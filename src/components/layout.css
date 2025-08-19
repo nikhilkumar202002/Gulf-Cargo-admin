@@ -1,22 +1,31 @@
 /* layout.css */
 .app {
   display: flex;
-  height: 100vh;
+  height: 100vh; /* Full height */
+  overflow: hidden;
 }
 
 .sidebar {
-  width: 250px;
-  background: #262262;
+ width: 250px;
+  height: 100vh;           /* full height */
+  display: flex;
+  flex-direction: column;  /* stack logo + menu */
+  background: #262262;        /* demo */
   color: #fff;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+.main{
   display: flex;
   flex-direction: column;
-  transition: width 0.3s;
+  flex: 1;
+  margin-left: 250px;
+  height: 100vh;
 }
-
 .sidebar.collapsed {
   width: 60px;
 }
-
 
 .menu-list {
   flex: 1;
@@ -34,6 +43,18 @@
   gap: 10px;
   font-family: "Montserrat";
 }
+.sidebar .menu-list {
+  flex: 1;                  /* take remaining height */
+  overflow-y: auto;         /* enable vertical scroll */
+  overflow-x: hidden;       /* hide horizontal scroll */
+  padding: 0;
+  margin: 0;
+  scrollbar-width: none;   /* Firefox */
+  -ms-overflow-style: none;
+}
+.sidebar .menu-list::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
 
 .menu-header:hover,
 .menu-item:hover {
@@ -48,18 +69,32 @@
 }
 
 .header {
-  height: 71px;
-  background: #fff;
+  flex-shrink: 0;
+  padding: 20px 20px;
+  height: 80px;
+  background-color: white;
+  span{
+    font-size: 20px;
+    font-family: "Montserrat";
+    font-weight: 600;
+  }
+}
+
+.footer {
+  flex-shrink: 0;
+  height: 50px;
+  background: white;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  border-bottom: 1px solid #dee2e6;
-  font-size: 1.25rem;
-  font-weight: bold;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  justify-content: center;
+  font-size: 14px;
   font-family: "Montserrat";
+  font-weight: 600;
+ 
 }
+.designed-company{
+    color: #262262;
+  }
 
 .acount-avatar {
   display: flex;
@@ -68,8 +103,9 @@
 }
 
 .user {
-  font-size: 14px;
+  font-size: 14px !important;
   font-weight: 500;
+  color: #262262;
 }
 
 .settings {
@@ -125,9 +161,9 @@
 }
 
 .menu-icon {
-  margin-right: 12px;
-  font-size: 18px;
+  font-size: 20px;
   display: flex;
+  justify-content: center;
   align-items: center;
 }
 
@@ -160,11 +196,12 @@
 .logo-section {
   display: flex;
   align-items: center;
-  padding: 15px;
-  background: #dee2e6;
+  background: white;
   font-weight: bold;
   color: white;
   user-select: none;
+  padding: 0px 10px;
+  height: 80px;
 }
 
 .toggle-btn {
@@ -272,4 +309,26 @@
 }
 .truck-img img {
   width: 100%;
+}
+
+.header-user{
+  background-color: rgb(243, 243, 243);
+  padding: 4px;
+  border-radius: 30px;
+  height: 42px;
+}
+.acount-avatar img {
+    border-radius: 50px;
+    width: 30px;
+}
+.header-notification{
+  background-color: rgb(243, 243, 243);
+  width: 42px;
+  height: 42px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #1e1e1e;
+  border-radius: 30px;
+  font-size: 20px;
 }

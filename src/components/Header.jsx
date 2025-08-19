@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import { IoIosArrowDown, IoIosSettings, IoIosLogOut } from "react-icons/io";
 import "./layout.css";
+import { IoNotifications } from "react-icons/io5";
 
 export default function Header() {
   const [showSettings, setShowSettings] = useState(false);
@@ -18,21 +20,46 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="header">
+    <header className="header flex justify-between items-center">
       <span>Welcome Back User</span>
-      <div style={{ position: "relative" }}>
-        <div className="acount-avatar" style={{ cursor: "pointer" }}
-          onClick={() => setShowSettings(s => !s)}>
-          <img src="https://ui-avatars.com/api/?name=User" alt="User" />
-          <span className="user">User</span>
+
+
+      <div className="header-right flex gap-3">
+ <div style={{ position: "relative" }} className="header-user">
+        <div
+          className="acount-avatar flex items-center gap-2 cursor-pointer"
+          onClick={() => setShowSettings(s => !s)}
+        >
+          <img src="./avatar.png" alt="User" className="w-8 h-8 rounded-full" />
+          <span className="user flex gap-1 items-center font-medium select-none">
+            User
+            <IoIosArrowDown
+              className={`transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`}
+              size={18}
+            />
+          </span>
         </div>
         {showSettings && (
-          <div ref={dropdownRef} className="settings">
-            <p>Settings</p>
-            <p>Logout</p>
+          <div ref={dropdownRef} className="settings absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white py-2">
+            <button className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700">
+              <IoIosSettings className="text-gray-500" size={20} />
+              Settings
+            </button>
+            <button className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700">
+              <IoIosLogOut className="text-red-400" size={20} />
+              Logout
+            </button>
           </div>
         )}
+
+        
       </div>
+
+      <div className="header-notification">
+              <IoNotifications />
+        </div>
+      </div>
+     
     </header>
   );
 }

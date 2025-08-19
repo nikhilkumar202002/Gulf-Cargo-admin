@@ -9,8 +9,8 @@
 }
 .card-icon{
     background-color: var(--secondary-color);
-    width: 35px;
-    height: 35px;
+    width: 45px;
+    height: 45px;
     color: white;
     font-size: 22px;
     display: flex;
@@ -19,7 +19,40 @@
     border-radius: 5px;
 }
 .card-text{
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 600;
-    color: var(--text-color);
+    color: black;
+}
+.card-staff-number{
+    font-weight: 800;
+    color: #454545;
+}
+.dashboard-card{
+    padding: 20px;
+    background-color: white;
+    border-radius: 15px;
+}
+.dashboard-heading{
+    font-size: 20px;
+    font-weight: 600;
+    padding: 10px 0px 15px;
+}
+.dashboard-table-wrapper{
+    width: 100% !important;
+}
+.staff-attendance,.cargo-movement,.dashboard-cargo-table{
+    width: 100%;
+}
+.dashboard-overview{
+    font-size: 22px;
+    font-weight: 600;
+    color: #1e1e1e;
+    padding: 15px 0px 8px;
+}
+.dashboard-cargo-list-heading h1{
+    font-size: 22px;
+    font-size: 22px;
+    font-weight: 600;
+    color: #1e1e1e;
+    padding: 15px 0px 8px;
 }
