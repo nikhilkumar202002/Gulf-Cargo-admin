@@ -11,6 +11,7 @@ import {
 } from "react-icons/fa";
 import { BiSolidDashboard } from "react-icons/bi";
 import "./layout.css";
+import { IoIosArrowDown, IoIosArrowUp  } from "react-icons/io";
 
 export default function Sidebar() {
   const [openMenu, setOpenMenu] = useState(null);
@@ -24,7 +25,7 @@ export default function Sidebar() {
     {
       key: "branch",
       icon: <FaBuilding />,
-      label: "Branch Management",
+      label: "Branches",
       submenus: ["All Branches", "Add New Branch", "Branch Performance Report"]
     },
     {
@@ -137,22 +138,22 @@ export default function Sidebar() {
               <span className="menu-icon" style={{ minWidth: 24 }}>
                 {icon}
               </span>
-              <span style={{ flex: 1, marginLeft: "14px" }}>{label}</span>
+              <span style={{ flex: 1, fontSize: "14px", fontWeight: "550" }}>{label}</span>
               {submenus && (
                 <span style={{ marginLeft: "auto" }}>
-                  {openMenu === key ? "▲" : "▼"}
+                  {openMenu === key ? <IoIosArrowUp/> :  <IoIosArrowDown/> }
                 </span>
               )}
             </div>
 
             {/* Submenu */}
             {submenus && openMenu === key && (
-              <ul className="submenu" style={{ paddingLeft: 48 }}>
+              <ul className="submenu">
                 {submenus.map((submenu) => (
                   <li
                     key={submenu}
                     className="submenu-item"
-                    style={{ padding: "8px 0", fontSize: "14px" }}
+                    style={{ padding: "8px 0px 8px 48px", fontSize: "14px" }}
                   >
                     {submenu}
                   </li>

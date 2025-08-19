@@ -58,7 +58,7 @@
 
 .menu-header:hover,
 .menu-item:hover {
-  background: #475569;
+  background: #1a1747 !important;
 }
 
 .main {
@@ -169,8 +169,7 @@
 
 .submenu {
   list-style: none;
-  padding-left: 36px;
-  background: #2c3a57;
+  background: #1a1747;
   margin: 0;
 }
 
