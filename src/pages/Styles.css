@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{
+    --primary-color: #262262;
+    --secondary-color: #ED2624;
+    --text-color: #1e1e1e;
+}
+.card-icon{
+    background-color: var(--secondary-color);
+    width: 35px;
+    height: 35px;
+    color: white;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+}
+.card-text{
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-color);
+}

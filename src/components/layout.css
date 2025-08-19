@@ -1,0 +1,275 @@
+/* layout.css */
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 250px;
+  background: #262262;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s;
+}
+
+.sidebar.collapsed {
+  width: 60px;
+}
+
+
+.menu-list {
+  flex: 1;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.menu-header,
+.menu-item {
+  padding: 12px 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Montserrat";
+}
+
+.menu-header:hover,
+.menu-item:hover {
+  background: #475569;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f7f8fa;
+}
+
+.header {
+  height: 71px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid #dee2e6;
+  font-size: 1.25rem;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  font-family: "Montserrat";
+}
+
+.acount-avatar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.settings {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  padding: 8px 0;
+  min-width: 140px;
+  z-index: 100;
+}
+
+.settings p {
+  margin: 0;
+  padding: 10px 15px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+}
+
+.settings p:hover {
+  background: #f5f5f5;
+}
+
+.toggle-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.4rem;
+  cursor: pointer;
+  margin-right: 0.5rem;
+}
+
+.menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.menu-header {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  user-select: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.menu-header:hover {
+  background: #334155;
+}
+
+.menu-icon {
+  margin-right: 12px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.submenu {
+  list-style: none;
+  padding-left: 36px;
+  background: #2c3a57;
+  margin: 0;
+}
+
+.submenu-item {
+  padding: 8px 0;
+  cursor: pointer;
+  font-weight: 400;
+  color: #ccc;
+  font-family: "Montserrat";
+}
+
+.submenu-item:hover {
+  color: white;
+  background: #3b4a7a;
+}
+
+.sidebar.collapsed .submenu {
+  display: none;
+}
+
+/* Other sidebar and logo styling should remain as before, ensure toggle button is visible */
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  padding: 15px;
+  background: #dee2e6;
+  font-weight: bold;
+  color: white;
+  user-select: none;
+}
+
+.toggle-btn {
+  background: none;
+  border: none;
+  color: #000;
+  font-size: 1.4rem;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.content{
+    padding: 20px;
+    font-family: "Montserrat";
+}
+
+
+.tracking-body {
+  padding: 20px;
+  background: #f9fafb;
+}
+
+/* Header */
+.tracking-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.tracking-header h2 span {
+  color: #6b7280;
+  font-size: 14px;
+}
+.filters button {
+  border: none;
+  background: #f3f4f6;
+  padding: 6px 12px;
+  border-radius: 6px;
+  margin-left: 8px;
+  cursor: pointer;
+}
+.filters .active {
+  background: #00b273;
+  color: white;
+}
+
+/* Search & Filters */
+.search-filter {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+.search-filter input,
+.search-filter select {
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+/* Orders grid */
+.orders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+.order-card {
+  background: white;
+  border-radius: 10px;
+  padding: 15px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.order-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.status.on\ route {
+  background: #dcfce7;
+  color: #166534;
+}
+.status.waiting {
+  background: #fef9c3;
+  color: #854d0e;
+}
+.eta {
+  font-size: 12px;
+  color: #6b7280;
+}
+.route {
+  font-weight: 500;
+}
+.truck-img {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 60px;
+}
+.truck-img img {
+  width: 100%;
+}
