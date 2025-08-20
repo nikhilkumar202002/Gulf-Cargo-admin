@@ -30,7 +30,7 @@ export default function Header() {
           className="acount-avatar flex items-center gap-2 cursor-pointer"
           onClick={() => setShowSettings(s => !s)}
         >
-          <img src="./avatar.png" alt="User" className="w-8 h-8 rounded-full" />
+          <img src="/avatar.png" alt="User" className="w-8 h-8 rounded-full" />
           <span className="user flex gap-1 items-center font-medium select-none">
             User
             <IoIosArrowDown

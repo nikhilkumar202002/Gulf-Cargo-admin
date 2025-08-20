@@ -2,7 +2,7 @@ import Sidebar from "./Sidebar";
 import Header from "./Header";
 import Footer from "./Footer";
 import "./layout.css";
-import "@fontsource/montserrat";
+import "@fontsource/roboto";
 import { Outlet } from "react-router-dom";
 
 const Layout = () => {

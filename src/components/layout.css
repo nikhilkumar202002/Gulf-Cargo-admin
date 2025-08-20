@@ -41,7 +41,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: "Montserrat";
+  font-family: "Roboto";
 }
 .sidebar .menu-list {
   flex: 1;                  /* take remaining height */
@@ -75,7 +75,7 @@
   background-color: white;
   span{
     font-size: 20px;
-    font-family: "Montserrat";
+    font-family: "Roboto";
     font-weight: 600;
   }
 }
@@ -88,7 +88,7 @@
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  font-family: "Montserrat";
+  font-family: "Roboto";
   font-weight: 600;
  
 }
@@ -178,7 +178,7 @@
   cursor: pointer;
   font-weight: 400;
   color: #ccc;
-  font-family: "Montserrat";
+  font-family: "Roboto";
 }
 
 .submenu-item:hover {
@@ -214,7 +214,7 @@
 
 .content{
     padding: 20px;
-    font-family: "Montserrat";
+    font-family: "Roboto";
 }
 
 

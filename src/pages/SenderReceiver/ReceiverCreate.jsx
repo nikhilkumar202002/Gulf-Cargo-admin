@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { HiUserAdd } from "react-icons/hi";
 import "../Styles.css";
 
 const ReceiverCreate = () => {
@@ -63,7 +64,7 @@ const ReceiverCreate = () => {
   return (
     <div className="form-container">
          {/* Heading */}
-      <div className="form-header">
+      <div className="staff-form-header">
         <h2>Create New Receiver</h2>
       </div>
 

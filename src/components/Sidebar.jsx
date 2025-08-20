@@ -9,7 +9,9 @@ import {
   FaChartBar,
   FaCog
 } from "react-icons/fa";
+import { RiMailSendFill } from "react-icons/ri";
 import { BiSolidDashboard } from "react-icons/bi";
+import { FaCcVisa } from "react-icons/fa6";
 import "./layout.css";
 import { IoIosArrowDown, IoIosArrowUp  } from "react-icons/io";
 import { Link } from "react-router-dom";
@@ -36,11 +38,31 @@ export default function Sidebar() {
       key: "hr",
       icon: <FaUsers />,
       label: "HR & Staff",
+       submenus: [
+        { name: "All Staffs", path: "/hr&staff/allstaffs" },
+        { name: "Create Staffs", path: "/hr&staff/createstaffs" },
+      ]
+    },
+     {
+      key: "shipments",
+      icon: <FaBox />,
+      label: "Shipments",
       submenus: [
-        "Staff List",
-        "Attendance & Leave",
-        "Payroll & Salaries",
-        "Performance Review"
+        "Create Shipment",
+        "All Shipments",
+        "Pending / In Transit / Delivered",
+        "Shipment Tracking"
+      ]
+    },
+    {
+      key: "sender",
+      icon: <RiMailSendFill />,
+      label: "Sender / Receiver",
+       submenus: [
+        { name: "View Receiver", path: "/allreceiver" },
+        { name: "View Sender", path: "/senders" },
+        { name: "Create Sender", path: "/sender/create" },
+        { name: "Create Receiver", path: "/receiver/create" },
       ]
     },
     {
@@ -54,30 +76,22 @@ export default function Sidebar() {
         "Maintenance Schedule"
       ]
     },
-    {
-      key: "shipments",
-      icon: <FaBox />,
-      label: "Shipments",
-      submenus: [
-        "Create Shipment",
-        "All Shipments",
-        "Pending / In Transit / Delivered",
-        "Shipment Tracking"
-      ]
-    },
+   
     {
       key: "agency",
       icon: <FaUser />,
       label: "Agency & Partners",
       submenus: ["Partner Agencies", "Contracts & Agreements", "Agency Performance"]
     },
-    {
-      key: "sender",
-      icon: <FaUser />,
-      label: "Sender / Receiver",
+    
+     {
+      key: "visa",
+      icon: <FaCcVisa />,
+      label: "Visa",
        submenus: [
-        { name: "Create Receiver", path: "/receiver/create" },
-        { name: "View Receiver", path: "/allreceiver" },
+        { name: "All Visa", path: "/visa/allvisa" },
+        { name: "Visa Empolyee", path: "/visaemployee" },
+        { name: "Create Visa type", path: "/visatype/create" },
       ]
     },
     {
