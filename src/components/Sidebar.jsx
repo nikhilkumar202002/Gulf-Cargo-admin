@@ -12,6 +12,7 @@ import {
 import { BiSolidDashboard } from "react-icons/bi";
 import "./layout.css";
 import { IoIosArrowDown, IoIosArrowUp  } from "react-icons/io";
+import { Link } from "react-router-dom";
 
 export default function Sidebar() {
   const [openMenu, setOpenMenu] = useState(null);
@@ -21,12 +22,15 @@ export default function Sidebar() {
   };
 
   const menuItems = [
-    { key: "dashboard", icon: <BiSolidDashboard />, label: "Dashboard" },
+    { key: "dashboard", icon: <BiSolidDashboard />, label: "Dashboard", path: "/dashboard" },
     {
       key: "branch",
       icon: <FaBuilding />,
       label: "Branches",
-      submenus: ["All Branches", "Add New Branch", "Branch Performance Report"]
+        submenus: [
+        { name: "All Branches", path: "/branches" },
+        { name: "Add New Branch", path: "/branches/add" },
+      ]
     },
     {
       key: "hr",
@@ -71,7 +75,10 @@ export default function Sidebar() {
       key: "sender",
       icon: <FaUser />,
       label: "Sender / Receiver",
-      submenus: ["Customer Database", "KYC & Verification", "Customer History"]
+       submenus: [
+        { name: "Create Receiver", path: "/receiver/create" },
+        { name: "View Receiver", path: "/allreceiver" },
+      ]
     },
     {
       key: "finance",
@@ -116,47 +123,71 @@ export default function Sidebar() {
       </div>
 
       {/* Menu List */}
-      <ul className="menu-list" style={{ padding: 0, margin: 0 }}>
-        {menuItems.map(({ key, icon, label, submenus }) => (
+        <ul className="menu-list" style={{ padding: 0, margin: 0 }}>
+        {menuItems.map(({ key, icon, label, submenus, path }) => (
           <li key={key} style={{ listStyle: "none" }}>
-            <div
-              className="menu-header"
-              onClick={() => submenus && toggleMenu(key)}
-              style={{
-                cursor: submenus ? "pointer" : "default",
-                display: "flex",
-                alignItems: "center",
-                padding: "12px 20px"
-              }}
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (submenus && (e.key === "Enter" || e.key === " ")) {
-                  toggleMenu(key);
-                }
-              }}
-            >
-              <span className="menu-icon" style={{ minWidth: 24 }}>
-                {icon}
-              </span>
-              <span style={{ flex: 1, fontSize: "14px", fontWeight: "550" }}>{label}</span>
-              {submenus && (
-                <span style={{ marginLeft: "auto" }}>
-                  {openMenu === key ? <IoIosArrowUp/> :  <IoIosArrowDown/> }
+            {/* Menu Header */}
+            {path && !submenus ? (
+              <Link
+                to={path}
+                className="menu-header"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "12px 20px",
+                  textDecoration: "none",
+                  color: "inherit",
+                  fontWeight: "550"
+                }}
+              >
+                <span className="menu-icon" style={{ minWidth: 24 }}>
+                  {icon}
                 </span>
-              )}
-            </div>
+                <span style={{ flex: 1, fontSize: "14px" }}>{label}</span>
+              </Link>
+            ) : (
+              <div
+                className="menu-header"
+                onClick={() => submenus && toggleMenu(key)}
+                style={{
+                  cursor: submenus ? "pointer" : "default",
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "12px 20px"
+                }}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (submenus && (e.key === "Enter" || e.key === " ")) {
+                    toggleMenu(key);
+                  }
+                }}
+              >
+                <span className="menu-icon" style={{ minWidth: 24 }}>
+                  {icon}
+                </span>
+                <span style={{ flex: 1, fontSize: "14px", fontWeight: "550" }}>{label}</span>
+                {submenus && (
+                  <span style={{ marginLeft: "auto" }}>
+                    {openMenu === key ? <IoIosArrowUp /> : <IoIosArrowDown />}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Submenu */}
             {submenus && openMenu === key && (
               <ul className="submenu">
-                {submenus.map((submenu) => (
+                {submenus.map(({ name, path }) => (
+                  <Link to={path} style={{ textDecoration: "none", color: "inherit" }}>
                   <li
-                    key={submenu}
+                    key={name}
                     className="submenu-item"
                     style={{ padding: "8px 0px 8px 48px", fontSize: "14px" }}
                   >
-                    {submenu}
+                      {name}
                   </li>
+                    </Link>
+
                 ))}
               </ul>
             )}

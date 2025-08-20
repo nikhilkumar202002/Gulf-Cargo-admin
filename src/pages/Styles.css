@@ -56,3 +56,29 @@
     color: #1e1e1e;
     padding: 15px 0px 8px;
 }
+
+/* All branches page styles */
+
+.allbranches-table-head{
+    font-size: 15px;
+    color: var(--primary-color);
+}
+
+.all-branches-row-add-new button{
+    background-color: var(--secondary-color);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+}
+.all-branches-row-add-new button:hover{
+    background-color: #c41c19;
+    transition: 400ms;
+}
+.add-branch-heading{
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary-color);
+    padding: 10px 0px 20px;
+}
