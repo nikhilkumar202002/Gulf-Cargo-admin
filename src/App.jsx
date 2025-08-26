@@ -23,17 +23,17 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="branches" element={<AllBranches />} />
-          <Route path="/branches/add" element={<AddBranch />} />
-          <Route path="/receiver/create" element={<ReceiverCreate />} />
-          <Route path="/allreceiver" element={<ReceiverView />} />
-          <Route path="/sender/create" element={<SenderCreate />} />
-          <Route path="/senders" element={<SenderView />} />
-          <Route path="/visa/allvisa" element={<AllVisa />} />
-          <Route path="/visaemployee" element={<VisaEmployees />} />
-          <Route path="/visatype/create" element={<VisaTypeCreate />} />
-          <Route path="/hr&staff/allstaffs" element={<StaffPanel />} />
-          <Route path="/hr&staff/createstaffs" element={<NewStaffForm />} />
-          <Route path="/hr&staff/view" element={<StaffView />} />
+          <Route path="branches/add" element={<AddBranch />} />
+          <Route path="receiver/create" element={<ReceiverCreate />} />
+          <Route path="allreceiver" element={<ReceiverView />} /> 
+          <Route path="sender/create" element={<SenderCreate />} />
+          <Route path="senders" element={<SenderView />} />
+          <Route path="visa/allvisa" element={<AllVisa />} />
+          <Route path="visaemployee" element={<VisaEmployees />} />
+          <Route path="visatype/create" element={<VisaTypeCreate />} />
+          <Route path="hr&staff/allstaffs" element={<StaffPanel />} />
+          <Route path="hr&staff/createstaffs" element={<NewStaffForm />} />
+          <Route path="hr&staff/view" element={<StaffView />} />
         </Route>
       </Routes>
     </BrowserRouter>

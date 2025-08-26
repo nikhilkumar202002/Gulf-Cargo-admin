@@ -90,18 +90,29 @@
     font-weight: 600;
 }
 .staffcreate-heading, .staff-panel-heading{
-    font-size: 30px !important;
+    font-size: 23px !important;
     font-weight: 600;
     padding: 25px 0px 15px;
 }
 .staff-form-header-icon,.staff-panel-heading-icon{
     background-color: var(--secondary-color);
-    width: 50px;
-    height: 50px;
+    width: 42px;
+    height: 42px;
     display: flex;
     justify-content: center;
     align-items: center;
     border-radius: 10px;
-    font-size: 28px;
+    font-size: 22px;
     color: white;
+}
+
+/* visa */
+
+.visa-table-heading{
+    font-size: 16px;
+    color: #1e1e1e;
+}
+.visa-table-content{
+    font-size: 14px;
+    color: #363636;
 }

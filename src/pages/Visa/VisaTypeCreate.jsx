@@ -1,122 +1,99 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "../styles.css";
+import { FiSave, FiXCircle } from "react-icons/fi";
+import { FaCcVisa } from "react-icons/fa6";
+import "../Styles.css";
 
 const VisaTypeCreate = () => {
+
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     visaType: "",
-    visaNumber: "",
-    issueDate: "",
-    expiryDate: "",
-    staffName: "",
     status: "Active",
   });
 
-  // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
-  // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log("Visa Created:", formData);
-    // API call or state management logic here
-    navigate("/visa"); // redirect back to visa list page
+    console.log("Visa Type Created:", formData);
+    navigate("/visa");
   };
 
+
   return (
-    <div className="visa-page">
+    <>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center px-4 py-6">
+        {/* Page Header */}
+        <div className="w-full max-w-2xl ">
+          <h2 className="flex items-center gap-3 staff-panel-heading">
+            <span className="staff-panel-heading-icon">
+              <FaCcVisa />
+            </span>
+            Create Visa Type
+          </h2>
+        </div>
 
-      {/* Title */}
-      <div className="header-section">
-        <h2>Create Visa</h2>
+        {/* Form Card */}
+        <div className="bg-white w-full max-w-2xl rounded-xl p-6 shadow-md border border-gray-100">
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {/* Visa Type */}
+            <div>
+              <label className="block text-gray-700 font-medium mb-1">
+                Visa Type <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text" 
+                name="visaType"
+                value={formData.visaType}
+                onChange={handleChange}
+                placeholder="e.g., Company Visa"
+                required
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-gray-700 font-medium mb-1">
+                Status
+              </label>
+              <select
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-4 pt-4">
+              <button
+                type="submit"
+                className="flex items-center gap-2 bg-[#262262] hover:bg-[#18153d] text-white px-5 py-2 rounded-lg shadow-md transition-all duration-200"
+              >
+                <FiSave className="text-lg" />
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/visa")}
+                className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 px-5 py-2 rounded-lg shadow-md transition-all duration-200"
+              >
+                <FiXCircle className="text-lg" />
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-
-      {/* Form */}
-      <form className="visa-form" onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label>Visa Type</label>
-          <input
-            type="text"
-            name="visaType"
-            value={formData.visaType}
-            onChange={handleChange}
-            placeholder="Enter visa type"
-            required
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Visa Number</label>
-          <input
-            type="text"
-            name="visaNumber"
-            value={formData.visaNumber}
-            onChange={handleChange}
-            placeholder="Enter visa number"
-            required
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Issue Date</label>
-          <input
-            type="date"
-            name="issueDate"
-            value={formData.issueDate}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Expiry Date</label>
-          <input
-            type="date"
-            name="expiryDate"
-            value={formData.expiryDate}
-            onChange={handleChange}
-            required
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Staff Name</label>
-          <input
-            type="text"
-            name="staffName"
-            value={formData.staffName}
-            onChange={handleChange}
-            placeholder="Enter staff name"
-            required
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Status</label>
-          <select name="status" value={formData.status} onChange={handleChange}>
-            <option value="Active">Active</option>
-            <option value="Expired">Expired</option>
-            <option value="Pending">Pending</option>
-          </select>
-        </div>
-
-        {/* Buttons */}
-        <div className="form-actions">
-          <button type="submit" className="btn btn-primary">Save</button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => navigate("/visa")}
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
-    </div>
+    </>
   );
 };
 
