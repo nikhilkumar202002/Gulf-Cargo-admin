@@ -16,56 +16,144 @@ import NewStaffForm from "./pages/Staffs/StaffCreate";
 import StaffView from "./pages/Staffs/StaffView";
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
-import { AuthProvider, useAuth } from "./auth/AuthContext"; // FIXED HERE
+import { useAuth } from "./auth/AuthContext";
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated } = useAuth();
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
 function App() {
-  const { isAuthenticated } = useAuth?.() || {};
+  const { isAuthenticated } = useAuth();
 
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/login"
+          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
+        />
+        <Route
+          path="/register"
+          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />}
+        />
+        <Route element={<Layout />}>
           <Route
-            path="/login"
-            element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
+            index
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            }
           />
           <Route
-            path="/register"
-            element={isAuthenticated ? <Navigate to="/dashboard" /> : <Register />}
+            path="dashboard"
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            }
           />
-          <Route element={<Layout />}>
-            <Route
-              path="/dashboard"
-              element={
-                <PrivateRoute>
-                  <Dashboard />
-                </PrivateRoute>
-              }
-            />
-            <Route index element={<Dashboard />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="branches" element={<AllBranches />} />
-            <Route path="branches/add" element={<AddBranch />} />
-            <Route path="receiver/create" element={<ReceiverCreate />} />
-            <Route path="allreceiver" element={<ReceiverView />} />
-            <Route path="sender/create" element={<SenderCreate />} />
-            <Route path="senders" element={<SenderView />} />
-            <Route path="visa/allvisa" element={<AllVisa />} />
-            <Route path="visaemployee" element={<VisaEmployees />} />
-            <Route path="visatype/create" element={<VisaTypeCreate />} />
-            <Route path="hr&staff/allstaffs" element={<StaffPanel />} />
-            <Route path="hr&staff/createstaffs" element={<NewStaffForm />} />
-            <Route path="hr&staff/view" element={<StaffView />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/login" />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+          <Route
+            path="branches"
+            element={
+              <PrivateRoute>
+                <AllBranches />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="branches/add"
+            element={
+              <PrivateRoute>
+                <AddBranch />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="receiver/create"
+            element={
+              <PrivateRoute>
+                <ReceiverCreate />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="allreceiver"
+            element={
+              <PrivateRoute>
+                <ReceiverView />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="sender/create"
+            element={
+              <PrivateRoute>
+                <SenderCreate />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="senders"
+            element={
+              <PrivateRoute>
+                <SenderView />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="visa/allvisa"
+            element={
+              <PrivateRoute>
+                <AllVisa />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="visaemployee"
+            element={
+              <PrivateRoute>
+                <VisaEmployees />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="visatype/create"
+            element={
+              <PrivateRoute>
+                <VisaTypeCreate />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="hr&staff/allstaffs"
+            element={
+              <PrivateRoute>
+                <StaffPanel />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="hr&staff/createstaffs"
+            element={
+              <PrivateRoute>
+                <NewStaffForm />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="hr&staff/view"
+            element={
+              <PrivateRoute>
+                <StaffView />
+              </PrivateRoute>
+            }
+          />
+        </Route>
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

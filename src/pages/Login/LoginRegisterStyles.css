@@ -5,21 +5,38 @@
 }
 
 /* login page style */
+.login-page{
+    width: 100%;
+    height: 100vh;
+    display: flex;              
+    justify-content: center;    
+    align-items: center;   
+     background: linear-gradient(
+                rgba(0, 0, 0, 0.7), 
+                rgba(0, 0, 0, 0.5)
+              ),
+              url("./bg/admin-bg.jpg");   
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;  
+}
+
 .login-page-container{
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: center !important;
 }
 .login-page-box{
     background-color: white;
     border-radius: 20px;
-    width: 350px;
+    width: 400px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     padding: 30px 30px;
     box-shadow: rgba(149, 157, 165, 0.2) 0px 8px 24px;
+    
 }
 .Login-page-box img{
     width: 100px !important;
