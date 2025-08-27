@@ -1,0 +1,71 @@
+:root{
+    --primary-color: #262262;
+    --secondary-color: #ED2624;
+    --text-color: #1e1e1e;
+}
+
+/* login page style */
+.login-page-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.login-page-box{
+    background-color: white;
+    border-radius: 20px;
+    width: 350px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 30px 30px;
+    box-shadow: rgba(149, 157, 165, 0.2) 0px 8px 24px;
+}
+.Login-page-box img{
+    width: 100px !important;
+}
+.login-page-heading{
+    font-size: 20px;
+    font-family: "Roboto";
+    font-weight: 600;
+    color: var(--primary-color);
+    padding: 10px 0px 15px;
+}
+.login-btn{
+    background-color: var(--secondary-color);
+    padding: 8px 20px;
+    color: white;
+    font-family: "Roboto";
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+.login-form-row{
+    width: 100% !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.login-form-row input{
+    background-color: rgb(238, 238, 238);
+    width: 100%;
+    padding: 8px 20px;
+    margin-bottom: 15px;
+}
+.login-page-box form{
+    width: 100%;
+    padding-top: 10px;
+}
+.login-form-row label{
+    font-size: 13px;
+    font-family: "Roboto";
+    font-weight: 400;
+    padding-bottom: 4px;
+}
+.login-register-link{
+    padding: 10px 0px 0px;
+    font-size: 14px;
+    font-family: "Roboto";
+    color: var(--secondary-color);
+}

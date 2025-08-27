@@ -2,22 +2,52 @@ import React, { useState, useEffect, useRef } from "react";
 import { IoIosArrowDown, IoIosSettings, IoIosLogOut } from "react-icons/io";
 import "./layout.css";
 import { IoNotifications } from "react-icons/io5";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import { useAuth } from "../auth/AuthContext";
 
 export default function Header() {
   const [showSettings, setShowSettings] = useState(false);
   const dropdownRef = useRef(null);
+  const { logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const handleClickOutside = event => {
+      const handleClickOutside = event => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowSettings(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        alert("You're not logged in!");
+        navigate("/login");
+        return;
+      }
+      await axios.post(
+        "https://gulfcargoapi.bhutanvoyage.in/api/logout",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+      logout(); // **Update context**
+      navigate("/login", { replace: true }); // **Redirect immediately**
+    } catch (err) {
+      logout(); // Fallback logout
+      navigate("/login", { replace: true });
+    }
+  };
+
 
   return (
     <header className="header flex justify-between items-center">
@@ -45,7 +75,7 @@ export default function Header() {
               <IoIosSettings className="text-gray-500" size={20} />
               Settings
             </button>
-            <button className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700">
+            <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700">
               <IoIosLogOut className="text-red-400" size={20} />
               Logout
             </button>
