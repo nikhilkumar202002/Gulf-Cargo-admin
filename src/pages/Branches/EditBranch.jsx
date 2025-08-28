@@ -6,6 +6,9 @@ const EditBranch = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
+
+  const token = localStorage.getItem("token");
+
   const [branch, setBranch] = useState({
     branch_name: "",
     branch_code: "",
@@ -15,25 +18,48 @@ const EditBranch = () => {
     location: "",
     website: "",
     address: "",
-    status: "Active",
+    status: "Active", // Default status
   });
 
-  // ✅ Fetch branch details
+  const [loading, setLoading] = useState(true);
+
+
   useEffect(() => {
     const fetchBranch = async () => {
       try {
         const response = await axios.post(
           "https://gulfcargoapi.bhutanvoyage.in/api/branch/view",
-          { id } // sending branch id in request body
+          { id },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`, // ✅ Add token for security
+            },
+          }
         );
-        setBranch(response.data);
+
+        // ✅ Set branch data from API response
+        if (response.data) {
+          setBranch({
+            branch_name: response.data.branch_name || "",
+            branch_code: response.data.branch_code || "",
+            contact_number: response.data.contact_number || "",
+            alternative_number: response.data.alternative_number || "",
+            email: response.data.email || "",
+            location: response.data.location || "",
+            website: response.data.website || "",
+            address: response.data.address || "",
+            status: response.data.status || "Active",
+          });
+        }
       } catch (error) {
         console.error("Error fetching branch:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchBranch();
-  }, [id]);
+  }, [id, token]);
 
   // ✅ Handle input changes
   const handleChange = (e) => {
@@ -46,13 +72,30 @@ const EditBranch = () => {
     try {
       await axios.post(
         `https://gulfcargoapi.bhutanvoyage.in/api/branch/update/${id}`,
-        branch
+        branch,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`, // ✅ Secure update
+          },
+        }
       );
+
+      alert("Branch updated successfully!");
       navigate("/branches");
     } catch (error) {
       console.error("Error updating branch:", error);
+      alert("Failed to update branch!");
     }
   };
+
+  // ✅ Show loading while fetching data
+  if (loading) {
+    return (
+      <div className="p-6 text-center text-lg font-semibold">
+        Loading branch details...
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -66,6 +109,7 @@ const EditBranch = () => {
             onChange={handleChange}
             placeholder="Branch Name"
             className="border p-2 w-full"
+            required
           />
           <input
             type="text"
@@ -74,6 +118,7 @@ const EditBranch = () => {
             onChange={handleChange}
             placeholder="Branch Code"
             className="border p-2 w-full"
+            required
           />
           <input
             type="text"
@@ -82,6 +127,7 @@ const EditBranch = () => {
             onChange={handleChange}
             placeholder="Contact Number"
             className="border p-2 w-full"
+            required
           />
           <input
             type="text"
@@ -132,8 +178,11 @@ const EditBranch = () => {
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
         </select>
-        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
-          Update
+        <button
+          type="submit"
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+        >
+          Update Branch
         </button>
       </form>
     </div>

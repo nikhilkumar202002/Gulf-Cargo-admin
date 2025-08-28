@@ -26,12 +26,22 @@ import Register from "./pages/Login/Register";
 import { useAuth } from "./auth/AuthContext";
 
 const PrivateRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return <div className="loader">Checking authentication...</div>;
+  }
+
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
 function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
+
+
+  if (loading) {
+    return <div className="loader">Loading...</div>;
+  }
 
   return (
     <BrowserRouter>
