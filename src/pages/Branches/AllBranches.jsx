@@ -1,71 +1,96 @@
 import { Button } from "@radix-ui/themes";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FaSearch, FaEdit, FaTrash, FaUsers } from "react-icons/fa";
 import { FiMoreVertical } from "react-icons/fi";
 import { LuPlus } from "react-icons/lu";
+import { Link } from "react-router-dom";
+import axios from "axios";
 
-const branchData = [
-  { name: "GULF CARGO KSA HAIL", code: "HL40", location: "Hail", numbers: ["050 343 3725", "056 877 8615"] },
-  { name: "GULF CARGO KSA TABUK", code: "TB50", location: "Tabuk", numbers: ["053 886 6793", "058 928 2543"] },
-  { name: "GULF CARGO KSA JEDDAH", code: "JED10", location: "Jeddah", numbers: ["053 833 0839", "053 833 0890"] },
-  { name: "Cargo World", code: "WC", location: "Cargo World", numbers: ["050 062 9263", "054 040 6835"] },
-  { name: "GULF CARGO KSA BURAIDAH", code: "BUR50", location: "Buraidah", numbers: ["055 022 4780", "057 703 9691"] },
-  { name: "GULF CARGO KSA UNAIZAH", code: "ON70", location: "Onaizah", numbers: ["055 970 2203", "055 970 2203"] },
-  { name: "GULF CARGO KSA AL JOUF", code: "AJ30", location: "Al Jouf", numbers: ["054 359 1837", "055 811 9967"] },
-  { name: "GULF CARGO KSA RIYADH", code: "RUH81", location: "Riyadh", numbers: ["054 430 8508", "054 314 5105"] },
-  { name: "GULF CARGO KSA HAFAR AL BATIN", code: "HB60", location: "Hafar Al Batin", numbers: ["053 886 6793", "058 928 2543"] },
-  { name: "AL AHSA", code: "AH20", location: "AL HAFUF BALADIYA-POST OFFICE ROAD", numbers: ["050 062 9263", "054 040 6835"] },
-];
 
 const AllBranches = () => {
 
-    const [search, setSearch] = useState("");
+  const [branches, setBranches] = useState([]);
+  const [search, setSearch] = useState("");
   const [openMenuIndex, setOpenMenuIndex] = useState(null);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter branches based on search term
-  const filteredBranches = branchData.filter(
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.get(
+          "https://gulfcargoapi.bhutanvoyage.in/api/branches",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/json",
+            },
+          }
+        );
+
+        console.log("API Response:", response.data);
+
+        if (response.data && Array.isArray(response.data)) {
+          setBranches(response.data);
+        } else if (response.data && Array.isArray(response.data.data)) {
+          setBranches(response.data.data);
+        } else {
+          setBranches([]);
+        }
+      } catch (error) {
+        console.error("Error fetching branches:", error);
+        setBranches([]); // avoid filter crash
+      }
+    };
+
+    fetchBranches();
+  }, []);
+
+
+  const filteredBranches = branches.filter(
     (branch) =>
-      branch.name.toLowerCase().includes(search.toLowerCase()) ||
-      branch.code.toLowerCase().includes(search.toLowerCase()) ||
-      branch.location.toLowerCase().includes(search.toLowerCase())
+      branch.branch_name?.toLowerCase().includes(search.toLowerCase()) ||
+      branch.branch_code?.toLowerCase().includes(search.toLowerCase()) ||
+      branch.branch_location?.toLowerCase().includes(search.toLowerCase())
   );
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredBranches.length / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
-  const currentBranches = filteredBranches.slice(startIndex, startIndex + rowsPerPage);
+  const currentBranches = filteredBranches.slice(
+    startIndex,
+    startIndex + rowsPerPage
+  );
 
-  // Toggle 3-dot menu
+
   const toggleMenu = (index) => {
     setOpenMenuIndex(openMenuIndex === index ? null : index);
   };
 
   const handleEdit = (branch) => {
-    alert(`Edit ${branch.name}`);
+    alert(`Edit ${branch.branch_name}`);
   };
 
   const handleDelete = (branch) => {
-    if (window.confirm(`Are you sure you want to delete ${branch.name}?`)) {
-      alert(`${branch.name} deleted successfully.`);
+    if (window.confirm(`Are you sure you want to delete ${branch.branch_name}?`)) {
+      alert(`${branch.branch_name} deleted successfully.`);
     }
   };
 
   const handleViewUsers = (branch) => {
-    alert(`View users for ${branch.name}`);
+    alert(`View users for ${branch.branch_name}`);
   };
-
 
   return (
     <>
-        <div className="add-branch-header">
-                <h1 className="add-branch-heading">Staff Members List</h1>
-            </div>
+      <div className="add-branch-header">
+        <h1 className="add-branch-heading">Branch List</h1>
+      </div>
 
       <div className="p-6 bg-white shadow-lg rounded-lg">
         {/* Search Bar */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-4">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-4">
           {/* Search bar */}
           <div className="relative w-full md:w-1/2">
             <input
@@ -78,31 +103,32 @@ const AllBranches = () => {
             <FaSearch className="absolute left-3 top-3 text-gray-400" />
           </div>
 
-          {/* Rows per page selector */}
+          {/* Rows per page selector + Add button */}
           <div className="all-branches-row-right flex gap-4">
-            
             <div className="flex items-center gap-2 md:w-auto w-full">
-            <label className="font-medium text-gray-700">Rows:</label>
-            <select
-              value={rowsPerPage}
-              onChange={(e) => {
-                setRowsPerPage(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="border px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={15}>15</option>
-            </select>
+              <label className="font-medium text-gray-700">Rows:</label>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+              </select>
             </div>
 
-             <div className="all-branches-row-add-new">
-                <Button className="flex items-center gap-2 font-bold">Add New Member <LuPlus /></Button>
+            <div className="all-branches-row-add-new">
+              <Link to="/branches/add">
+                <Button className="flex items-center gap-2 font-bold">
+                  Add New Branch <LuPlus />
+                </Button>
+              </Link>
             </div>
-
           </div>
-          
         </div>
 
         {/* Table */}
@@ -115,26 +141,41 @@ const AllBranches = () => {
                 <th className="py-3 px-4 text-left">Branch Code</th>
                 <th className="py-3 px-4 text-left">Location</th>
                 <th className="py-3 px-4 text-left">Contact Numbers</th>
+                <th className="py-3 px-4 text-left">Email</th>
+
+                <th className="py-3 px-4 text-left">Status</th>
                 <th className="py-3 px-4 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredBranches.length > 0 ? (
-                filteredBranches.map((branch, index) => (
+              {currentBranches.length > 0 ? (
+                currentBranches.map((branch, index) => (
                   <tr
-                    key={index}
+                    key={branch.id}
                     className="border-t hover:bg-gray-50 transition duration-200"
                   >
                     <td className="py-3 px-4 font-medium text-gray-700">
-                      {index + 1}
+                      {startIndex + index + 1}
                     </td>
-                    <td className="py-3 px-4 text-gray-700">{branch.name}</td>
-                    <td className="py-3 px-4 text-gray-600">{branch.code}</td>
-                    <td className="py-3 px-4 text-gray-600">{branch.location}</td>
+                    <td className="py-3 px-4 text-gray-700">{branch.branch_name || "-"}</td>
+                    <td className="py-3 px-4 text-gray-600">{branch.branch_code || "-"}</td>
+                    <td className="py-3 px-4 text-gray-600">{branch.branch_location || "-"}</td>
                     <td className="py-3 px-4 text-gray-600">
-                      {branch.numbers.map((num, i) => (
-                        <p key={i}>{num}</p>
-                      ))}
+                      {branch.branch_contact_number && <p>{branch.branch_contact_number}</p>}
+                      {branch.branch_alternative_number && <p>{branch.branch_alternative_number}</p>}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">{branch.branch_email || "-"}</td>
+
+                    <td className="py-3 px-4">
+                      {branch.status === "Active" || branch.status === 1 ? (
+                        <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded">
+                          Inactive
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center relative">
                       {/* 3-dot menu */}
@@ -147,11 +188,10 @@ const AllBranches = () => {
 
                       {openMenuIndex === index && (
                         <div className="absolute right-0 mt-2 w-32 bg-white border rounded shadow-lg z-10">
-                          <button
-                            onClick={() => handleEdit(branch)}
-                            className="flex items-center gap-2 px-4 py-2 hover:bg-yellow-100 w-full text-yellow-600"
-                          >
-                            <FaEdit /> Edit
+                          <button className="flex items-center gap-2 px-4 py-2 hover:bg-yellow-100 w-full text-yellow-600">
+                            <Link to={`/branches/edit/${branch.id}`} className="flex items-center gap-2 w-full">
+                              <FaEdit /> Edit
+                            </Link>
                           </button>
                           <button
                             onClick={() => handleDelete(branch)}
@@ -173,10 +213,10 @@ const AllBranches = () => {
               ) : (
                 <tr>
                   <td
-                    colSpan="6"
+                    colSpan="9"
                     className="py-4 px-4 text-center text-gray-500"
                   >
-                    No matching branches found.
+                    No branches found.
                   </td>
                 </tr>
               )}
@@ -184,7 +224,7 @@ const AllBranches = () => {
           </table>
         </div>
 
-          {/* Pagination */}
+        {/* Pagination */}
         <div className="flex justify-between items-center mt-4">
           <p className="text-gray-600">
             Showing {startIndex + 1} -{" "}

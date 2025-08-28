@@ -33,8 +33,6 @@ export default function Header() {
           }
         );
 
-        console.log("Profile API response:", response.data);
-
         const name = response.data?.user?.name;
         if (name) {
           setUserName(name);
@@ -86,7 +84,7 @@ export default function Header() {
       logout();
       navigate("/login", { replace: true });
     } catch (err) {
-      console.error("Logout failed:", err);
+     
       localStorage.removeItem("token");
       localStorage.removeItem("userName");
       logout();

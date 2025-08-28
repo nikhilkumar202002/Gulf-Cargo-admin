@@ -19,6 +19,7 @@ import ViewAllDriver from "./pages/Drivers/ViewAllDriver";
 import CreateCargo from "./pages/CargoShipment/CreateCargo";
 import ShippingReport from "./pages/CargoShipment/ShipmentReport";
 import UserProfile from "./pages/Profile/UserProfile";
+import EditBranch from "./pages/Branches/EditBranch";
 
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
@@ -192,6 +193,8 @@ function App() {
               </PrivateRoute>
             }
           />
+
+          <Route path="/branches/edit/:id" element={<EditBranch />} />
 
             <Route path="drivers/addnewdriver" element={ <PrivateRoute><AddDriver /></PrivateRoute> } />
         </Route>
