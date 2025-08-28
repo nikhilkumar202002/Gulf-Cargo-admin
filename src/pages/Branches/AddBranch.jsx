@@ -31,10 +31,10 @@ const AddBranch = () => {
   return (
     <>
         <section className='add-branch'>
-          <div className="add-branch-container">
+          <div className="add-branch-container flex items-center justify-center">
             
-              <div className="min-h-screen bg-gray-50 p-6">
-                <div className="bg-white rounded-xl shadow-md border border-gray-200 p-8">
+              <div className="min-h-screen bg-gray-50 p-6 w-full max-w-5xl">
+                <div className="bg-white rounded-xl p-8 ">
                   
                   <h1 className="text-2xl font-semibold text-gray-700 mb-6">Create Branch</h1>
 

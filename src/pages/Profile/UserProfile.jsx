@@ -58,7 +58,7 @@ function UserProfile() {
 <div className="flex justify-center items-center min-h-screen p-6">
       <div className="bg-white shadow-lg rounded-2xl w-full max-w-md overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-white text-center">
+        <div className="bg-gradient-to-r from-[#ED2624] to-[#f5524f] p-6 text-white text-center">
           <img
             src={user.profile_pic || "/avatar.png"}
             alt="Profile"
@@ -104,11 +104,7 @@ function UserProfile() {
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-50 p-4 text-center">
-          <button className="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition">
-            Edit Profile
-          </button>
-        </div>
+
       </div>
     </div>
             </div>

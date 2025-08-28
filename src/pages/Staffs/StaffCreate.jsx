@@ -5,15 +5,14 @@ import "../Styles.css";
 const StaffCreate = () => {
   return (
     <>
-      <div className="staffcreate-header">
-        <h1 className="staffcreate-heading flex items-center gap-3"><span className="staff-form-header-icon"><HiUserAdd/></span>Staff Registration</h1>
-      </div>
-      <div className="flex justify-center items-center w-full">
-        <div className="w-full bg-white rounded-2xl p-8 border border-gray-100">
-          {/* Heading */}
+      
+      <div className="flex justify-center items-center w-full ">
+        <div className="w-full max-w-4xl bg-white rounded-2xl p-8">
+          <div className="staffcreate-header ">
+              <h1 className="staffcreate-heading flex items-center gap-3"><span className="staff-form-header-icon"><HiUserAdd/></span>Staff Registration</h1>
+            </div>
 
           <form className="space-y-6">
-            {/* Row 1 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
