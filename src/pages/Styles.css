@@ -125,5 +125,59 @@
 }
 .all-driver-view-content{
     font-size: 14px;
-    
+}
+
+/* Shipment pages styles */
+
+.shipment-report-key-card{
+    padding: 20px;
+    background-color: white;
+    border-radius: 15px;
+}
+.shipment-report-key-content{
+    font-family: "Roboto";
+    line-height: 22px;
+    padding-top: 5px;
+    h1{
+        font-size: 20px;
+        font-weight: 600;
+    }
+    p{
+        font-size: 16px;
+        font-weight: 400;
+        color: #454545;
+    }
+}
+.shipment-report-key-icon{
+    background-color: var(--secondary-color);
+    color: white;
+    font-size: 25px;
+    width: 45px;
+    height: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+}
+.shipment-report-heading{
+    font-size: 20px;
+    font-family: "Roboto";
+    font-weight: 600;
+    color: #1e1e1e;
+    padding-bottom: 15px;
+}
+.shipment-report-table-container{
+    padding: 20px;
+    background-color: white;
+    border-radius: 15px;
+}
+.shipment-report-filter-box{
+    input{
+        font-size: 14px;
+    }
+}
+.shipment-report-filter-btn{
+    padding-top: 20px;
+    font-size: 15px;
+    font-family: "Roboto";
 }

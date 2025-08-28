@@ -17,6 +17,7 @@ import StaffView from "./pages/Staffs/StaffView";
 import AddDriver from "./pages/Drivers/AddDriver";
 import ViewAllDriver from "./pages/Drivers/ViewAllDriver";
 import CreateCargo from "./pages/CargoShipment/CreateCargo";
+import ShippingReport from "./pages/CargoShipment/ShipmentReport";
 
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
@@ -169,6 +170,15 @@ function App() {
             element={
               <PrivateRoute>
                 <CreateCargo />
+              </PrivateRoute>
+            }
+          />
+
+            <Route
+            path="shipment/shipmentreport"
+            element={
+              <PrivateRoute>
+                <ShippingReport />
               </PrivateRoute>
             }
           />

@@ -49,6 +49,7 @@ export default function Sidebar() {
       label: "Shipments",
       submenus: [
         {name: "Create Shipment", path: "/cargoshipment/createcargo"},
+        {name: "Shipment Report", path: "/shipment/shipmentreport"},
       ]
     },
     {

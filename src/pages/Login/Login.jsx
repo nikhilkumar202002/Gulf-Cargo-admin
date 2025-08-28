@@ -3,7 +3,7 @@ import "./LoginRegisterStyles.css"
 import React, { useState } from "react";
 import { Button } from "@radix-ui/themes";
 
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -37,8 +37,6 @@ function Login() {
       setMessage(err.response?.data?.message || "Invalid email or password");
     }
   };
-
- 
 
   return (
     <>
@@ -78,11 +76,7 @@ function Login() {
             </form>
             {message && <p className="login-message">{message}</p>}
 
-            <p className="login-register-link">
-              <Link to="/register" className="text-blue-600 hover:underline">
-                Create User?
-              </Link>
-            </p>
+           
           </div>
         </div>
       </section>
