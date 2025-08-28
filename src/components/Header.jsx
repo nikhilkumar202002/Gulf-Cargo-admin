@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { IoIosArrowDown, IoIosSettings, IoIosLogOut } from "react-icons/io";
 import "./layout.css";
 import { IoNotifications } from "react-icons/io5";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../auth/AuthContext";
 
@@ -33,9 +33,12 @@ export default function Header() {
           }
         );
 
-        if (response.data && response.data.name) {
-          setUserName(response.data.name);
-          localStorage.setItem("userName", response.data.name);
+        console.log("Profile API response:", response.data);
+
+        const name = response.data?.user?.name;
+        if (name) {
+          setUserName(name);
+          localStorage.setItem("userName", name);
         }
       } catch (err) {
         console.error("Failed to fetch profile:", err);
@@ -43,13 +46,14 @@ export default function Header() {
       }
     };
 
+
     fetchProfile();
   }, [navigate]);
 
 
 
   useEffect(() => {
-      const handleClickOutside = event => {
+    const handleClickOutside = event => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowSettings(false);
       }
@@ -66,7 +70,7 @@ export default function Header() {
         navigate("/login");
         return;
       }
-       await axios.post(
+      await axios.post(
         "https://gulfcargoapi.bhutanvoyage.in/api/logout",
         {},
         {
@@ -96,41 +100,44 @@ export default function Header() {
 
 
       <div className="header-right flex gap-3">
- <div style={{ position: "relative" }} className="header-user">
-        <div
-          className="acount-avatar flex items-center gap-2 cursor-pointer"
-          onClick={() => setShowSettings(s => !s)}
-        >
-          <img src="/avatar.png" alt="User" className="w-8 h-8 rounded-full" />
-          <span className="user flex gap-1 items-center font-medium select-none">
-            {userName}
-            <IoIosArrowDown
-              className={`transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`}
-              size={18}
-            />
-          </span>
-        </div>
-        {showSettings && (
-          <div ref={dropdownRef} className="settings absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white py-2">
-            <button className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700">
-              <IoIosSettings className="text-gray-500" size={20} />
-              Settings
-            </button>
-            <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700">
-              <IoIosLogOut className="text-red-400" size={20} />
-              Logout
-            </button>
+        <div style={{ position: "relative" }} className="header-user">
+          <div
+            className="acount-avatar flex items-center gap-2 cursor-pointer"
+            onClick={() => setShowSettings(s => !s)}
+          >
+            <img src="/avatar.png" alt="User" className="w-8 h-8 rounded-full" />
+            <span className="user flex gap-1 items-center font-medium select-none">
+              {userName}
+              <IoIosArrowDown
+                className={`transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`}
+                size={18}
+              />
+            </span>
           </div>
-        )}
+          {showSettings && (
+            <div ref={dropdownRef} className="settings absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white py-2">
+              <Link
+                to="/profile"
+                className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700"
+              >
+                <IoIosSettings className="text-gray-500" size={20} />
+                Profile
+              </Link>
+              <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700">
+                <IoIosLogOut className="text-red-400" size={20} />
+                Logout
+              </button>
+            </div>
+          )}
 
-        
-      </div>
 
-      <div className="header-notification">
-              <IoNotifications />
+        </div>
+
+        <div className="header-notification">
+          <IoNotifications />
         </div>
       </div>
-     
+
     </header>
   );
 }

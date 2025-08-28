@@ -18,6 +18,7 @@ import AddDriver from "./pages/Drivers/AddDriver";
 import ViewAllDriver from "./pages/Drivers/ViewAllDriver";
 import CreateCargo from "./pages/CargoShipment/CreateCargo";
 import ShippingReport from "./pages/CargoShipment/ShipmentReport";
+import UserProfile from "./pages/Profile/UserProfile";
 
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
@@ -182,6 +183,16 @@ function App() {
               </PrivateRoute>
             }
           />
+
+           <Route
+            path="profile"
+            element={
+              <PrivateRoute>
+                <UserProfile />
+              </PrivateRoute>
+            }
+          />
+
             <Route path="drivers/addnewdriver" element={ <PrivateRoute><AddDriver /></PrivateRoute> } />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
