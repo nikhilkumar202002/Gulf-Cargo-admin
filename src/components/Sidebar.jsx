@@ -48,10 +48,7 @@ export default function Sidebar() {
       icon: <FaBox />,
       label: "Shipments",
       submenus: [
-        "Create Shipment",
-        "All Shipments",
-        "Pending / In Transit / Delivered",
-        "Shipment Tracking"
+        {name: "Create Shipment", path: "/cargoshipment/createcargo"},
       ]
     },
     {
@@ -69,12 +66,16 @@ export default function Sidebar() {
       key: "fleet",
       icon: <FaTruck />,
       label: "Fleet & Drivers",
-      submenus: [
-        "Driver List",
-        "Assign Driver to Shipment",
-        "Vehicle Management",
-        "Maintenance Schedule"
+       submenus: [
+        { name: "Drivers", path: "/drivers/alldriverslist" },
+        { name: "Add Drivers", path: "/drivers/addnewdriver" },
       ]
+      // submenus: [
+      //   "Driver List",
+      //   "Assign Driver to Shipment",
+      //   "Vehicle Management",
+      //   "Maintenance Schedule"
+      // ]
     },
    
     {

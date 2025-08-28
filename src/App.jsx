@@ -14,6 +14,10 @@ import VisaTypeCreate from "./pages/Visa/VisaTypeCreate";
 import StaffPanel from "./pages/Staffs/StaffPanel";
 import NewStaffForm from "./pages/Staffs/StaffCreate";
 import StaffView from "./pages/Staffs/StaffView";
+import AddDriver from "./pages/Drivers/AddDriver";
+import ViewAllDriver from "./pages/Drivers/ViewAllDriver";
+import CreateCargo from "./pages/CargoShipment/CreateCargo";
+
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
 import { useAuth } from "./auth/AuthContext";
@@ -150,6 +154,25 @@ function App() {
               </PrivateRoute>
             }
           />
+
+            <Route
+            path="drivers/alldriverslist"
+            element={
+              <PrivateRoute>
+                <ViewAllDriver />
+              </PrivateRoute>
+            }
+          />
+
+        <Route
+            path="cargoshipment/createcargo"
+            element={
+              <PrivateRoute>
+                <CreateCargo />
+              </PrivateRoute>
+            }
+          />
+            <Route path="drivers/addnewdriver" element={ <PrivateRoute><AddDriver /></PrivateRoute> } />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

@@ -116,3 +116,14 @@
     font-size: 14px;
     color: #363636;
 }
+
+/* Driver view page */
+
+.all-driver-view th{
+    font-size: 14px;
+    color: var(--primary-color);
+}
+.all-driver-view-content{
+    font-size: 14px;
+    
+}

@@ -12,6 +12,42 @@ export default function Header() {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
+  const [userName, setUserName] = useState("User");
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+
+        const response = await axios.get(
+          "https://gulfcargoapi.bhutanvoyage.in/api/profile",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/json",
+            },
+          }
+        );
+
+        if (response.data && response.data.name) {
+          setUserName(response.data.name);
+          localStorage.setItem("userName", response.data.name);
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile:", err);
+        navigate("/login");
+      }
+    };
+
+    fetchProfile();
+  }, [navigate]);
+
+
+
   useEffect(() => {
       const handleClickOutside = event => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -30,7 +66,7 @@ export default function Header() {
         navigate("/login");
         return;
       }
-      await axios.post(
+       await axios.post(
         "https://gulfcargoapi.bhutanvoyage.in/api/logout",
         {},
         {
@@ -40,18 +76,23 @@ export default function Header() {
           },
         }
       );
-      logout(); // **Update context**
-      navigate("/login", { replace: true }); // **Redirect immediately**
+
+      localStorage.removeItem("token");
+      localStorage.removeItem("userName");
+      logout();
+      navigate("/login", { replace: true });
     } catch (err) {
-      logout(); // Fallback logout
+      console.error("Logout failed:", err);
+      localStorage.removeItem("token");
+      localStorage.removeItem("userName");
+      logout();
       navigate("/login", { replace: true });
     }
   };
 
-
   return (
     <header className="header flex justify-between items-center">
-      <span>Welcome Back User</span>
+      <span className="flex gap-2">Welcome Back <h1 className="header-username">{userName}!</h1></span>
 
 
       <div className="header-right flex gap-3">
@@ -62,7 +103,7 @@ export default function Header() {
         >
           <img src="/avatar.png" alt="User" className="w-8 h-8 rounded-full" />
           <span className="user flex gap-1 items-center font-medium select-none">
-            User
+            {userName}
             <IoIosArrowDown
               className={`transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`}
               size={18}
