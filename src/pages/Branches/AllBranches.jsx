@@ -73,15 +73,43 @@ const AllBranches = () => {
   navigate(`/branches/edit/${branch.id}`, { state: branch });
 };
 
-  const handleDelete = (branch) => {
-    if (window.confirm(`Are you sure you want to delete ${branch.branch_name}?`)) {
-      alert(`${branch.branch_name} deleted successfully.`);
-    }
-  };
+  const handleDelete = async (branch) => {
+  if (!window.confirm(`Are you sure you want to delete ${branch.branch_name}?`)) {
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("token"); // ✅ fix: get token here
+
+    await axios.delete(
+      `https://gulfcargoapi.bhutanvoyage.in/api/branch/${branch.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    alert("Branch deleted successfully!");
+    // ✅ remove the deleted branch from UI
+    setBranches((prev) => prev.filter((b) => b.id !== branch.id));
+  } catch (error) {
+    console.error("Delete error:", error.response?.data || error.message);
+    alert(
+      `Failed to delete branch!\n${
+        error.response?.data?.message || "Please try again."
+      }`
+    );
+  }
+};
+
 
   const handleViewUsers = (branch) => {
     alert(`View users for ${branch.branch_name}`);
   };
+
+  
 
   return (
     <>
