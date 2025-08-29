@@ -5,11 +5,40 @@ import { useAuth } from "../../auth/AuthContext";
 import "../Styles.css";
 
 const StaffCreate = () => {
-  const { token } = useAuth(); // ✅ Get token from AuthContext
+  const { token } = useAuth();
   const [branches, setBranches] = useState([]);
+  const [visas, setVisas] = useState([]);
   const [loading, setLoading] = useState(true);
+    const [loadingVisas, setLoadingVisas] = useState(true);
 
-  // Function to fetch active branches
+  const fetchVisaTypes = async () => {
+  if (!token) return;
+
+  try {
+    const response = await axios.get(
+      "https://gulfcargoapi.bhutanvoyage.in/api/active-visa-types",
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    console.log("Visa Types API Response:", response.data); // 👈 Add this
+
+    if (response.data.success) {
+      setVisas(response.data.data || []);
+    } else {
+      setVisas([]);
+    }
+  } catch (error) {
+    console.error("Error fetching visa types:", error.response?.data || error.message);
+    setVisas([]);
+  } finally {
+    setLoadingVisas(false);
+  }
+};
+
   const fetchBranches = async () => {
     if (!token) return;
 
@@ -23,10 +52,8 @@ const StaffCreate = () => {
         }
       );
 
-      // Check the API structure
       console.log("Branches API Response:", response.data);
 
-      // Fix: assign the correct array
       setBranches(response.data.data || []);
     } catch (error) {
       console.error("Error fetching branches:", error);
@@ -36,14 +63,16 @@ const StaffCreate = () => {
   };
 
 
-  // Fetch branches every 5 seconds
-  useEffect(() => {
-    fetchBranches(); // Initial call
+    useEffect(() => {
+      fetchBranches();
+      fetchVisaTypes();
+      
+      const interval = setInterval(() => {
+        fetchBranches();
+        fetchVisaTypes();
+    }, 5000);
 
-    const interval = setInterval(fetchBranches, 5000); // ✅ Fetch every 5 sec
-
-    return () => clearInterval(interval); // ✅ Cleanup on unmount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => clearInterval(interval);
   }, [token]);
 
   return (
@@ -193,12 +222,26 @@ const StaffCreate = () => {
                 <label className="block text-sm font-medium text-gray-700">
                   Type of Visa
                 </label>
-                <select className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200">
-                  <option>Select</option>
-                  <option>Employment</option>
-                  <option>Visit</option>
-                  <option>Residence</option>
-                </select>
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
+                disabled={loadingVisas}
+              >
+                {loadingVisas ? (
+                  <option>Loading visa types...</option>
+                ) : visas.length === 0 ? (
+                  <option>No active visa types found</option>
+                ) : (
+                  <>
+                    <option value="">Select Visa Type</option>
+                    {visas.map((visa) => (
+                      <option key={visa.id} value={visa.id}>
+                        {visa.type_name}
+                      </option>
+                    ))}
+                  </>
+                )}
+              </select>
+
               </div>
             </div>
 

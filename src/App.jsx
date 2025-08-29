@@ -22,6 +22,8 @@ import UserProfile from "./pages/Profile/UserProfile";
 import EditBranch from "./pages/Branches/EditBranch";
 import AllRoles from "./pages/Roles/AllRoles";
 import CreateRoles from "./pages/Roles/CreateRoles";
+import DocumentTypeCreate from "./pages/Document/CreateDocument";
+import DocumentList from "./pages/Document/DocumentList";
 
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
@@ -220,6 +222,24 @@ function App() {
             element={
               <PrivateRoute>
                 <CreateRoles />
+              </PrivateRoute>
+            }
+          />
+
+            <Route
+            path="documents/createdocument"
+            element={
+              <PrivateRoute>
+                <DocumentTypeCreate/>
+              </PrivateRoute>
+            }
+          />
+
+            <Route
+            path="documents/documentlist"
+            element={
+              <PrivateRoute>
+                <DocumentList/>
               </PrivateRoute>
             }
           />

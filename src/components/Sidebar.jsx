@@ -96,6 +96,17 @@ export default function Sidebar() {
         { name: "Create Visa type", path: "/visatype/create" },
       ]
     },
+
+         {
+      key: "document",
+      icon: <FaCcVisa />,
+      label: "Document Type",
+       submenus: [
+        { name: "Create Document Type", path: "/documents/createdocument" },
+        { name: "Visa List", path: "/documents/documentlist" },
+      ]
+    },
+
     {
       key: "finance",
       icon: <FaMoneyBill />,
