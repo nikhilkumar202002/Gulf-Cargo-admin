@@ -10,23 +10,18 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(!!token);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Login method
   const login = (newToken) => {
     localStorage.setItem("token", newToken);
     setToken(newToken);
     setIsAuthenticated(true);
   };
 
-  // ✅ Logout method
   const logout = () => {
     localStorage.removeItem("token");
     setToken(null);
     setIsAuthenticated(false);
-    // ❌ No useNavigate here — just update state.
-    // We'll handle redirects in components instead.
   };
 
-  // ✅ Check token validity every 5 seconds
   useEffect(() => {
     let interval;
 
@@ -46,7 +41,6 @@ export const AuthProvider = ({ children }) => {
 
         setIsAuthenticated(true);
       } catch (err) {
-        // ❌ If token expired or deleted → logout user
         if (err.response && err.response.status === 401) {
           logout();
         }
@@ -55,8 +49,8 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    verifyToken(); // Initial check
-    interval = setInterval(verifyToken, 5000); // Check every 5 sec
+    verifyToken(); 
+    interval = setInterval(verifyToken, 5000); 
 
     return () => clearInterval(interval);
   }, [token]);

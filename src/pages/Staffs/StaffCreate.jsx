@@ -1,16 +1,59 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { HiUserAdd } from "react-icons/hi";
+import axios from "axios";
+import { useAuth } from "../../auth/AuthContext";
 import "../Styles.css";
 
 const StaffCreate = () => {
+  const { token } = useAuth(); // ✅ Get token from AuthContext
+  const [branches, setBranches] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Function to fetch active branches
+  const fetchBranches = async () => {
+    if (!token) return;
+
+    try {
+      const response = await axios.get(
+        "https://gulfcargoapi.bhutanvoyage.in/api/active-branches",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      // Check the API structure
+      console.log("Branches API Response:", response.data);
+
+      // Fix: assign the correct array
+      setBranches(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching branches:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  // Fetch branches every 5 seconds
+  useEffect(() => {
+    fetchBranches(); // Initial call
+
+    const interval = setInterval(fetchBranches, 5000); // ✅ Fetch every 5 sec
+
+    return () => clearInterval(interval); // ✅ Cleanup on unmount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
   return (
     <>
-      
+
       <div className="flex justify-center items-center w-full ">
         <div className="w-full max-w-4xl bg-white rounded-2xl p-8">
           <div className="staffcreate-header ">
-              <h1 className="staffcreate-heading flex items-center gap-3"><span className="staff-form-header-icon"><HiUserAdd/></span>Staff Registration</h1>
-            </div>
+            <h1 className="staffcreate-heading flex items-center gap-3"><span className="staff-form-header-icon"><HiUserAdd /></span>Staff Registration</h1>
+          </div>
 
           <form className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -47,33 +90,8 @@ const StaffCreate = () => {
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Staff ID
-                </label>
-                <input
-                  type="text"
-                  value="AR0219"
-                  disabled
-                  className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-gray-500 cursor-not-allowed"
-                />
-              </div>
-            </div>
 
-            {/* Row 3 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Staff Branch
-                </label>
-                <select className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200">
-                  <option value="">Select Branch</option>
-                  <option>Dubai</option>
-                  <option>Abu Dhabi</option>
-                  <option>Sharjah</option>
-                </select>
-              </div>
-              <div>
+               <div>
                 <label className="block text-sm font-medium text-gray-700">
                   Staff Email
                 </label>
@@ -83,6 +101,31 @@ const StaffCreate = () => {
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
                 />
               </div>
+
+            </div>
+
+            {/* Row 3 */}
+            <div >
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Staff Branch
+                </label>
+                <select
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
+                  disabled={loading}
+                >
+                  <option value="">
+                    {loading ? "Loading branches..." : "Select Branch"}
+                  </option>
+                  {!loading &&
+                    branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.branch_name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+             
             </div>
 
             {/* Row 4 */}

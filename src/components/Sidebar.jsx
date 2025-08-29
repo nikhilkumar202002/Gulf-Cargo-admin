@@ -123,10 +123,9 @@ export default function Sidebar() {
       icon: <FaCog />,
       label: "System Settings",
       submenus: [
-        "User Roles & Permissions",
-        "API Integrations",
-        "System Preferences",
-        "Notification Settings"
+        { name: "All Roles", path: "/roles/allroles" },
+        { name: "Create Role", path: "/roles/addroles" },
+
       ]
     }
   ];

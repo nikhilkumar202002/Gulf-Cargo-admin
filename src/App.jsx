@@ -20,6 +20,8 @@ import CreateCargo from "./pages/CargoShipment/CreateCargo";
 import ShippingReport from "./pages/CargoShipment/ShipmentReport";
 import UserProfile from "./pages/Profile/UserProfile";
 import EditBranch from "./pages/Branches/EditBranch";
+import AllRoles from "./pages/Roles/AllRoles";
+import CreateRoles from "./pages/Roles/CreateRoles";
 
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
@@ -200,6 +202,24 @@ function App() {
             element={
               <PrivateRoute>
                 <UserProfile />
+              </PrivateRoute>
+            }
+          />
+
+           <Route
+            path="roles/allroles"
+            element={
+              <PrivateRoute>
+                <AllRoles />
+              </PrivateRoute>
+            }
+          />
+
+          <Route
+            path="roles/addroles"
+            element={
+              <PrivateRoute>
+                <CreateRoles />
               </PrivateRoute>
             }
           />
