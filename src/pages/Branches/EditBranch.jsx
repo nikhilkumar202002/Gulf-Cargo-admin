@@ -1,58 +1,59 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { FiArrowLeft } from "react-icons/fi";
 import axios from "axios";
 
 const EditBranch = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-
-
   const token = localStorage.getItem("token");
 
   const [branch, setBranch] = useState({
     branch_name: "",
     branch_code: "",
-    contact_number: "",
-    alternative_number: "",
-    email: "",
-    location: "",
-    website: "",
-    address: "",
-    status: "Active", // Default status
+    branch_contact_number: "",
+    branch_alternative_number: "",
+    branch_email: "",
+    branch_location: "",
+    branch_website: "",
+    branch_address: "",
+    status: 1, // ✅ Default to active (numeric)
   });
 
   const [loading, setLoading] = useState(true);
 
-
+  // ✅ Fetch existing branch details
   useEffect(() => {
     const fetchBranch = async () => {
       try {
-        const response = await axios.post(
-          "https://gulfcargoapi.bhutanvoyage.in/api/branch/view",
-          { id },
+        const response = await axios.get(
+          `https://gulfcargoapi.bhutanvoyage.in/api/branch/${id}`,
           {
             headers: {
-              Authorization: `Bearer ${token}`, // ✅ Add token for security
+              Authorization: `Bearer ${token}`,
             },
           }
         );
 
-        // ✅ Set branch data from API response
-        if (response.data) {
-          setBranch({
-            branch_name: response.data.branch_name || "",
-            branch_code: response.data.branch_code || "",
-            contact_number: response.data.contact_number || "",
-            alternative_number: response.data.alternative_number || "",
-            email: response.data.email || "",
-            location: response.data.location || "",
-            website: response.data.website || "",
-            address: response.data.address || "",
-            status: response.data.status || "Active",
+        if (response.data && response.data.branch) {
+         setBranch({
+            branch_name: response.data.branch.branch_name || "",
+            branch_code: response.data.branch.branch_code || "",
+            branch_contact_number: response.data.branch.branch_contact_number || "",
+            branch_alternative_number: response.data.branch.branch_alternative_number || "",
+            branch_email: response.data.branch.branch_email || "",
+            branch_location: response.data.branch.branch_location || "",
+            branch_website: response.data.branch.branch_website || "",
+            branch_address: response.data.branch.branch_address || "",
+            status: Number(response.data.branch.status), // ✅ Force numeric
           });
+
+        } else {
+          alert("Branch details not found!");
         }
       } catch (error) {
         console.error("Error fetching branch:", error);
+        alert("Failed to fetch branch details!");
       } finally {
         setLoading(false);
       }
@@ -63,19 +64,25 @@ const EditBranch = () => {
 
   // ✅ Handle input changes
   const handleChange = (e) => {
-    setBranch({ ...branch, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setBranch({
+      ...branch,
+      [name]: name === "status" ? parseInt(value) : value, // ✅ Convert status to number
+    });
   };
 
-  // ✅ Update branch
+  // ✅ Submit form
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     try {
-      await axios.post(
-        `https://gulfcargoapi.bhutanvoyage.in/api/branch/update/${id}`,
+      await axios.put(
+        `https://gulfcargoapi.bhutanvoyage.in/api/branch/${id}`,
         branch,
         {
           headers: {
-            Authorization: `Bearer ${token}`, // ✅ Secure update
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -83,12 +90,15 @@ const EditBranch = () => {
       alert("Branch updated successfully!");
       navigate("/branches");
     } catch (error) {
-      console.error("Error updating branch:", error);
-      alert("Failed to update branch!");
+      console.error("Error updating branch:", error.response?.data || error);
+      alert(
+        `Failed to update branch!\n${
+          error.response?.data?.message || "Please check all fields."
+        }`
+      );
     }
   };
 
-  // ✅ Show loading while fetching data
   if (loading) {
     return (
       <div className="p-6 text-center text-lg font-semibold">
@@ -98,93 +108,113 @@ const EditBranch = () => {
   }
 
   return (
-    <div className="p-6">
-      <h2 className="text-xl font-bold mb-4">Edit Branch</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <input
-            type="text"
-            name="branch_name"
-            value={branch.branch_name}
-            onChange={handleChange}
-            placeholder="Branch Name"
-            className="border p-2 w-full"
-            required
-          />
-          <input
-            type="text"
-            name="branch_code"
-            value={branch.branch_code}
-            onChange={handleChange}
-            placeholder="Branch Code"
-            className="border p-2 w-full"
-            required
-          />
-          <input
-            type="text"
-            name="contact_number"
-            value={branch.contact_number}
-            onChange={handleChange}
-            placeholder="Contact Number"
-            className="border p-2 w-full"
-            required
-          />
-          <input
-            type="text"
-            name="alternative_number"
-            value={branch.alternative_number}
-            onChange={handleChange}
-            placeholder="Alternative Number"
-            className="border p-2 w-full"
-          />
-          <input
-            type="email"
-            name="email"
-            value={branch.email}
-            onChange={handleChange}
-            placeholder="Email"
-            className="border p-2 w-full"
-          />
-          <input
-            type="text"
-            name="location"
-            value={branch.location}
-            onChange={handleChange}
-            placeholder="Location"
-            className="border p-2 w-full"
-          />
-          <input
-            type="text"
-            name="website"
-            value={branch.website}
-            onChange={handleChange}
-            placeholder="Website"
-            className="border p-2 w-full"
-          />
+    <div className="flex justify-center py-10 px-4">
+      <div className="w-full max-w-4xl bg-white shadow-lg rounded-2xl p-8">
+        <div className="view-branch-header flex justify-between border-b items-center">
+          <h2>Update Branch</h2>
+          <button
+            className="flex items-center gap-2 mb-6 text-white bg-[#ED2624] hover:bg-[#e6403e] px-5 py-2 rounded-lg shadow transition-all duration-300"
+            onClick={() => navigate(-1)}
+          >
+            <FiArrowLeft size={18} />
+            Back
+          </button>
         </div>
-        <textarea
-          name="address"
-          value={branch.address}
-          onChange={handleChange}
-          placeholder="Address"
-          className="border p-2 w-full"
-        />
-        <select
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Inputs Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <input
+              type="text"
+              name="branch_name"
+              value={branch.branch_name}
+              onChange={handleChange}
+              placeholder="Branch Name"
+              className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+            <input
+              type="text"
+              name="branch_code"
+              value={branch.branch_code}
+              onChange={handleChange}
+              placeholder="Branch Code"
+              className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+            <input
+              type="text"
+              name="branch_contact_number"
+              value={branch.branch_contact_number}
+              onChange={handleChange}
+              placeholder="Contact Number"
+              className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+            <input
+              type="text"
+              name="branch_alternative_number"
+              value={branch.branch_alternative_number}
+              onChange={handleChange}
+              placeholder="Alternative Number"
+              className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <input
+              type="email"
+              name="branch_email"
+              value={branch.branch_email}
+              onChange={handleChange}
+              placeholder="Email"
+              className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <input
+              type="text"
+              name="branch_location"
+              value={branch.branch_location}
+              onChange={handleChange}
+              placeholder="Location"
+              className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <input
+              type="text"
+              name="branch_website"
+              value={branch.branch_website}
+              onChange={handleChange}
+              placeholder="Website"
+              className="border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {/* Address */}
+          <textarea
+            name="branch_address"
+            value={branch.branch_address}
+            onChange={handleChange}
+            placeholder="Address"
+            className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+
+          {/* Status */}
+         <select
           name="status"
-          value={branch.status}
-          onChange={handleChange}
-          className="border p-2 w-full"
+          value={branch.status} // ✅ Always numeric
+          onChange={(e) => setBranch({ ...branch, status: parseInt(e.target.value) })}
+          className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
+          <option value={1}>Active</option>
+          <option value={0}>Inactive</option>
         </select>
-        <button
-          type="submit"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
-        >
-          Update Branch
-        </button>
-      </form>
+
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            className="bg-indigo-600 text-white px-6 py-3 rounded-lg shadow hover:bg-indigo-700 transition-all w-full"
+          >
+            Update Branch
+          </button>
+        </form>
+      </div>
     </div>
   );
 };

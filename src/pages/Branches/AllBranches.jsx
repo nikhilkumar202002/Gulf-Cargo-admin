@@ -1,10 +1,11 @@
 import { Button } from "@radix-ui/themes";
 import React, { useEffect, useState } from "react";
-import { FaSearch, FaEdit, FaTrash, FaUsers } from "react-icons/fa";
+import { FaSearch, FaEdit, FaTrash, FaUsers, FaEye  } from "react-icons/fa";
 import { FiMoreVertical } from "react-icons/fi";
 import { LuPlus } from "react-icons/lu";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import "../styles.css";
 
 
 const AllBranches = () => {
@@ -68,9 +69,9 @@ const AllBranches = () => {
     setOpenMenuIndex(openMenuIndex === index ? null : index);
   };
 
-  const handleEdit = (branch) => {
-    alert(`Edit ${branch.branch_name}`);
-  };
+ const handleEdit = (branch) => {
+  navigate(`/branches/edit/${branch.id}`, { state: branch });
+};
 
   const handleDelete = (branch) => {
     if (window.confirm(`Are you sure you want to delete ${branch.branch_name}?`)) {
@@ -188,8 +189,14 @@ const AllBranches = () => {
 
                       {openMenuIndex === index && (
                         <div className="absolute right-0 mt-2 w-32 bg-white border rounded shadow-lg z-10">
+                           <button className="flex items-center gap-2 px-4 py-2 hover:bg-green-100 w-full text-green-600">
+                            <Link to={`/branch/viewbranch/${branch.id}`} className="flex items-center gap-2 w-full">
+                              <FaEye /> View
+                            </Link>
+                          </button>
+                 
                           <button className="flex items-center gap-2 px-4 py-2 hover:bg-yellow-100 w-full text-yellow-600">
-                            <Link to={`/branches/edit/${branch.id}`} className="flex items-center gap-2 w-full">
+                            <Link to={`/branches/edit/${branch.id}`}   state={branch} className="flex items-center gap-2 w-full">
                               <FaEdit /> Edit
                             </Link>
                           </button>
@@ -199,12 +206,7 @@ const AllBranches = () => {
                           >
                             <FaTrash /> Delete
                           </button>
-                          <button
-                            onClick={() => handleViewUsers(branch)}
-                            className="flex items-center gap-2 px-4 py-2 hover:bg-green-100 w-full text-green-600"
-                          >
-                            <FaUsers /> Users
-                          </button>
+                         
                         </div>
                       )}
                     </td>

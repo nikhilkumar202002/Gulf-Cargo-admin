@@ -24,6 +24,7 @@ import AllRoles from "./pages/Roles/AllRoles";
 import CreateRoles from "./pages/Roles/CreateRoles";
 import DocumentTypeCreate from "./pages/Document/CreateDocument";
 import DocumentList from "./pages/Document/DocumentList";
+import ViewBranch from "./pages/Branches/ViewBranch";
 
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
@@ -240,6 +241,15 @@ function App() {
             element={
               <PrivateRoute>
                 <DocumentList/>
+              </PrivateRoute>
+            }
+          />
+
+            <Route
+            path="branch/viewbranch/:id"
+            element={
+              <PrivateRoute>
+                <ViewBranch/>
               </PrivateRoute>
             }
           />
