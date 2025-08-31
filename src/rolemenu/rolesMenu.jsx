@@ -89,7 +89,7 @@ export const rolesMenu = {
       label: "Document Type",
       submenus: [
         { name: "Create Document Type", path: "/documents/createdocument" },
-        { name: "Visa List", path: "/documents/documentlist" },
+        { name: "Document List", path: "/documents/documentlist" },
       ]
     },
     {
