@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
-import axios from "axios";
+import api from "../../api/axiosInstance";
 
 const EditBranch = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
-  const [branch, setBranch] = useState({
+   const [branch, setBranch] = useState({
     branch_name: "",
     branch_code: "",
     branch_contact_number: "",
@@ -17,83 +16,70 @@ const EditBranch = () => {
     branch_location: "",
     branch_website: "",
     branch_address: "",
-    status: 1, // ✅ Default to active (numeric)
+    status: 1,
   });
 
   const [loading, setLoading] = useState(true);
 
-  // ✅ Fetch existing branch details
-  useEffect(() => {
+   useEffect(() => {
+    let cancelled = false;
+
     const fetchBranch = async () => {
       try {
-        const response = await axios.get(
-          `https://gulfcargoapi.bhutanvoyage.in/api/branch/${id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const res = await api.get(`/branch/${id}`); // ✅ baseURL + token auto
+        const b =
+          res.data?.branch ??
+          res.data?.data ??
+          res.data; // handle different shapes safely
 
-        if (response.data && response.data.branch) {
-         setBranch({
-            branch_name: response.data.branch.branch_name || "",
-            branch_code: response.data.branch.branch_code || "",
-            branch_contact_number: response.data.branch.branch_contact_number || "",
-            branch_alternative_number: response.data.branch.branch_alternative_number || "",
-            branch_email: response.data.branch.branch_email || "",
-            branch_location: response.data.branch.branch_location || "",
-            branch_website: response.data.branch.branch_website || "",
-            branch_address: response.data.branch.branch_address || "",
-            status: Number(response.data.branch.status), // ✅ Force numeric
+        if (!b) throw new Error("Branch details not found");
+        if (!cancelled) {
+          setBranch({
+            branch_name: b.branch_name || "",
+            branch_code: b.branch_code || "",
+            branch_contact_number: b.branch_contact_number || "",
+            branch_alternative_number: b.branch_alternative_number || "",
+            branch_email: b.branch_email || "",
+            branch_location: b.branch_location || "",
+            branch_website: b.branch_website || "",
+            branch_address: b.branch_address || "",
+            status: Number(b.status ?? 1), // ✅ keep numeric
           });
-
-        } else {
-          alert("Branch details not found!");
         }
       } catch (error) {
         console.error("Error fetching branch:", error);
         alert("Failed to fetch branch details!");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchBranch();
-  }, [id, token]);
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
-  // ✅ Handle input changes
-  const handleChange = (e) => {
+   const handleChange = (e) => {
     const { name, value } = e.target;
-    setBranch({
-      ...branch,
-      [name]: name === "status" ? parseInt(value) : value, // ✅ Convert status to number
-    });
+    setBranch((prev) => ({
+      ...prev,
+      [name]: name === "status" ? Number(value) : value,
+    }));
   };
 
-  // ✅ Submit form
-  const handleSubmit = async (e) => {
+
+   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
-      await axios.put(
-        `https://gulfcargoapi.bhutanvoyage.in/api/branch/${id}`,
-        branch,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
+      await api.put(`/branch/${id}`, branch); 
       alert("Branch updated successfully!");
       navigate("/branches");
     } catch (error) {
-      console.error("Error updating branch:", error.response?.data || error);
+      console.error("Error updating branch:", error?.response?.data || error);
       alert(
         `Failed to update branch!\n${
-          error.response?.data?.message || "Please check all fields."
+          error?.response?.data?.message || "Please check all fields."
         }`
       );
     }

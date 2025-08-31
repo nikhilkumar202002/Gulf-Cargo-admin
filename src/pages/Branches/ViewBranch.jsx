@@ -1,54 +1,62 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../api/axiosInstance";
 import { FiArrowLeft } from "react-icons/fi";
 import { useAuth } from "../../auth/AuthContext";
 import "../styles.css";
 
 function ViewBranch() {
 
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const { token } = useAuth();
-    const [branch, setBranch] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { token } = useAuth(); 
+  const [branch, setBranch] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-    const fetchBranch = async () => {
-        try {
-            if (!token) {
-                navigate("/login");
-                return;
-            }
-
-            const response = await axios.get(
-                `https://gulfcargoapi.bhutanvoyage.in/api/branch/${id}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
-            );
-
-            setBranch(response.data.branch);
-            setLoading(false);
-            setError("");
-        } catch (err) {
-            console.error("Fetch Error:", err);
-            if (err.response && err.response.status === 401) {
-                navigate("/login");
-            } else {
-                setError("Failed to fetch branch details.");
-            }
-            setLoading(false);
-        }
-    };
+  const fetchBranch = async () => {
+    try {
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+      const res = await api.get(`/branch/${id}`); // ✅ token + baseURL auto
+      const b = res.data?.branch ?? res.data?.data ?? res.data;
+      setBranch(b || null);
+      setError("");
+    } catch (err) {
+      console.error("Fetch Error:", err);
+      if (err.response?.status === 401) {
+        navigate("/login");
+      } else {
+        setError("Failed to fetch branch details.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
     useEffect(() => {
-        fetchBranch();
-        const interval = setInterval(fetchBranch, 5000);
-        return () => clearInterval(interval);
-    }, [id, token]);
+    let cancelled = false;
+    const run = async () => {
+      if (!cancelled) await fetchBranch();
+    };
+    run();
+    const interval = setInterval(run, 5000); 
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    
+  }, [id, token]);
+
+  const isActive =
+    branch &&
+    (branch.status === 1 ||
+      branch.status === "1" ||
+      branch.status === true ||
+      branch.status === "Active");
+
 
     return (
         <>

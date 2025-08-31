@@ -3,7 +3,7 @@ import axios from "axios";
 
 const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext); // Always call useContext at the top level
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem("token"));
@@ -23,8 +23,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    let interval;
-
     const verifyToken = async () => {
       if (!token) {
         setIsAuthenticated(false);
@@ -38,22 +36,21 @@ export const AuthProvider = ({ children }) => {
             Authorization: `Bearer ${token}`,
           },
         });
-
         setIsAuthenticated(true);
       } catch (err) {
         if (err.response && err.response.status === 401) {
-          logout();
+          logout(); // Handle 401 by logging out
         }
       } finally {
-        setLoading(false);
+        setLoading(false); // Set loading to false after checking
       }
     };
 
-    verifyToken(); 
-    interval = setInterval(verifyToken, 5000); 
+    verifyToken();
 
-    return () => clearInterval(interval);
-  }, [token]);
+    const interval = setInterval(verifyToken, 5000); // Check every 5 seconds
+    return () => clearInterval(interval); // Cleanup interval on component unmount
+  }, [token]); // Token dependency, ensures effect runs when token changes
 
   return (
     <AuthContext.Provider value={{ token, isAuthenticated, login, logout, loading }}>

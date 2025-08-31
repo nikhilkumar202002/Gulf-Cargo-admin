@@ -1,7 +1,5 @@
-"use client";
-
 import { useState } from "react";
-import axios from "axios";
+import { storeBranch } from "../../api/branchApi"; 
 
 const AddBranch = () => {
 
@@ -13,7 +11,7 @@ const AddBranch = () => {
     location: "",
     branchCode: "",
     contactNo: "",
-    alternativeContactNo: "",   // ✅ new field
+    alternativeContactNo: "",   
     adminEmail: "",
     adminPassword: "",
     branchAddress: "",
@@ -22,75 +20,67 @@ const AddBranch = () => {
     status: 1,
   });
 
-  const handleChange = (e) => {
+ const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const val = name === "status" ? Number(value) : value;
+    setFormData((prev) => ({ ...prev, [name]: val }));
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  setMessage("");
+    e.preventDefault();
+    setLoading(true);
+    setMessage("");
 
-  try {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      setMessage("⚠️ You are not logged in!");
-      return;
-    }
-
-    const payload = {
-      branch_name: formData.branchName,
-      branch_code: formData.branchCode,
-      branch_contact_number: formData.contactNo,
-      branch_alternative_number: formData.alternativeContactNo,
-      branch_email: formData.branchEmail,
-      branch_address: formData.branchAddress,
-      branch_location: formData.location,
-      branch_website: formData.website,
-      status: formData.status,
-    };
-
-    const response = await axios.post(
-      "https://gulfcargoapi.bhutanvoyage.in/api/branch",
-      payload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setMessage("⚠️ You are not logged in!");
+        return;
       }
-    );
 
-    if (response.data) {
-      setMessage("✅ Branch created successfully!");
-      setFormData({
-        branchName: "",
-        location: "",
-        branchCode: "",
-        contactNo: "",
-        alternativeContactNo: "",
-        adminEmail: "",
-        adminPassword: "",
-        branchAddress: "",
-        branchEmail: "",
-        website: "",
-        status: 1,
-      });
-    }
-  } catch (error) {
-    if (error.response) {
-      console.error("Branch creation failed:", error.response.data);
-      setMessage("❌ " + (error.response.data.message || "Failed to create branch."));
-    } else {
-      console.error("Error:", error.message);
-      setMessage("❌ " + error.message);
-    }
-  } finally {
-    setLoading(false); // ✅ always reset button state
-  }
-};
+      // Backend expects snake_case keys
+      const payload = {
+        branch_name: formData.branchName,
+        branch_code: formData.branchCode,
+        branch_contact_number: formData.contactNo,
+        branch_alternative_number: formData.alternativeContactNo,
+        branch_email: formData.branchEmail,
+        branch_address: formData.branchAddress,
+        branch_location: formData.location,
+        branch_website: formData.website,
+        status: formData.status,
+      };
 
+      const data = await storeBranch(payload); 
+
+      if (data) {
+        setMessage("✅ Branch created successfully!");
+        setFormData({
+          branchName: "",
+          location: "",
+          branchCode: "",
+          contactNo: "",
+          alternativeContactNo: "",
+          adminEmail: "",
+          adminPassword: "",
+          branchAddress: "",
+          branchEmail: "",
+          website: "",
+          status: 1,
+        });
+      }
+    } catch (error) {
+      if (error.response) {
+        console.error("Branch creation failed:", error.response.data);
+        setMessage("❌ " + (error.response.data.message || "Failed to create branch."));
+      } else {
+        console.error("Error:", error.message);
+        setMessage("❌ " + error.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <>

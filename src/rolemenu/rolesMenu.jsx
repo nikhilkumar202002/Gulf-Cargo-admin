@@ -1,0 +1,183 @@
+// rolesMenu.js
+import {
+  FaUsers,
+  FaTruck,
+  FaBox,
+  FaBuilding,
+  FaUser,
+  FaMoneyBill,
+  FaChartBar,
+  FaCog,
+  FaCcVisa
+} from "react-icons/fa";
+import { RiMailSendFill } from "react-icons/ri";
+import { BiSolidDashboard } from "react-icons/bi";
+
+export const rolesMenu = {
+  1: [ // Super Admin Menu
+    { key: "dashboard", icon: <BiSolidDashboard />, label: "Dashboard", path: "/dashboard" },
+    {
+      key: "branch",
+      icon: <FaBuilding />,
+      label: "Branches",
+      submenus: [
+        { name: "All Branches", path: "/branches" },
+        { name: "Add New Branch", path: "/branches/add" },
+      ]
+    },
+    {
+      key: "hr",
+      icon: <FaUsers />,
+      label: "HR & Staff",
+      submenus: [
+        { name: "All Staffs", path: "/hr&staff/allstaffs" },
+        { name: "Create Staffs", path: "/hr&staff/createstaffs" },
+      ]
+    },
+    {
+      key: "shipments",
+      icon: <FaBox />,
+      label: "Shipments",
+      submenus: [
+        { name: "Create Shipment", path: "/cargoshipment/createcargo" },
+        { name: "Shipment Report", path: "/shipment/shipmentreport" },
+      ]
+    },
+    {
+      key: "sender",
+      icon: <RiMailSendFill />,
+      label: "Sender / Receiver",
+      submenus: [
+        { name: "View Receiver", path: "/allreceiver" },
+        { name: "View Sender", path: "/senders" },
+        { name: "Create Sender", path: "/sender/create" },
+        { name: "Create Receiver", path: "/receiver/create" },
+      ]
+    },
+    {
+      key: "fleet",
+      icon: <FaTruck />,
+      label: "Fleet & Drivers",
+      submenus: [
+        { name: "Drivers", path: "/drivers/alldriverslist" },
+        { name: "Add Drivers", path: "/drivers/addnewdriver" },
+      ]
+    },
+    {
+      key: "agency",
+      icon: <FaUser />,
+      label: "Agency & Partners",
+      submenus: [
+        { name: "Partner Agencies", path: "/partner-agencies" },
+        { name: "Contracts & Agreements", path: "/contracts" },
+        { name: "Agency Performance", path: "/performance" },
+      ]
+    },
+    {
+      key: "visa",
+      icon: <FaCcVisa />,
+      label: "Visa",
+      submenus: [
+        { name: "All Visa", path: "/visa/allvisa" },
+        { name: "Visa Employee", path: "/visaemployee" },
+        { name: "Create Visa Type", path: "/visatype/create" },
+      ]
+    },
+    {
+      key: "document",
+      icon: <FaCcVisa />,
+      label: "Document Type",
+      submenus: [
+        { name: "Create Document Type", path: "/documents/createdocument" },
+        { name: "Visa List", path: "/documents/documentlist" },
+      ]
+    },
+    {
+      key: "finance",
+      icon: <FaMoneyBill />,
+      label: "Finance & Accounts",
+      submenus: [
+        { name: "Invoices & Payments", path: "/invoices" },
+        { name: "Expenses & Purchase Orders", path: "/expenses" },
+        { name: "Outstanding Payments", path: "/outstanding" },
+        { name: "Financial Reports", path: "/financialreports" },
+      ]
+    },
+    {
+      key: "reports",
+      icon: <FaChartBar />,
+      label: "Reports & Analytics",
+      submenus: [
+        { name: "Shipment Reports", path: "/shipment-reports" },
+        { name: "Revenue & Expense Reports", path: "/revenue-expense" },
+        { name: "Delivery Performance", path: "/delivery-performance" },
+        { name: "Branch-wise Analysis", path: "/branch-analysis" },
+      ]
+    },
+    {
+      key: "settings",
+      icon: <FaCog />,
+      label: "System Settings",
+      submenus: [
+        { name: "All Roles", path: "/roles/allroles" },
+        { name: "Create Role", path: "/roles/addroles" },
+      ]
+    }
+  ],
+
+  2: [ // Staff Menu
+    { key: "dashboard", icon: <BiSolidDashboard />, label: "Dashboard", path: "/dashboard" },
+    {
+      key: "shipments",
+      icon: <FaBox />,
+      label: "Shipments",
+      submenus: [
+        { name: "Create Shipment", path: "/cargoshipment/createcargo" },
+        { name: "Shipment Report", path: "/shipment/shipmentreport" },
+      ]
+    },
+    {
+      key: "sender",
+      icon: <RiMailSendFill />,
+      label: "Sender / Receiver",
+      submenus: [
+        { name: "View Receiver", path: "/allreceiver" },
+        { name: "View Sender", path: "/senders" },
+        { name: "Create Sender", path: "/sender/create" },
+        { name: "Create Receiver", path: "/receiver/create" },
+      ]
+    },
+    {
+      key: "fleet",
+      icon: <FaTruck />,
+      label: "Fleet & Drivers",
+      submenus: [
+        { name: "Drivers", path: "/drivers/alldriverslist" },
+        { name: "Add Drivers", path: "/drivers/addnewdriver" },
+      ]
+    }
+  ],
+
+  3: [ // Agency Menu
+    { key: "dashboard", icon: <BiSolidDashboard />, label: "Dashboard", path: "/dashboard" },
+    {
+      key: "shipments",
+      icon: <FaBox />,
+      label: "Shipments",
+      submenus: [
+        { name: "Create Shipment", path: "/cargoshipment/createcargo" },
+        { name: "Shipment Report", path: "/shipment/shipmentreport" },
+      ]
+    },
+    {
+      key: "agency",
+      icon: <FaUser />,
+      label: "Agency & Partners",
+      submenus: [
+        { name: "Partner Agencies", path: "/partner-agencies" },
+        { name: "Contracts & Agreements", path: "/contracts" },
+        { name: "Agency Performance", path: "/performance" },
+      ]
+    }
+  ]
+};

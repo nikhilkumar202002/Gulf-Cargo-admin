@@ -1,115 +1,73 @@
 import { Button } from "@radix-ui/themes";
 import React, { useEffect, useState } from "react";
-import { FaSearch, FaEdit, FaTrash, FaUsers, FaEye  } from "react-icons/fa";
+import { FaSearch  } from "react-icons/fa";
 import { FiMoreVertical } from "react-icons/fi";
 import { LuPlus } from "react-icons/lu";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import DropdownMenu from "../../components/DropdownMenu";
+import api from "../../api/axiosInstance";
 import "../styles.css";
 
 
 const AllBranches = () => {
 
-  const [branches, setBranches] = useState([]);
+   const [branches, setBranches] = useState([]);
   const [search, setSearch] = useState("");
   const [openMenuIndex, setOpenMenuIndex] = useState(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [currentPage, setCurrentPage] = useState(1);
 
-  useEffect(() => {
+ useEffect(() => {
+    let cancelled = false;
+
     const fetchBranches = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const response = await axios.get(
-          "https://gulfcargoapi.bhutanvoyage.in/api/branches",
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/json",
-            },
-          }
-        );
-
-        console.log("API Response:", response.data);
-
-        if (response.data && Array.isArray(response.data)) {
-          setBranches(response.data);
-        } else if (response.data && Array.isArray(response.data.data)) {
-          setBranches(response.data.data);
-        } else {
-          setBranches([]);
-        }
+        const res = await api.get("/branches"); 
+        const payload = res.data;
+        const items = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
+        if (!cancelled) setBranches(items);
       } catch (error) {
-        console.error("Error fetching branches:", error);
-        setBranches([]); // avoid filter crash
+        console.error("Error fetching branches:", error?.response?.data || error.message);
+        if (!cancelled) setBranches([]); 
       }
     };
 
     fetchBranches();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-
-  const filteredBranches = branches.filter(
-    (branch) =>
-      branch.branch_name?.toLowerCase().includes(search.toLowerCase()) ||
-      branch.branch_code?.toLowerCase().includes(search.toLowerCase()) ||
-      branch.branch_location?.toLowerCase().includes(search.toLowerCase())
+const filteredBranches = branches.filter(
+    (b) =>
+      b.branch_name?.toLowerCase().includes(search.toLowerCase()) ||
+      b.branch_code?.toLowerCase().includes(search.toLowerCase()) ||
+      b.branch_location?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Pagination calculations
-  const totalPages = Math.ceil(filteredBranches.length / rowsPerPage);
+  // Pagination
+  const totalPages = Math.ceil(filteredBranches.length / rowsPerPage) || 1;
   const startIndex = (currentPage - 1) * rowsPerPage;
-  const currentBranches = filteredBranches.slice(
-    startIndex,
-    startIndex + rowsPerPage
-  );
-
-
-  const toggleMenu = (index) => {
-    setOpenMenuIndex(openMenuIndex === index ? null : index);
-  };
-
- const handleEdit = (branch) => {
-  navigate(`/branches/edit/${branch.id}`, { state: branch });
-};
+  const currentBranches = filteredBranches.slice(startIndex, startIndex + rowsPerPage);
 
   const handleDelete = async (branch) => {
-  if (!window.confirm(`Are you sure you want to delete ${branch.branch_name}?`)) {
-    return;
-  }
+    if (!window.confirm(`Are you sure you want to delete ${branch.branch_name}?`)) return;
 
-  try {
-    const token = localStorage.getItem("token"); // ✅ fix: get token here
-
-    await axios.delete(
-      `https://gulfcargoapi.bhutanvoyage.in/api/branch/${branch.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      }
-    );
-
-    alert("Branch deleted successfully!");
-    // ✅ remove the deleted branch from UI
-    setBranches((prev) => prev.filter((b) => b.id !== branch.id));
-  } catch (error) {
-    console.error("Delete error:", error.response?.data || error.message);
-    alert(
-      `Failed to delete branch!\n${
-        error.response?.data?.message || "Please try again."
-      }`
-    );
-  }
-};
-
-
-  const handleViewUsers = (branch) => {
-    alert(`View users for ${branch.branch_name}`);
+    try {
+      await api.delete(`/branch/${branch.id}`); 
+      setBranches((prev) => prev.filter((b) => b.id !== branch.id));
+      alert("Branch deleted successfully!");
+    } catch (error) {
+      console.error("Delete error:", error?.response?.data || error.message);
+      alert(`Failed to delete branch!\n${error?.response?.data?.message || "Please try again."}`);
+    }
   };
 
-  
 
   return (
     <>
@@ -206,38 +164,33 @@ const AllBranches = () => {
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-center relative">
-                      {/* 3-dot menu */}
-                      <button
-                        onClick={() => toggleMenu(index)}
-                        className="p-2 rounded hover:bg-gray-200 transition"
-                      >
-                        <FiMoreVertical size={20} />
-                      </button>
+                   <td className="py-3 px-4 text-center relative">
 
-                      {openMenuIndex === index && (
-                        <div className="absolute right-0 mt-2 w-32 bg-white border rounded shadow-lg z-10">
-                           <button className="flex items-center gap-2 px-4 py-2 hover:bg-green-100 w-full text-green-600">
-                            <Link to={`/branch/viewbranch/${branch.id}`} className="flex items-center gap-2 w-full">
-                              <FaEye /> View
-                            </Link>
-                          </button>
-                 
-                          <button className="flex items-center gap-2 px-4 py-2 hover:bg-yellow-100 w-full text-yellow-600">
-                            <Link to={`/branches/edit/${branch.id}`}   state={branch} className="flex items-center gap-2 w-full">
-                              <FaEdit /> Edit
-                            </Link>
-                          </button>
-                          <button
-                            onClick={() => handleDelete(branch)}
-                            className="flex items-center gap-2 px-4 py-2 hover:bg-red-100 w-full text-red-600"
-                          >
-                            <FaTrash /> Delete
-                          </button>
-                         
-                        </div>
-                      )}
-                    </td>
+<button
+  onClick={(e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setOpenMenuIndex(index);
+    setMenuPosition({
+      top: rect.bottom + window.scrollY,
+      left: rect.left + window.scrollX - 100, 
+    });
+  }}
+  className="p-2 rounded hover:bg-gray-200 transition"
+>
+  <FiMoreVertical size={20} />
+</button>
+
+
+{openMenuIndex === index && (
+  <DropdownMenu
+    branch={branch}
+    handleDelete={handleDelete}
+    position={menuPosition}
+    onClose={() => setOpenMenuIndex(null)}
+  />
+)}
+
+</td>
                   </tr>
                 ))
               ) : (

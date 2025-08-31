@@ -1,156 +1,30 @@
 import React, { useState } from "react";
-import {
-  FaUsers,
-  FaTruck,
-  FaBox,
-  FaBuilding,
-  FaUser,
-  FaMoneyBill,
-  FaChartBar,
-  FaCog
-} from "react-icons/fa";
-import { RiMailSendFill } from "react-icons/ri";
-import { BiSolidDashboard } from "react-icons/bi";
-import { FaCcVisa } from "react-icons/fa6";
 import "./layout.css";
 import { IoIosArrowDown, IoIosArrowUp  } from "react-icons/io";
 import { Link } from "react-router-dom";
+import { rolesMenu } from "../rolemenu/rolesMenu";
 
-export default function Sidebar() {
+export default function Sidebar({ userRole }) {
+
+  const roleMenuItems = rolesMenu[userRole] || [];
+
   const [openMenu, setOpenMenu] = useState(null);
-
+  
   const toggleMenu = (menu) => {
     setOpenMenu(openMenu === menu ? null : menu);
   };
 
-  const menuItems = [
-    { key: "dashboard", icon: <BiSolidDashboard />, label: "Dashboard", path: "/dashboard" },
-    {
-      key: "branch",
-      icon: <FaBuilding />,
-      label: "Branches",
-        submenus: [
-        { name: "All Branches", path: "/branches" },
-        { name: "Add New Branch", path: "/branches/add" },
-      ]
-    },
-    {
-      key: "hr",
-      icon: <FaUsers />,
-      label: "HR & Staff",
-       submenus: [
-        { name: "All Staffs", path: "/hr&staff/allstaffs" },
-        { name: "Create Staffs", path: "/hr&staff/createstaffs" },
-      ]
-    },
-     {
-      key: "shipments",
-      icon: <FaBox />,
-      label: "Shipments",
-      submenus: [
-        {name: "Create Shipment", path: "/cargoshipment/createcargo"},
-        {name: "Shipment Report", path: "/shipment/shipmentreport"},
-      ]
-    },
-    {
-      key: "sender",
-      icon: <RiMailSendFill />,
-      label: "Sender / Receiver",
-       submenus: [
-        { name: "View Receiver", path: "/allreceiver" },
-        { name: "View Sender", path: "/senders" },
-        { name: "Create Sender", path: "/sender/create" },
-        { name: "Create Receiver", path: "/receiver/create" },
-      ]
-    },
-    {
-      key: "fleet",
-      icon: <FaTruck />,
-      label: "Fleet & Drivers",
-       submenus: [
-        { name: "Drivers", path: "/drivers/alldriverslist" },
-        { name: "Add Drivers", path: "/drivers/addnewdriver" },
-      ]
-      // submenus: [
-      //   "Driver List",
-      //   "Assign Driver to Shipment",
-      //   "Vehicle Management",
-      //   "Maintenance Schedule"
-      // ]
-    },
-   
-    {
-      key: "agency",
-      icon: <FaUser />,
-      label: "Agency & Partners",
-      submenus: ["Partner Agencies", "Contracts & Agreements", "Agency Performance"]
-    },
-    
-     {
-      key: "visa",
-      icon: <FaCcVisa />,
-      label: "Visa",
-       submenus: [
-        { name: "All Visa", path: "/visa/allvisa" },
-        { name: "Visa Empolyee", path: "/visaemployee" },
-        { name: "Create Visa type", path: "/visatype/create" },
-      ]
-    },
-
-         {
-      key: "document",
-      icon: <FaCcVisa />,
-      label: "Document Type",
-       submenus: [
-        { name: "Create Document Type", path: "/documents/createdocument" },
-        { name: "Visa List", path: "/documents/documentlist" },
-      ]
-    },
-
-    {
-      key: "finance",
-      icon: <FaMoneyBill />,
-      label: "Finance & Accounts",
-      submenus: [
-        "Invoices & Payments",
-        "Expenses & Purchase Orders",
-        "Outstanding Payments",
-        "Financial Reports"
-      ]
-    },
-    {
-      key: "reports",
-      icon: <FaChartBar />,
-      label: "Reports & Analytics",
-      submenus: [
-        "Shipment Reports",
-        "Revenue & Expense Reports",
-        "Delivery Performance",
-        "Branch-wise Analysis"
-      ]
-    },
-    {
-      key: "settings",
-      icon: <FaCog />,
-      label: "System Settings",
-      submenus: [
-        { name: "All Roles", path: "/roles/allroles" },
-        { name: "Create Role", path: "/roles/addroles" },
-
-      ]
-    }
-  ];
 
   return (
-    <aside className="sidebar">
+   <aside className="sidebar">
       {/* Logo Section */}
       <div className="logo-section" style={{ display: "flex", alignItems: "center", padding: "16px" }}>
         <img src="/Logo.png" alt="Logo" style={{ height: "40px", marginRight: "10px" }} />
       </div>
 
       {/* Menu List */}
-        <ul className="menu-list" style={{ padding: 0, margin: 0 }}>
-        {menuItems.map(({ key, icon, label, submenus, path }) => (
+      <ul className="menu-list" style={{ padding: 0, margin: 0 }}>
+        {roleMenuItems.map(({ key, icon, label, submenus, path }) => (
           <li key={key} style={{ listStyle: "none" }}>
             {/* Menu Header */}
             {path && !submenus ? (
@@ -181,12 +55,6 @@ export default function Sidebar() {
                   alignItems: "center",
                   padding: "12px 20px"
                 }}
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (submenus && (e.key === "Enter" || e.key === " ")) {
-                    toggleMenu(key);
-                  }
-                }}
               >
                 <span className="menu-icon" style={{ minWidth: 24 }}>
                   {icon}
@@ -204,16 +72,14 @@ export default function Sidebar() {
             {submenus && openMenu === key && (
               <ul className="submenu">
                 {submenus.map(({ name, path }) => (
-                  <Link to={path} style={{ textDecoration: "none", color: "inherit" }}>
-                  <li
-                    key={name}
-                    className="submenu-item"
-                    style={{ padding: "8px 0px 8px 48px", fontSize: "14px" }}
-                  >
+                  <Link to={path} style={{ textDecoration: "none", color: "inherit" }} key={name}>
+                    <li
+                      className="submenu-item"
+                      style={{ padding: "8px 0px 8px 48px", fontSize: "14px" }}
+                    >
                       {name}
-                  </li>
-                    </Link>
-
+                    </li>
+                  </Link>
                 ))}
               </ul>
             )}

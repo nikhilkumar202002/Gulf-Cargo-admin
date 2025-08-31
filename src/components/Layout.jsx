@@ -5,10 +5,10 @@ import "./layout.css";
 import "@fontsource/roboto";
 import { Outlet } from "react-router-dom";
 
-const Layout = () => {
+const Layout = ({ userRole }) => {
   return (
     <div className="app flex h-screen w-screen overflow-hidden">
-      <Sidebar />
+      <Sidebar userRole={userRole} /> {/* Pass userRole to Sidebar */}
 
       <div className="main flex flex-col flex-1 h-screen">
         {/* Fixed Header */}
@@ -18,7 +18,7 @@ const Layout = () => {
 
         {/* Scrollable Content */}
         <div className="content flex-1 overflow-y-auto bg-gray-50">
-          <Outlet />
+          <Outlet /> {/* This will render the nested route components */}
         </div>
 
         {/* Fixed Footer */}

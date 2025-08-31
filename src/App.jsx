@@ -1,5 +1,9 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./auth/AuthContext";
+
+import ResetPassword from "./pages/Login/ResetPassword";
+import ForgotPassword from "./pages/Login/ForgotPassword";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import AllBranches from "./pages/Branches/AllBranches";
@@ -28,7 +32,6 @@ import ViewBranch from "./pages/Branches/ViewBranch";
 
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
-import { useAuth } from "./auth/AuthContext";
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -41,8 +44,19 @@ const PrivateRoute = ({ children }) => {
 };
 
 function App() {
-  const { isAuthenticated, loading } = useAuth();
+  const [userRole, setUserRole] = useState(null);
 
+  useEffect(() => {
+    const role = 1;  // Hardcoded for Super Admin role; replace with dynamic logic
+    setUserRole(role);
+  }, []);
+
+  // Ensure the userRole is set before rendering the app content
+  if (userRole === null) {
+    return <div>Loading...</div>;
+  }
+
+  const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return <div className="loader">Loading...</div>;
@@ -59,23 +73,34 @@ function App() {
           path="/register"
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />}
         />
-        <Route element={<Layout />}>
+             <Route path="/forgotpassword" element={<ForgotPassword />} />
+          <Route path="/resetpassword" element={<ResetPassword />} />
+          
+        <Route element={<Layout userRole={userRole} />}>
           <Route
-            index
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
+            path="dashboard"
+            element={<PrivateRoute><Dashboard /></PrivateRoute>}
           />
-          <Route
+          {/* <Route
             path="dashboard"
             element={
               <PrivateRoute>
                 <Dashboard />
               </PrivateRoute>
             }
+          /> */}
+   
+
+
+           <Route
+            path="receiver/create"
+            element={
+              <PrivateRoute>
+                <ReceiverCreate />
+              </PrivateRoute>
+            }
           />
+          
           <Route
             path="branches"
             element={
@@ -173,7 +198,7 @@ function App() {
             }
           />
 
-            <Route
+          <Route
             path="drivers/alldriverslist"
             element={
               <PrivateRoute>
@@ -182,7 +207,7 @@ function App() {
             }
           />
 
-        <Route
+          <Route
             path="cargoshipment/createcargo"
             element={
               <PrivateRoute>
@@ -191,7 +216,7 @@ function App() {
             }
           />
 
-            <Route
+          <Route
             path="shipment/shipmentreport"
             element={
               <PrivateRoute>
@@ -200,7 +225,7 @@ function App() {
             }
           />
 
-           <Route
+          <Route
             path="profile"
             element={
               <PrivateRoute>
@@ -209,7 +234,7 @@ function App() {
             }
           />
 
-           <Route
+          <Route
             path="roles/allroles"
             element={
               <PrivateRoute>
@@ -227,36 +252,36 @@ function App() {
             }
           />
 
-            <Route
+          <Route
             path="documents/createdocument"
             element={
               <PrivateRoute>
-                <DocumentTypeCreate/>
+                <DocumentTypeCreate />
               </PrivateRoute>
             }
           />
 
-            <Route
+          <Route
             path="documents/documentlist"
             element={
               <PrivateRoute>
-                <DocumentList/>
+                <DocumentList />
               </PrivateRoute>
             }
           />
 
-            <Route
+          <Route
             path="branch/viewbranch/:id"
             element={
               <PrivateRoute>
-                <ViewBranch/>
+                <ViewBranch />
               </PrivateRoute>
             }
           />
 
           <Route path="/branches/edit/:id" element={<EditBranch />} />
 
-            <Route path="drivers/addnewdriver" element={ <PrivateRoute><AddDriver /></PrivateRoute> } />
+          <Route path="drivers/addnewdriver" element={<PrivateRoute><AddDriver /></PrivateRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
