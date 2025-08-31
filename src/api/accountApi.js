@@ -75,3 +75,40 @@ export const resetPassword = async (email, otp, password) => {
     throw error;
   }
 };
+
+export const staffRegister = async (userData, tokenArg, axiosOpts = {}) => {
+  const token = tokenArg || localStorage.getItem("token");
+
+  try {
+    const res = await axiosInstance.post("/register", userData, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      ...axiosOpts, // safe spread
+    });
+    return res.data;
+  } catch (error) {
+    // Normalize every failure path
+    const status = error?.response?.status ?? null;
+    const data = error?.response?.data ?? null;
+
+    let msg =
+      data?.message ||
+      (data?.errors && Object.values(data.errors)[0]?.[0]) ||
+      error?.message ||
+      "Request failed";
+
+    // mark abort/cancel clearly
+    if (error?.name === "CanceledError" || error?.message === "canceled") {
+      msg = "Request was canceled";
+    }
+
+    const err = new Error(msg);
+    err.status = status;
+    err.data = data;
+    err.isAxios = !!error?.isAxiosError;
+    throw err;
+  }
+};
