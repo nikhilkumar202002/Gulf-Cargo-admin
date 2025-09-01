@@ -6,9 +6,12 @@ import "@fontsource/roboto";
 import { Outlet } from "react-router-dom";
 
 const Layout = ({ userRole }) => {
+  
+
   return (
     <div className="app flex h-screen w-screen overflow-hidden">
-      <Sidebar userRole={userRole} /> {/* Pass userRole to Sidebar */}
+      <Sidebar userRole={userRole} />
+      
 
       <div className="main flex flex-col flex-1 h-screen">
         {/* Fixed Header */}

@@ -1,4 +1,4 @@
-// rolesMenu.js
+
 import {
   FaUsers,
   FaTruck,
@@ -181,3 +181,5 @@ export const rolesMenu = {
     }
   ]
 };
+
+export default rolesMenu;
