@@ -112,3 +112,41 @@ export const staffRegister = async (userData, tokenArg, axiosOpts = {}) => {
     throw err;
   }
 };
+
+export const listStaffs = async (params = {}) => {
+  const token = localStorage.getItem("token");
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const res = await axiosInstance.get("/staffs", { params, headers });
+  const payload = res?.data ?? {};
+
+  // DEBUG: see what keys exist in your response
+  console.log("listStaffs payload keys:", Object.keys(payload));
+  console.log("listStaffs payload preview:", payload);
+
+  // Find the first plausible array of rows in typical API shapes
+  const pickArray = (o) => {
+    if (!o) return [];
+    if (Array.isArray(o)) return o;
+    if (Array.isArray(o.data)) return o.data;               // {data:[...]}
+    if (Array.isArray(o?.data?.data)) return o.data.data;   // {data:{data:[...]}} (Laravel paginator)
+    const keys = ["staffs", "staff", "users", "items", "results", "records", "rows", "list"];
+    for (const k of keys) {
+      if (Array.isArray(o[k])) return o[k];
+      if (Array.isArray(o?.data?.[k])) return o.data[k];
+    }
+    // deep fallback: scan one level down for any array
+    for (const v of Object.values(o)) {
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === "object") {
+        const nested = pickArray(v);
+        if (nested.length) return nested;
+      }
+    }
+    return [];
+  };
+
+  const list = pickArray(payload);
+  console.log("listStaffs normalized length:", list.length);
+  return list;
+};
