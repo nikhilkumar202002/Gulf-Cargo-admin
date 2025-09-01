@@ -30,6 +30,8 @@ import DocumentTypeCreate from "./pages/Document/CreateDocument";
 import DocumentList from "./pages/Document/DocumentList";
 import ViewBranch from "./pages/Branches/ViewBranch";
 
+import Preloader from "./components/Preloader";
+
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
 
@@ -45,21 +47,16 @@ const PrivateRoute = ({ children }) => {
 
 function App() {
   const [userRole, setUserRole] = useState(null);
+  const [ready, setReady] = useState(false);
+  const { isAuthenticated, loading } = useAuth();
 
   useEffect(() => {
-    const role = 1;  // Hardcoded for Super Admin role; replace with dynamic logic
+    const role = 1;  
     setUserRole(role);
   }, []);
 
-  // Ensure the userRole is set before rendering the app content
-  if (userRole === null) {
-    return <div>Loading...</div>;
-  }
-
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return <div className="loader">Loading...</div>;
+   if (!ready || loading || userRole === null) {
+    return <Preloader onDone={() => setReady(true)} duration={2000} />;
   }
 
   return (

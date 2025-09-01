@@ -4,7 +4,7 @@ import { Button } from "@radix-ui/themes";
 import { Link } from "react-router-dom";  // Use Link for navigation
 import { useAuth } from "../../auth/AuthContext";
 import { loginUser } from "../../api/accountApi";
-import AdminImage from "../../../public/bg/admin-bg.jpg";
+import AdminImage from "../../assets/bg/admin-bg.jpg";
 
 function Login() {
   const { login } = useAuth();
