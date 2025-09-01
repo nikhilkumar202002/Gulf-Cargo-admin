@@ -2,15 +2,20 @@ import React, { useState } from "react";
 import "./layout.css";
 import { IoIosArrowDown, IoIosArrowUp } from "react-icons/io";
 import { NavLink } from "react-router-dom";
-import { rolesMenu } from "../rolemenu/rolesMenu";
+import { rolesMenu } from "../rolemenu/rolesMenu"; // named export
 
 export default function Sidebar({ userRole }) {
+  // FORCE COERCE role -> number; works for 1 / "1" / "superadmin 1"
+  const roleKey = (() => {
+    if (userRole == null) return null;
+    const m = String(userRole).toLowerCase().match(/\d+/);
+    return m ? Number(m[0]) : null;
+  })();
 
-   const roleKey = Number(userRole);                         
   const items = Number.isFinite(roleKey) ? (rolesMenu[roleKey] || []) : [];
 
   const [openMenu, setOpenMenu] = useState(null);
-  const toggleMenu = (id) => setOpenMenu((prev) => (prev === id ? null : id));
+  const toggleMenu = (id) => setOpenMenu((p) => (p === id ? null : id));
 
   return (
     <aside className="sidebar">

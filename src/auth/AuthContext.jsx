@@ -1,26 +1,32 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { getProfile } from "../api/accountApi"; // ← adjust path if needed
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { getProfile } from "../api/accountApi"; // uses axiosInstance + token
 
 const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
-// Map text/number roles to numeric ids used by the menu (1=Super Admin, 2=Staff, 3=Agency)
-// 1 = superadmin, 2 = staff, 3 = agent
+
 const normalizeRoleId = (raw) => {
   if (raw == null) return null;
 
-  // numeric or numeric string: "1", 2, "3"
   const n = Number(raw);
   if (Number.isFinite(n)) return n;
 
-  // text labels from API: "superadmin", "staff", "agent"
   const s = String(raw).trim().toLowerCase();
-  if (s === "superadmin" || s === "super admin" || s === "admin") return 1;
-  if (s === "staff") return 2;
-  if (s === "agent" || s === "agency") return 3; // keep agency as synonym just in case
+  const m = s.match(/\d+/);
+  if (m && Number.isFinite(Number(m[0]))) return Number(m[0]);
+  if (s.includes("super")) return 1;
+  if (s.includes("staff")) return 2;
+  if (s.includes("agent") || s.includes("agency")) return 3;
+
+  if (typeof raw === "object") {
+    if (raw.id != null && Number.isFinite(Number(raw.id))) return Number(raw.id);
+    const label = String(raw.role_name ?? raw.name ?? raw.title ?? "").toLowerCase();
+    if (label.includes("super")) return 1;
+    if (label.includes("staff")) return 2;
+    if (label.includes("agent") || label.includes("agency")) return 3;
+  }
   return null;
 };
-
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem("token"));
@@ -45,18 +51,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const fetchProfile = async () => {
-    const res = await getProfile(); // your wrapper sets Authorization header
-    const profile = res?.data?.data ?? res?.data?.user ?? res?.data ?? res ?? null;
+    // IMPORTANT: getProfile() returns response.data already
+    const apiData = await getProfile();
+
+    // Accept common shapes coming from your backend:
+    // - { data: {...profile} }
+    // - { user: {...profile} }
+    // - { ...profile }
+    const profile =
+      apiData?.data ?? apiData?.user ?? apiData ?? null;
     setUser(profile);
 
-   const rawRole =
-   profile?.roleId ??
-   profile?.role_id ??
-  profile?.role ??     
-   profile?.role?.id ??
-   profile?.role_type ??
-   profile?.roleName ??
-   profile?.role_name ?? null;
+    // Try all plausible fields your API may use
+    const rawRole =
+      profile?.role ??             // preferred: 1/2/3 here
+      profile?.role_id ??
+      profile?.roleId ??
+      profile?.role_type ??
+      profile?.role_name ??
+      profile?.roleName ??
+      profile?.role?.id ??         // nested object
+      profile?.role?.name ?? null;
 
     setRoleId(normalizeRoleId(rawRole));
   };
@@ -84,14 +99,10 @@ export const AuthProvider = ({ children }) => {
       }
     };
     verify();
-    // Optional: re-verify every 5s if you truly need live token checks.
-    // const id = setInterval(verify, 5000); return () => clearInterval(id);
   }, [token]);
 
   return (
-    <AuthContext.Provider
-      value={{ token, isAuthenticated, login, logout, loading, user, roleId }}
-    >
+    <AuthContext.Provider value={{ token, isAuthenticated, login, logout, loading, user, roleId }}>
       {children}
     </AuthContext.Provider>
   );

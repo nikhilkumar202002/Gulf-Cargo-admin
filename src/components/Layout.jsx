@@ -5,9 +5,8 @@ import "./layout.css";
 import "@fontsource/roboto";
 import { Outlet } from "react-router-dom";
 
-const Layout = ({ userRole }) => {
+export default function Layout({ userRole }) {
   
-
   return (
     <div className="app flex h-screen w-screen overflow-hidden">
       <Sidebar userRole={userRole} />
@@ -33,4 +32,3 @@ const Layout = ({ userRole }) => {
   );
 };
 
-export default Layout;

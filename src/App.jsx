@@ -43,7 +43,7 @@ const PrivateRoute = ({ children }) => {
 
 const RoleRoute = ({ allow, children }) => {
   const { roleId } = useAuth();
-  console.log("roleId:", roleId)
+  console.log("roleId from context:", roleId);
   return allow.includes(roleId) ? children : <Navigate to="/dashboard" replace />;
   
   
