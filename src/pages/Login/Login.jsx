@@ -1,7 +1,8 @@
+
 import "./LoginRegisterStyles.css";
 import React, { useState } from "react";
 import { Button } from "@radix-ui/themes";
-import { Link } from "react-router-dom";  // Use Link for navigation
+import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { loginUser } from "../../api/accountApi";
 import AdminImage from "../../assets/bg/admin-bg.jpg";
@@ -14,15 +15,19 @@ function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setMessage("");  // Clear previous messages
+    setMessage("");
 
     try {
       const data = await loginUser({ email, password });
-      login(data.token); // store token in AuthContext
+      // Your AuthContext might expect a token param; passing it is fine,
+      // but the source of truth is our in-memory store.
+      const token = data?.access_token || data?.token || null;
+      login?.(token);
       setMessage("Login successful! Redirecting...");
+      // navigate(...) if needed
     } catch (err) {
-      console.error("Login error:", err.response?.data || err.message);
-      setMessage(err.response?.data?.message || "Invalid email or password");
+      console.error("Login error:", err?.response?.data || err?.message);
+      setMessage(err?.response?.data?.message || "Invalid email or password");
     }
   };
 
@@ -57,21 +62,16 @@ function Login() {
             </div>
 
             <div className="login-form-row">
-              <Button className="login-btn" type="submit">
-                Login
-              </Button>
+              <Button className="login-btn" type="submit">Login</Button>
             </div>
           </form>
 
-          {/* Forgot password link using Link from react-router-dom */}
           <div className="forgot-password-link">
-            <Link
-              to="/forgotpassword"  // Use Link for redirection
-              style={{ cursor: "pointer", color: "blue" }}
-            >
+            <Link to="/forgotpassword" style={{ cursor: "pointer", color: "blue" }}>
               Forgot Password?
             </Link>
           </div>
+          {message && <p style={{ color: message.startsWith("Login successful") ? "lime" : "tomato" }}>{message}</p>}
         </div>
       </div>
     </section>
