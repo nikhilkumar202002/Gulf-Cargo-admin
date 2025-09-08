@@ -46,6 +46,8 @@ import BranchAnalysis from "./pages/Shipment Reports/BranchAnalysis";
 import DeliveryPerformance from "./pages/Shipment Reports/DeliveryPerformance";
 import RevenueExpenseReport from "./pages/Shipment Reports/RevenueExpenseReport";
 
+import SenderShow from "./pages/SenderReceiver/SenderShow";
+
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return <div className="loader">Checking authentication...</div>;
@@ -148,7 +150,8 @@ function App() {
 
           <Route path="profile" element={<PrivateRoute><UserProfile /></PrivateRoute>} />
           <Route path="branch/viewbranch/:id" element={<PrivateRoute><ViewBranch /></PrivateRoute>} />
-          <Route path="/branches/edit/:id" element={<PrivateRoute><EditBranch /></PrivateRoute>} />
+          <Route path="/senderreceiver/senderview/:id" element={<PrivateRoute><SenderShow /></PrivateRoute>} />
+          <Route path="branches/edit/:id" element={<PrivateRoute><EditBranch /></PrivateRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />
