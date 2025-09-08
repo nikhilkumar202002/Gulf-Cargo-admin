@@ -8,10 +8,8 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import AllBranches from "./pages/Branches/AllBranches";
 import AddBranch from "./pages/Branches/AddBranch";
-import ReceiverCreate from "./pages/SenderReceiver/ReceiverCreate";
-import ReceiverView from "./pages/SenderReceiver/ReceiverView";
-import SenderCreate from "./pages/SenderReceiver/SenderCreate";
-import SenderView from "./pages/SenderReceiver/SenderView";
+import SenderCreate from "./pages/SenderReceiver/SenderReceiverCreate";
+import SenderView from "./pages/SenderReceiver/SenderReceiverView";
 import AllVisa from "./pages/Visa/VisaTypeList";
 import VisaEmployees from "./pages/Visa/VisaEmployees";
 import VisaTypeCreate from "./pages/Visa/VisaTypeCreate";
@@ -88,8 +86,6 @@ function App() {
         <Route element={<Layout userRole={roleId} />}>
           <Route path="dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
 
-          <Route path="receiver/create" element={<PrivateRoute><ReceiverCreate /></PrivateRoute>} />
-          <Route path="allreceiver" element={<PrivateRoute><ReceiverView /></PrivateRoute>} />
           <Route path="branches" element={<PrivateRoute><AllBranches /></PrivateRoute>} />
           <Route path="branches/add" element={<PrivateRoute><AddBranch /></PrivateRoute>} />
 

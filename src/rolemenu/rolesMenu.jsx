@@ -48,10 +48,8 @@ export const rolesMenu = {
       icon: <RiMailSendFill />,
       label: "Sender / Receiver",
       submenus: [
-        { name: "View Receiver", path: "/allreceiver" },
         { name: "View Sender", path: "/senders" },
         { name: "Create Sender", path: "/sender/create" },
-        { name: "Create Receiver", path: "/receiver/create" },
       ]
     },
     {

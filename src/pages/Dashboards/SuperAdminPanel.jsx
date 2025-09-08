@@ -41,24 +41,21 @@ const Card = ({ icon, title, value, sub }) => (
   </div>
 );
 
-/* ---------- NEW: paged branch bars with inline Branch selector ---------- */
 const PagedBars = ({
   title,
-  items,                     // [{label, value}]
+  items,                     
   icon: HeadingIcon = FaChartBar,
   itemsPerPage = 5,
-  barColor = "#262262",      // brand blue by default
+  barColor = "#262262",     
 }) => {
   const [page, setPage] = useState(1);
   const [branchSel, setBranchSel] = useState("ALL");
 
-  // unique branch list for the selector
   const branchOptions = useMemo(
     () => ["ALL", ...Array.from(new Set((items || []).map(i => i.label)))],
     [items]
   );
 
-  // filter by selected branch (or show all)
   const filtered = useMemo(
     () => (branchSel === "ALL" ? items : items.filter(i => i.label === branchSel)),
     [items, branchSel]
@@ -252,7 +249,6 @@ const SuperAdminPanel = () => {
     return buckets;
   }, [filteredShipments]);
 
-  /* Branch performance -> arrays for the bar cards */
   const branchPerf = useMemo(() => {
     const map = {};
     filteredShipments.forEach(s => {
@@ -268,7 +264,7 @@ const SuperAdminPanel = () => {
   const mainCards = [
     { title: "Shipments Today", value: kpis.shipmentsToday, icon: <FaTruck /> },
     { title: "On-Time Delivery %", value: `${kpis.onTimePct}%`, icon: <FaClock /> },
-    { title: "Exceptions Open", value: kpis.exceptionsOpen, icon: <FaExclamationTriangle className="text-red-500" /> },
+    { title: "Exceptions Open", value: kpis.exceptionsOpen, icon: <FaExclamationTriangle/> },
     { title: "Revenue (MTD View)", value: fmtCurrency(kpis.revenue), sub: `Gross Margin ${kpis.marginPct}%`, icon: <FaDollarSign /> },
   ];
 
@@ -285,7 +281,7 @@ const SuperAdminPanel = () => {
       <div className="dashboard-container max-w-7xl mx-auto py-8 px-4">
 
         {/* Top bar: global filters + freshness */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 mb-6">
+        <div className="bg-white rounded-2xl p-4 mb-2">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-center gap-2 text-gray-600">
               <FaFilter className="text-gray-400" />
@@ -352,20 +348,20 @@ const SuperAdminPanel = () => {
         </div>
 
         {/* KPI cards */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 mb-2">
           {mainCards.map((c, i) => <Card key={i} {...c} />)}
         </div>
 
         {/* Info cards */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-5">
           {topInfoCards.map((c, i) => <Card key={i} {...c} />)}
         </div>
 
         {/* Exceptions / Finance / Compliance */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-2">
           {/* Exceptions */}
           <div className="bg-white rounded-2xl shadow-md p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-semibold flex items-center gap-2"><FaShieldAlt /> Exceptions Queue</h2>
             </div>
             {Object.entries(exceptionsList).map(([k, arr]) => (

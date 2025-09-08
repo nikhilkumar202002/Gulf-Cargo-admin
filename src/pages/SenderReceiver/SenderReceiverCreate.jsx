@@ -1,15 +1,30 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaUserTie } from "react-icons/fa";
+import { getActiveCustomerTypes } from "../../api/customerTypeApi";
+
+const normalizeActiveTypes = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.results)) return payload.results;
+  if (Array.isArray(payload?.items)) return payload.items;
+  return [];
+};
+
+const getTypeId = (t) => t?.id ?? t?._id ?? t?.value ?? String(t?.name ?? "");
+const getTypeLabel = (t) => t?.name ?? t?.type ?? t?.title ?? t?.label ?? `Type ${getTypeId(t)}`;
 
 const SenderCreate = () => {
+
+  const [activeTypes, setActiveTypes] = useState([]);
+  const [typesLoading, setTypesLoading] = useState(true);
+  const [typesError, setTypesError] = useState("");
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     branch: "",
     customerType: "",
-    whatsappCode: "+93",
     whatsappNumber: "",
-    contactCode: "+93",
     contactNumber: "",
     senderIdType: "CPR No",
     senderId: "",
@@ -31,6 +46,25 @@ const SenderCreate = () => {
     }));
   };
 
+    useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setTypesLoading(true);
+        setTypesError("");
+        const res = await getActiveCustomerTypes({ per_page: 1000 }); 
+        const list = normalizeActiveTypes(res);
+        if (mounted) setActiveTypes(list);
+      } catch (err) {
+        if (mounted) setTypesError("Failed to load customer types.");
+        console.error(err);
+      } finally {
+        if (mounted) setTypesLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
   // handle form submit
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -44,9 +78,7 @@ const SenderCreate = () => {
       email: "",
       branch: "",
       customerType: "",
-      whatsappCode: "+93",
       whatsappNumber: "",
-      contactCode: "+93",
       contactNumber: "",
       senderIdType: "CPR No",
       senderId: "",
@@ -63,16 +95,13 @@ const SenderCreate = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex justify-center items-start py-10">
       <div className="bg-white shadow-lg rounded-xl w-full max-w-5xl p-8">
-        {/* Heading */}
-        
+
           <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-6 border-b pb-3">
-            <span className="staff-panel-heading-icon"><FaUserTie/></span>Create Customer
+            <span className="staff-panel-heading-icon"><FaUserTie/></span>Create Sender/Receiver
           </h2>
         
-
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic Info */}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <input
               type="text"
@@ -100,30 +129,35 @@ const SenderCreate = () => {
               <option>Branch 1</option>
               <option>Branch 2</option>
             </select>
-            <select
-              name="customerType"
-              value={formData.customerType}
-              onChange={handleChange}
-              className="border rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-red-300"
-            >
-              <option value="">Select Customer Type</option>
-              <option>Individual</option>
-              <option>Business</option>
-            </select>
+              <select
+        name="customerType"
+        value={String(formData.customerType ?? "")}
+        onChange={handleChange}
+        className="border rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-red-300"
+        disabled={typesLoading}
+      >
+        <option value="">{typesLoading ? "Loading..." : "Select Customer Type"}</option>
+        {!typesLoading &&
+          activeTypes.map((t) => {
+            const id = String(getTypeId(t));
+            const label = getTypeLabel(t);
+            return (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            );
+          })}
+      </select>
+
+      {typesError ? (
+        <p className="mt-1 text-sm text-red-600">{typesError}</p>
+      ) : null}
+
           </div>
 
           {/* Contact Info */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            <select
-              name="whatsappCode"
-              value={formData.whatsappCode}
-              onChange={handleChange}
-              className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300"
-            >
-              <option>+93</option>
-              <option>+91</option>
-              <option>+971</option>
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          
             <input
               type="text"
               name="whatsappNumber"
@@ -132,16 +166,7 @@ const SenderCreate = () => {
               onChange={handleChange}
               className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300"
             />
-            <select
-              name="contactCode"
-              value={formData.contactCode}
-              onChange={handleChange}
-              className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300"
-            >
-              <option>+93</option>
-              <option>+91</option>
-              <option>+971</option>
-            </select>
+            
             <input
               type="text"
               name="contactNumber"

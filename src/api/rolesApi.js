@@ -1,9 +1,8 @@
 import api from "./axiosInstance";
 
-// Helper function to convert to array if it's not already
 const toArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
 
-// Get All Roles
+
 export const getAllRoles = async (params = {}) => {
   const { data } = await api.get("/roles", { params });
 
@@ -17,7 +16,6 @@ export const getAllRoles = async (params = {}) => {
     return toArray(data.data.roles);
   if (Array.isArray(data?.data?.data)) return data.data.data;
 
-  // Final single-object fallback: { id, role_name }
   if (data && typeof data === "object" && "role_name" in data) return [data];
 
   return [];
