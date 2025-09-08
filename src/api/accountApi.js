@@ -13,10 +13,11 @@ export const register = async (userData) => {
 
 // Login
 export const loginUser = async (credentials) => {
-  const res = await axiosInstance.post("/login", credentials);
-  const data = unwrap(res);
-  const t = pickToken(data);
-  if (t) setToken(t);             // memory only — no localStorage
+  const loginPath = import.meta.env.VITE_AUTH_LOGIN_PATH || "/login";
+  const res = await axiosInstance.post(loginPath, credentials);
+  const data = res?.data ?? res;
+  const t = data?.access_token || data?.token || data?.data?.access_token || null;
+  if (t) setToken(t);
   return data;
 };
 

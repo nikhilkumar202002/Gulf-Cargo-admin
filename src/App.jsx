@@ -34,6 +34,20 @@ import Preloader from "./components/Preloader";
 import Login from "./pages/Login/Login";
 import Register from "./pages/Login/Register";
 
+import InvoicesPayments from "./pages/FinanceAccounts/InvoicesPayments";
+import OutstandingPayments from "./pages/FinanceAccounts/OutstandingPayments";
+import ExpensesPurchaseOrders from "./pages/FinanceAccounts/ExpensesPurchaseOrders";
+import FinancialReports from "./pages/FinanceAccounts/FinancialReports";
+
+import MonthlyReport from "./pages/FinanceAccounts/MonthlyReport";
+import QuarterlyReport from "./pages/FinanceAccounts/QuarterlyReport";
+import AnnualReport from "./pages/FinanceAccounts/AnnualReport";
+
+import ShipmentReport from "./pages/Shipment Reports/ShipmentReport";
+import BranchAnalysis from "./pages/Shipment Reports/BranchAnalysis";
+import DeliveryPerformance from "./pages/Shipment Reports/DeliveryPerformance";
+import RevenueExpenseReport from "./pages/Shipment Reports/RevenueExpenseReport";
+
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return <div className="loader">Checking authentication...</div>;
@@ -98,6 +112,21 @@ function App() {
 
           <Route path="documents/documentlist" element={<PrivateRoute><DocumentList /></PrivateRoute>} />
           <Route path="documents/createdocument" element={<PrivateRoute><DocumentTypeCreate /></PrivateRoute>} />
+          
+          <Route path="financeaccounts/invoicepayment" element={<PrivateRoute><InvoicesPayments /></PrivateRoute>} />
+          <Route path="financeaccounts/outstandingpayments" element={<PrivateRoute><OutstandingPayments /></PrivateRoute>} />
+          <Route path="financeaccounts/expensespurchaseorders" element={<PrivateRoute><ExpensesPurchaseOrders /></PrivateRoute>} />
+          <Route path="financeaccounts/financialreports" element={<PrivateRoute><FinancialReports /></PrivateRoute>} />
+
+          <Route path="financeaccounts/monthlyreport" element={<PrivateRoute><MonthlyReport /></PrivateRoute>} />
+          <Route path="financeaccounts/quarterlyreport" element={<PrivateRoute><QuarterlyReport /></PrivateRoute>} />
+          <Route path="financeaccounts/annualreport" element={<PrivateRoute><AnnualReport /></PrivateRoute>} />
+
+          <Route path="shipmentreport/shipmentreport" element={<PrivateRoute><ShipmentReport /></PrivateRoute>} />
+          <Route path="shipmentreport/branchanalysis" element={<PrivateRoute><BranchAnalysis /></PrivateRoute>} />
+          <Route path="shipmentreport/deliveryperformance" element={<PrivateRoute><DeliveryPerformance /></PrivateRoute>} />
+          <Route path="shipmentreport/revenueexpensereport" element={<PrivateRoute><RevenueExpenseReport /></PrivateRoute>} />
+
 
           {/* Super Admin only examples */}
           <Route

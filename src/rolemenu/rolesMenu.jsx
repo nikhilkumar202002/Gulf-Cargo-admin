@@ -97,10 +97,10 @@ export const rolesMenu = {
       icon: <FaMoneyBill />,
       label: "Finance & Accounts",
       submenus: [
-        { name: "Invoices & Payments", path: "/invoices" },
-        { name: "Expenses & Purchase Orders", path: "/expenses" },
-        { name: "Outstanding Payments", path: "/outstanding" },
-        { name: "Financial Reports", path: "/financialreports" },
+        { name: "Invoices & Payments", path: "financeaccounts/invoicepayment" },
+        { name: "Expenses & Purchase Orders", path: "financeaccounts/outstandingpayments" },
+        { name: "Outstanding Payments", path: "financeaccounts/expensespurchaseorders" },
+        { name: "Financial Reports", path: "financeaccounts/financialreports" },
       ]
     },
     {
@@ -108,10 +108,10 @@ export const rolesMenu = {
       icon: <FaChartBar />,
       label: "Reports & Analytics",
       submenus: [
-        { name: "Shipment Reports", path: "/shipment-reports" },
-        { name: "Revenue & Expense Reports", path: "/revenue-expense" },
-        { name: "Delivery Performance", path: "/delivery-performance" },
-        { name: "Branch-wise Analysis", path: "/branch-analysis" },
+        { name: "Shipment Reports", path: "shipmentreport/shipmentreport" },
+        { name: "Revenue & Expense Reports", path: "shipmentreport/revenueexpensereport" },
+        { name: "Delivery Performance", path: "shipmentreport/deliveryperformance" },
+        { name: "Branch-wise Analysis", path: "shipmentreport/branchanalysis" },
       ]
     },
     {

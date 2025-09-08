@@ -339,3 +339,19 @@
   font-size: 20px;
 }
 
+.notification-badge{
+  font-size: 11px !important;
+  font-family: "Roboto";
+  font-weight: 400 !important;
+}
+.notification-items{
+  font-size: 16px;
+  padding: 10px 0px;
+  font-family: "Roboto";
+  color: #1e1e1e;
+}
+.notification-container{
+  padding: 30px;
+  width: 360px !important;
+}
+

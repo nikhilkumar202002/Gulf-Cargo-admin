@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect  } from "react";
 import "./layout.css";
 import { IoIosArrowDown, IoIosArrowUp } from "react-icons/io";
 import { NavLink } from "react-router-dom";
-import { rolesMenu } from "../rolemenu/rolesMenu"; // named export
+import { rolesMenu } from "../rolemenu/rolesMenu"; 
+import { IoClose } from "react-icons/io5";
 
 export default function Sidebar({ userRole }) {
-  // FORCE COERCE role -> number; works for 1 / "1" / "superadmin 1"
+  
   const roleKey = (() => {
     if (userRole == null) return null;
     const m = String(userRole).toLowerCase().match(/\d+/);
@@ -16,6 +17,23 @@ export default function Sidebar({ userRole }) {
 
   const [openMenu, setOpenMenu] = useState(null);
   const toggleMenu = (id) => setOpenMenu((p) => (p === id ? null : id));
+
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+   useEffect(() => {
+    const onToggle = () => setMobileOpen((p) => !p);
+    const onClose = () => setMobileOpen(false);
+    const onEsc = (e) => e.key === "Escape" && setMobileOpen(false);
+
+    window.addEventListener("toggle-sidebar", onToggle);
+    window.addEventListener("close-sidebar", onClose);
+    window.addEventListener("keydown", onEsc);
+    return () => {
+      window.removeEventListener("toggle-sidebar", onToggle);
+      window.removeEventListener("close-sidebar", onClose);
+      window.removeEventListener("keydown", onEsc);
+    };
+  }, []);
 
   return (
     <aside className="sidebar">
