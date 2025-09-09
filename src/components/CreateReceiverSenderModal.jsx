@@ -1,15 +1,8 @@
 import React, { useEffect, useMemo } from "react";
 
-/** Safe helpers */
 const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
-const entriesSafe = (v) => (isObj(v) ? Object.entries(v) : []);
 const take = (o, ...keys) => keys.map((k) => o?.[k]).find((x) => x !== undefined && x !== null);
-const labelize = (s) =>
-  String(s || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (m) => m.toUpperCase());
 
-/** Extract array safely from many API shapes */
 const asArray = (v) => {
   if (Array.isArray(v)) return v;
   if (isObj(v) && Array.isArray(v.data)) return v.data;
@@ -18,7 +11,6 @@ const asArray = (v) => {
 };
 
 const getDocs = (payload) => {
-  // accepts: ["url", ...] OR [{url/name/path}, ...]
   const raw = take(payload, "documents") ?? take(payload?.data, "documents") ?? [];
   const list = asArray(raw) || [];
   return list
@@ -53,22 +45,8 @@ const Section = ({ title, rows }) =>
     </>
   ) : null;
 
-const canonicalOrder = [
-  "id", "name", "email",
-  "branch_name", "branch_id",
-  "customer_type", "customer_type_id",
-  "document_type", "document_type_id", "document_id",
-  "whatsapp_number", "contact_number",
-  "country", "country_id",
-  "state", "state_id",
-  "district", "district_id",
-  "city", "postal_code", "zip_code",
-  "address", "status",
-  "created_at", "updated_at",
-];
 
 export default function CreateReceiverSenderModal({ open, onClose, data, details }) {
-  // Always run hooks (no conditional early-returns before hooks)
   useEffect(() => {
     const prev = document.body.style.overflow;
     if (open) document.body.style.overflow = "hidden";
@@ -77,40 +55,19 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
     };
   }, [open]);
 
-  // normalize payload
   const payload = useMemo(() => {
     if (!data) return null;
-    // Accept {success, data:{...}} or plain object
     return isObj(data?.data) ? data.data : data;
   }, [data]);
 
-  // Submitted details (already human-friendly from the form)
   const submittedRows = useMemo(() => {
     if (!isObj(details)) return [];
     return Object.entries(details).filter(([, v]) => v !== undefined);
   }, [details]);
 
-  // Server rows in a stable order + include any extra fields
-  const serverRows = useMemo(() => {
-    if (!isObj(payload)) return [];
-    const out = [];
-
-    // ordered keys first
-    for (const k of canonicalOrder) {
-      if (k in payload) out.push([labelize(k), payload[k]]);
-    }
-
-    // any remaining keys
-    for (const [k, v] of Object.entries(payload)) {
-      if (!canonicalOrder.includes(k)) out.push([labelize(k), v]);
-    }
-
-    return out;
-  }, [payload]);
 
   const docs = useMemo(() => getDocs(payload || {}), [payload]);
-
-  // After hooks: decide whether to render
+  
   if (!open) return null;
 
   return (
@@ -122,7 +79,6 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
         </p>
 
         <Section title="Submitted Details" rows={submittedRows} />
-        <Section title="Server Response" rows={serverRows} />
 
         {docs.length > 0 && (
           <>
@@ -153,14 +109,6 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
         )}
 
         {/* Raw (collapsible) for debugging */}
-        <details className="mt-6">
-          <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
-            Raw payload
-          </summary>
-          <pre className="mt-2 text-xs bg-gray-50 border rounded p-3 overflow-x-auto">
-            {JSON.stringify(data, null, 2)}
-          </pre>
-        </details>
 
         <div className="mt-6 flex justify-end">
           <button
