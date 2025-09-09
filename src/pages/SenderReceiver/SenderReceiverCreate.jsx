@@ -2,8 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { FaUserTie } from "react-icons/fa";
 import { getActiveCustomerTypes } from "../../api/customerTypeApi";
 import { getActiveDocumentTypes } from "../../api/documentTypeApi";
-import { getActiveCountries, getActiveStatesByCountry, getActiveDistrictsByState} from "../../api/worldApi";
-import { getActiveBranches } from "../../api/branchApi";
+import {
+  getActiveCountries,
+  getActiveStatesByCountry,
+  getActiveDistrictsByState,
+} from "../../api/worldApi";
+import { getAllBranches } from "../../api/branchApi";   // ⬅️ use All Branches
 import { createParty } from "../../api/partiesApi";
 
 /* ---------------------- Helpers ---------------------- */
@@ -46,7 +50,8 @@ const getStateLabel = (s) =>
 const getDistrictLabel = (d) =>
   typeof d === "string"
     ? d
-    : pickLabel(d, ["district_name", "district", "name", "title", "label"]) || `District ${getId(d)}`;
+    : pickLabel(d, ["district_name", "district", "name", "title", "label"]) ||
+      `District ${getId(d)}`;
 
 /* Customer Type getters */
 const TYPE_ID_KEY = "id";
@@ -150,16 +155,16 @@ const SuccessModal = ({ open, onClose, data, details }) => {
 const makeInitialForm = () => ({
   name: "",
   email: "",
-  branch: "",          // branch_id
-  customerType: "",    // customer_type_id
+  branch: "", // branch_id
+  customerType: "", // customer_type_id
   whatsappNumber: "",
   contactNumber: "",
-  senderIdType: "",    // document_type_id
-  senderId: "",        // maps to document_id
-  document: null,      // File
-  country: "",         // country_id
-  state: "",           // state_id
-  district: "",        // district_id
+  senderIdType: "", // document_type_id
+  senderId: "", // maps to document_id
+  documents: [], // File[]
+  country: "", // country_id
+  state: "", // state_id
+  district: "", // district_id
   city: "",
   zipCode: "",
   address: "",
@@ -194,8 +199,7 @@ const SenderCreate = () => {
 
   /* form state */
   const [formData, setFormData] = useState(makeInitialForm());
-  // force-reset file input by changing its key
-  const [fileKey, setFileKey] = useState(0);
+  const [fileKey, setFileKey] = useState(0); // force-reset file input
 
   /* submit state */
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -205,14 +209,14 @@ const SenderCreate = () => {
   const [createdData, setCreatedData] = useState(null);
   const [displayDetails, setDisplayDetails] = useState(null);
 
-  /* reset everything (used by Cancel and after closing modal) */
+  /* reset everything */
   const resetForm = () => {
     setFormData(makeInitialForm());
     setFieldErrors({});
     setSubmitError("");
     setCreatedData(null);
     setDisplayDetails(null);
-    setFileKey((k) => k + 1); // clears the file input
+    setFileKey((k) => k + 1);
   };
 
   /* handle input */
@@ -221,7 +225,8 @@ const SenderCreate = () => {
     setFormData((prev) => {
       if (name === "country") return { ...prev, country: value, state: "", district: "" };
       if (name === "state") return { ...prev, state: value, district: "" };
-      return { ...prev, [name]: files ? files[0] : value };
+      if (name === "documents") return { ...prev, documents: Array.from(files || []) };
+      return { ...prev, [name]: value };
     });
   };
 
@@ -240,17 +245,13 @@ const SenderCreate = () => {
         const [typesRes, docsRes, branchesRes] = await Promise.all([
           getActiveCustomerTypes({ per_page: 1000 }),
           getActiveDocumentTypes(),
-          getActiveBranches({ per_page: 500 }),
+          getAllBranches({ per_page: 500 }), // ⬅️ fetch from /branches
         ]);
 
         if (!mounted) return;
-        const types = normalizeList(typesRes);
-        const docs = normalizeList(docsRes);
-        const brs = normalizeList(branchesRes);
-
-        setActiveTypes(types);
-        setDocTypes(docs);
-        setBranches(brs);
+        setActiveTypes(normalizeList(typesRes));
+        setDocTypes(normalizeList(docsRes));
+        setBranches(normalizeList(branchesRes));
       } catch (err) {
         if (!mounted) return;
         setTypesError("Failed to load customer types.");
@@ -351,21 +352,20 @@ const SenderCreate = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.country, formData.state]);
 
-  /* Build payload (JSON or multipart if file present) */
+  /* Build payload (JSON or multipart if files present) */
   const buildPartyPayload = (fd) => {
-    const hasFile = !!fd.document;
+    const files = Array.isArray(fd.documents) ? fd.documents : [];
+    const hasFiles = files.length > 0;
+
     const map = {
       name: fd.name,
       email: fd.email,
       phone: fd.contactNumber,
       whatsapp: fd.whatsappNumber,
-
       customer_type_id: fd.customerType ? Number(fd.customerType) : "",
       document_type_id: fd.senderIdType ? Number(fd.senderIdType) : "",
       document_id: fd.senderId, // server expects this key
-
       branch_id: fd.branch ? Number(fd.branch) : "",
-
       country_id: fd.country ? Number(fd.country) : "",
       state_id: fd.state ? Number(fd.state) : "",
       district_id: fd.district ? Number(fd.district) : "",
@@ -374,17 +374,18 @@ const SenderCreate = () => {
       address: fd.address,
     };
 
-    if (!hasFile) {
-      return Object.fromEntries(
-        Object.entries(map).filter(([, v]) => v !== "" && v != null)
-      );
+    if (!hasFiles) {
+      return Object.fromEntries(Object.entries(map).filter(([, v]) => v !== "" && v != null));
     }
 
     const f = new FormData();
     for (const [k, v] of Object.entries(map)) {
       if (v !== "" && v != null) f.append(k, v);
     }
-    f.append("document", fd.document);
+    // Multi-file preferred
+    files.forEach((file) => f.append("documents[]", file, file.name));
+    // Back-compat for servers that accept single 'document'
+    if (files.length === 1) f.append("document", files[0], files[0].name);
     return f;
   };
 
@@ -419,12 +420,16 @@ const SenderCreate = () => {
         City: formData.city,
         "Zip Code": formData.zipCode,
         Address: formData.address,
-        Attachment: formData.document ? formData.document.name : "—",
+        Attachments:
+          formData.documents?.length > 0
+            ? formData.documents.map((f) => f.name).join(", ")
+            : "—",
       };
 
       setCreatedData(created ?? null);
       setDisplayDetails(details);
       setShowSuccess(true);
+      resetForm();
     } catch (err) {
       console.error(err);
       const apiMsg = err?.response?.data?.message || "Failed to submit form.";
@@ -436,10 +441,9 @@ const SenderCreate = () => {
     }
   };
 
-  /* Close modal → clear the form */
+  /* Close modal */
   const handleCloseSuccess = () => {
     setShowSuccess(false);
-    resetForm();
   };
 
   /* Renderers */
@@ -589,7 +593,7 @@ const SenderCreate = () => {
                 name="senderIdType"
                 value={String(formData.senderIdType ?? "")}
                 onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
+                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w/full"
                 disabled={docsLoading}
               >
                 <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
@@ -628,14 +632,21 @@ const SenderCreate = () => {
 
             <div>
               <input
-                key={fileKey} // ✅ forces the file input to reset
+                key={fileKey}
                 type="file"
-                name="document"
+                name="documents"
+                multiple
                 onChange={handleChange}
                 className="w-full border rounded-lg px-1 py-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-red-500 file:text-white hover:file:bg-red-600 cursor-pointer"
               />
-              {fieldErrors.document && (
-                <p className="text-sm text-red-600">{fieldErrors.document[0]}</p>
+              {formData.documents?.length > 0 && (
+                <p className="text-xs text-gray-600 mt-1">
+                  {formData.documents.length} file(s):{" "}
+                  {formData.documents.map((f) => f.name).join(", ")}
+                </p>
+              )}
+              {fieldErrors["documents.0"] && (
+                <p className="text-sm text-red-600">{fieldErrors["documents.0"][0]}</p>
               )}
             </div>
           </div>
@@ -778,7 +789,7 @@ const SenderCreate = () => {
 
       <SuccessModal
         open={showSuccess}
-        onClose={handleCloseSuccess}  
+        onClose={handleCloseSuccess}
         data={createdData}
         details={displayDetails}
       />

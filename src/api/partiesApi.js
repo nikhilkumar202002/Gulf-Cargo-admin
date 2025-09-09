@@ -2,10 +2,13 @@ import api from "./axiosInstance";
 
 const unwrap = (res) => res?.data ?? res;
 
-export const createParty = async (payload) => {
-  const res = await api.post("/party", payload);
-  return unwrap(res);
-};
+  export const createParty = async (payload) => {
+      const isFD = typeof FormData !== "undefined" && payload instanceof FormData;
+      const res = await api.post("/party", payload, {
+      transformRequest: isFD ? [(d) => d] : undefined, 
+      });
+    return unwrap(res);
+  };
 
 export const getParties = async (params = {}) => {
   const res = await api.get("/parties", { params });

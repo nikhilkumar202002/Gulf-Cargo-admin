@@ -43,6 +43,11 @@ axiosInstance.interceptors.request.use(
     }
 
     config.headers["X-Client-Session"] = ensureSessionId();
+    if (config.data instanceof FormData) {
+     if (config.headers) {
+        delete config.headers["Content-Type"];
+      }
+    }
     return config;
   },
   (error) => Promise.reject(error)

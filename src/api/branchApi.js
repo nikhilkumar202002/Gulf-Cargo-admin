@@ -1,22 +1,90 @@
+// api/branchApi.js
 import api from "./axiosInstance";
 
-// Get All Branches
-export const getAllBranches = async () => {
-  const { data } = await api.get("/branches");
-  return data; // Return data without masking
+/* ---------------- helpers ---------------- */
+const unwrap = (res) => res?.data ?? res;
+
+// Pull an array out of common API shapes: {data:[...]}, {data:{data:[...]}}, {branches:[...]}, [...]
+const normalizeArray = (o) => {
+  if (!o) return [];
+  if (Array.isArray(o)) return o;
+
+  const d = o.data ?? o.branches ?? o.items ?? null;
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.data)) return d.data;        // Laravel paginator
+  if (Array.isArray(o?.data?.data)) return o.data.data;
+
+  const firstArr = Object.values(o).find(Array.isArray);
+  return Array.isArray(firstArr) ? firstArr : [];
 };
 
-// Get Active Branches
-export const getActiveBranches = async () => {
-  const { data } = await api.get("/active-branches");
-  return data; // Return data without masking
+// Detect "active" truthiness across common shapes
+const isActive = (b) => {
+  const v =
+    b?.status ?? b?.active ?? b?.is_active ?? b?.isActive ?? b?.enabled ?? b?.isEnabled;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v === 1;
+  if (typeof v === "string") {
+    const s = v.toLowerCase();
+    return s === "active" || s === "1" || s === "true" || s === "enabled";
+  }
+  return false;
 };
 
-// Get Inactive Branches
-export const getInactiveBranches = async () => {
-  const { data } = await api.get("/inactive-branches");
-  return data; // Return data without masking
+/* -------------- core list -------------- */
+
+// Get All Branches (optionally with params like {page, per_page, search})
+export const getAllBranches = async (params = {}) => {
+  const res = await api.get("/branches", { params });
+  return normalizeArray(unwrap(res));
 };
+
+/**
+ * Get Active Branches
+ * 1) Tries /active-branches if it exists.
+ * 2) Falls back to /branches with {active:1,status:'Active'} and filters client-side.
+ */
+export const getActiveBranches = async (params = {}) => {
+  // Try dedicated endpoint first
+  try {
+    const res = await api.get("/active-branches", { params });
+    const list = normalizeArray(unwrap(res));
+    if (list.length) return list;
+  } catch (_) {
+    // ignore; fallback below
+  }
+
+  const merged = {
+    per_page: 500,
+    active: 1,
+    status: "Active",
+    ...params,
+  };
+  const res = await api.get("/branches", { params: merged });
+  const list = normalizeArray(unwrap(res));
+  return list.filter(isActive);
+};
+
+/**
+ * Get Inactive Branches
+ * 1) Tries /inactive-branches if it exists.
+ * 2) Falls back to /branches and filters client-side.
+ */
+export const getInactiveBranches = async (params = {}) => {
+  try {
+    const res = await api.get("/inactive-branches", { params });
+    const list = normalizeArray(unwrap(res));
+    if (list.length) return list;
+  } catch (_) {
+    // ignore; fallback below
+  }
+
+  const res = await api.get("/branches", { params: { per_page: 500, ...params } });
+  const list = normalizeArray(unwrap(res));
+  return list.filter((b) => !isActive(b));
+};
+
+/* -------------- CRUD -------------- */
 
 // View Single Branch
 export const viewBranch = async (id) => {
