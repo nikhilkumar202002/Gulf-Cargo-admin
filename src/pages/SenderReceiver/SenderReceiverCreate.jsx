@@ -386,7 +386,7 @@ const SenderCreate = () => {
       setCreatedData(created ?? null);
       setDisplayDetails(details);
       setShowSuccess(true);
-      resetForm();
+      // resetForm();
     } catch (err) {
       console.error(err);
       const apiMsg = err?.response?.data?.message || "Failed to submit form.";
@@ -401,6 +401,7 @@ const SenderCreate = () => {
   /* Close modal */
   const handleCloseSuccess = () => {
     setShowSuccess(false);
+    resetForm();
   };
 
   /* Renderers */
@@ -737,12 +738,12 @@ const SenderCreate = () => {
       </div>
 
       <ErrorBoundary onClose={handleCloseSuccess}>
-  <CreateReceiverSenderModal
-    open={showSuccess}
-    onClose={handleCloseSuccess}
-    data={createdData}      // raw API response
-    details={displayDetails} // the human-friendly map you built from the form
-  />
+<CreateReceiverSenderModal
+  open={showSuccess}
+  onClose={handleCloseSuccess}
+  data={createdData}          // <-- pass whole response; component normalizes internally
+  details={displayDetails}
+/>
 </ErrorBoundary>
     </div>
   );
