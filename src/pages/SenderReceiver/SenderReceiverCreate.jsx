@@ -1,14 +1,14 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { FaUserTie } from "react-icons/fa";
-import { getActiveCustomerTypes } from "../../api/customerTypeApi";
-import { getActiveDocumentTypes } from "../../api/documentTypeApi";
-import {
-  getActiveCountries,
-  getActiveStatesByCountry,
-  getActiveDistrictsByState,
-} from "../../api/worldApi";
-import { getAllBranches } from "../../api/branchApi";   // ⬅️ use All Branches
+import { getCustomerTypes } from "../../api/customerTypeApi";
+import { getDocumentTypes } from "../../api/documentTypeApi";
+import { getCountries, getStatesByCountry, getDistrictsByState } from "../../api/worldApi";
+import { getAllBranches } from "../../api/branchApi";
 import { createParty } from "../../api/partiesApi";
+
+import CreateReceiverSenderModal from "../../components/CreateReceiverSenderModal";
+import ErrorBoundary from "../../components/ErrorBoundary";
 
 /* ---------------------- Helpers ---------------------- */
 const normalizeList = (p) => {
@@ -54,11 +54,9 @@ const getDistrictLabel = (d) =>
       `District ${getId(d)}`;
 
 /* Customer Type getters */
-const TYPE_ID_KEY = "id";
-const TYPE_LABEL_KEY = "customer_type";
-const getTypeId = (t) => String(t?.[TYPE_ID_KEY] ?? t?.id ?? t?._id ?? t?.value ?? "");
+const getTypeId = (t) => String(t?.id ?? t?._id ?? t?.value ?? "");
 const getTypeLabel = (t) =>
-  t?.[TYPE_LABEL_KEY] ?? t?.name ?? t?.type ?? t?.title ?? t?.label ?? `Type ${getTypeId(t)}`;
+  t?.customer_type ?? t?.name ?? t?.type ?? t?.title ?? t?.label ?? `Type ${getTypeId(t)}`;
 
 /* Document Type getters */
 const DOC_LABEL_CANDIDATES = [
@@ -106,48 +104,6 @@ const resolveLabel = (id, list, getLabelFn) => {
   return item ? getLabelFn(item) : String(id);
 };
 
-/* ---------------------- Success Modal ---------------------- */
-const SuccessModal = ({ open, onClose, data, details }) => {
-  if (!open) return null;
-  const rows = Object.entries(details ?? {}).filter(([, v]) => v !== undefined);
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-xl w-[92%] max-w-lg p-6">
-        <h3 className="text-xl font-semibold text-green-700">Created successfully</h3>
-        <p className="text-sm text-gray-600 mt-1">The sender/receiver has been saved.</p>
-
-        {rows.length > 0 && (
-          <dl className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-            {rows.map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-gray-500">{label}</dt>
-                <dd className="text-gray-900 break-words">
-                  {value === "" || value == null ? "—" : String(value)}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
-
-        {data && (
-          <div className="mt-3 text-xs text-gray-500">
-            <span className="font-medium">Server ID:</span> {String(data.id ?? "—")}
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 /* ---------------------- Main Component ---------------------- */
 
@@ -172,7 +128,7 @@ const makeInitialForm = () => ({
 
 const SenderCreate = () => {
   /* selects data */
-  const [activeTypes, setActiveTypes] = useState([]);
+  const [customerTypes, setCustomerTypes] = useState([]);
   const [docTypes, setDocTypes] = useState([]);
   const [branches, setBranches] = useState([]);
 
@@ -230,7 +186,7 @@ const SenderCreate = () => {
     });
   };
 
-  /* load types + docs + branches (once) */
+  /* load customer types + doc types + branches (once) */
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -242,16 +198,17 @@ const SenderCreate = () => {
         setDocsError("");
         setBranchError("");
 
-        const [typesRes, docsRes, branchesRes] = await Promise.all([
-          getActiveCustomerTypes({ per_page: 1000 }),
-          getActiveDocumentTypes(),
-          getAllBranches({ per_page: 500 }), // ⬅️ fetch from /branches
+        // IMPORTANT: order of Promise.all must match destructuring below
+        const [branchesRes, docsRes, custTypesRes] = await Promise.all([
+          getAllBranches({ per_page: 500 }),
+          getDocumentTypes({ per_page: 1000 }),
+          getCustomerTypes({ per_page: 1000 }),
         ]);
 
         if (!mounted) return;
-        setActiveTypes(normalizeList(typesRes));
-        setDocTypes(normalizeList(docsRes));
         setBranches(normalizeList(branchesRes));
+        setDocTypes(normalizeList(docsRes));
+        setCustomerTypes(normalizeList(custTypesRes));
       } catch (err) {
         if (!mounted) return;
         setTypesError("Failed to load customer types.");
@@ -284,7 +241,7 @@ const SenderCreate = () => {
           setCountryLoading(true);
           setCountryError("");
           try {
-            const cRes = await getActiveCountries({ per_page: 500 });
+            const cRes = await getCountries({ per_page: 500 });
             if (!mounted || fetchStamp.current !== myStamp) return;
             setCountries(normalizeList(cRes));
           } catch (e) {
@@ -310,7 +267,7 @@ const SenderCreate = () => {
         setStateLoading(true);
         setStateError("");
         try {
-          const sRes = await getActiveStatesByCountry(formData.country);
+          const sRes = await getStatesByCountry(formData.country);
           if (!mounted || fetchStamp.current !== myStamp) return;
           setStates(normalizeList(sRes));
         } catch (e) {
@@ -333,7 +290,7 @@ const SenderCreate = () => {
         setDistrictLoading(true);
         setDistrictError("");
         try {
-          const dRes = await getActiveDistrictsByState(formData.state);
+          const dRes = await getDistrictsByState(formData.state);
           if (!mounted || fetchStamp.current !== myStamp) return;
           setDistricts(normalizeList(dRes));
         } catch (e) {
@@ -410,7 +367,7 @@ const SenderCreate = () => {
         Email: formData.email,
         WhatsApp: formData.whatsappNumber,
         Phone: formData.contactNumber,
-        "Customer Type": resolveLabel(formData.customerType, activeTypes, getTypeLabel),
+        "Customer Type": resolveLabel(formData.customerType, customerTypes, getTypeLabel),
         "Document Type": resolveLabel(formData.senderIdType, docTypes, getDocLabel),
         "Document ID": formData.senderId,
         Branch: resolveLabel(formData.branch, branches, getBranchLabel),
@@ -541,15 +498,11 @@ const SenderCreate = () => {
               >
                 <option value="">{typesLoading ? "Loading..." : "Select Customer Type"}</option>
                 {!typesLoading &&
-                  activeTypes.map((t) => {
-                    const id = getTypeId(t);
-                    const label = getTypeLabel(t);
-                    return (
-                      <option key={id} value={id}>
-                        {label}
-                      </option>
-                    );
-                  })}
+                  customerTypes.map((t) => (
+                    <option key={getTypeId(t)} value={getTypeId(t)}>
+                      {getTypeLabel(t)}
+                    </option>
+                  ))}
               </select>
               {typesError && <p className="text-sm text-red-600">{typesError}</p>}
               {fieldErrors.customer_type_id && (
@@ -593,20 +546,16 @@ const SenderCreate = () => {
                 name="senderIdType"
                 value={String(formData.senderIdType ?? "")}
                 onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w/full"
+                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
                 disabled={docsLoading}
               >
                 <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
                 {!docsLoading &&
-                  docTypes.map((d) => {
-                    const id = getDocId(d);
-                    const label = getDocLabel(d);
-                    return (
-                      <option key={id} value={id}>
-                        {label}
-                      </option>
-                    );
-                  })}
+                  docTypes.map((d) => (
+                    <option key={getDocId(d)} value={getDocId(d)}>
+                      {getDocLabel(d)}
+                    </option>
+                  ))}
               </select>
               {docsError && <p className="text-sm text-red-600">{docsError}</p>}
               {fieldErrors.document_type_id && (
@@ -787,12 +736,14 @@ const SenderCreate = () => {
         </form>
       </div>
 
-      <SuccessModal
-        open={showSuccess}
-        onClose={handleCloseSuccess}
-        data={createdData}
-        details={displayDetails}
-      />
+      <ErrorBoundary onClose={handleCloseSuccess}>
+  <CreateReceiverSenderModal
+    open={showSuccess}
+    onClose={handleCloseSuccess}
+    data={createdData}      // raw API response
+    details={displayDetails} // the human-friendly map you built from the form
+  />
+</ErrorBoundary>
     </div>
   );
 };
