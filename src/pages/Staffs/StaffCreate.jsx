@@ -3,6 +3,7 @@ import { HiUserAdd } from "react-icons/hi";
 import { useAuth } from "../../auth/AuthContext";
 import "../Styles.css";
 
+import { getPhoneCodes } from "../../api/phoneCodeApi";
 import { getActiveBranches } from "../../api/branchApi";
 import { getActiveVisaTypes } from "../../api/visaType";
 import { getAllRoles } from "../../api/rolesApi";
@@ -57,6 +58,9 @@ const StaffCreate = () => {
   const [formKey, setFormKey] = useState(0);
   const [submitMsg, setSubmitMsg] = useState({ text: "", variant: "" });
 
+  const [phoneCodes, setPhoneCodes] = useState([]);
+const [phoneCode, setPhoneCode] = useState("+91");
+
   // file refs
   const photoRef = useRef(null);
   const docRef = useRef(null);
@@ -103,6 +107,14 @@ const StaffCreate = () => {
       } finally {
         setLoadingDocTypes(false);
       }
+
+        try {
+          const pc = await getPhoneCodes();   // already returns an array now
+          setPhoneCodes(pc);                  // <-- was setPhoneCodes(toList(pc))
+        } catch {
+          setPhoneCodes([]);
+        }
+
     })();
   }, [token]);
 
@@ -163,6 +175,7 @@ const StaffCreate = () => {
     formData.append("password", password);
     formData.append("role", roleName);
     formData.append("role_id", String(selectedRole));
+    formData.append("phone_code", phoneCode || "");
     formData.append("contact_number", contactNumber || "");
     formData.append("branch_id", String(selectedBranch));
     formData.append("status", status === "" ? 1 : Number(status));
@@ -170,6 +183,7 @@ const StaffCreate = () => {
     formData.append("visa_expiry_date", visaExpiryDate);    // e.g. 2026-09-01
     formData.append("visa_type_id", String(selectedVisaType));
     formData.append("visa_status", visaStatus === "" ? 1 : Number(visaStatus));
+    
 
     // photo
     if (photoRef.current?.files?.[0]) {
@@ -210,6 +224,27 @@ const StaffCreate = () => {
       setSubmitting(false);
     }
   };
+
+useEffect(() => {
+  const count = Array.isArray(phoneCodes) ? phoneCodes.length : 0;
+  console.log(`[PhoneCodes] list ${count ? "loaded" : "empty"} (${count} items)`);
+
+  if (count) {
+    const exists = phoneCodes.some((c) => extractDial(c) === phoneCode);
+    console.log(`[PhoneCodes] selected code "${phoneCode}" ${exists ? "FOUND" : "NOT FOUND"} in list`);
+    if (!exists) {
+      const sample = phoneCodes.slice(0, 5).map(extractDial).filter(Boolean);
+      console.log("[PhoneCodes] first few codes:", sample);
+    }
+  }
+}, [phoneCodes, phoneCode]);
+
+  const extractDial = (c) => {
+  const raw = c?.code ?? c?.dial_code ?? c?.phone_code ?? c?.prefix ?? (c?.calling_code ? `+${c.calling_code}` : "");
+  if (!raw) return "";
+  const s = String(raw).trim();
+  return s.startsWith("+") ? s : `+${s}`;
+};
 
   return (
     <div className="flex justify-center items-center w-full">
@@ -269,15 +304,43 @@ const StaffCreate = () => {
 
           {/* Row 2b */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
+          <div>
               <label className="block text-sm font-medium text-gray-700">Contact Number</label>
-              <input
-                type="text"
-                placeholder="+971…"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
-                value={contactNumber} onChange={(e) => setContactNumber(e.target.value)}
-              />
+              <div className="mt-1 flex gap-2">
+                <select
+                  className="w-28 rounded-lg border border-gray-300 px-2 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
+                  value={phoneCode}
+                  onChange={(e) => setPhoneCode(e.target.value)}
+                >
+                  {phoneCodes.length > 0 ? (
+                    phoneCodes.map((c, i) => {
+                      const code = c?.code ?? c?.dial_code ?? c?.phone_code ?? c?.prefix ?? "";
+                      const name = c?.name ?? c?.country ?? c?.country_name ?? c?.iso2 ?? "";
+                      if (!code) return null;
+                      return (
+                        <option key={`${code}-${name || i}`} value={code}>
+                          {code}{name ? ` — ${name}` : ""}
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <option value="+91">+91 — India</option>
+                      <option value="+971">+971 — UAE</option>
+                    </>
+                  )}
+                </select>
+
+                <input
+                  type="text"
+                  placeholder="Phone number"
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(e.target.value)}
+                />
+              </div>
             </div>
+
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Staff Branch *</label>
