@@ -1,5 +1,4 @@
-
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { HiUserAdd } from "react-icons/hi";
 import { useAuth } from "../../auth/AuthContext";
 import "../Styles.css";
@@ -8,10 +7,9 @@ import { getActiveBranches } from "../../api/branchApi";
 import { getActiveVisaTypes } from "../../api/visaType";
 import { getAllRoles } from "../../api/rolesApi";
 import { getActiveDocumentTypes } from "../../api/documentTypeApi";
-import { staffRegister } from "../../api/accountApi"; 
+import { staffRegister } from "../../api/accountApi";
 
 const toList = (res) => {
-  console.log("API Response:", res); 
   if (Array.isArray(res)) return res;
   if (Array.isArray(res?.data)) return res.data;
   if (Array.isArray(res?.data?.data)) return res.data.data;
@@ -46,63 +44,67 @@ const StaffCreate = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [contactNumber, setContactNumber] = useState("");
-  const [appointmentDate, setAppointmentDate] = useState("");
-  const [visaExpiryDate, setVisaExpiryDate] = useState("");
+  const [appointmentDate, setAppointmentDate] = useState(""); // YYYY-MM-DD
+  const [visaExpiryDate, setVisaExpiryDate] = useState("");   // YYYY-MM-DD
   const [documentNumber, setDocumentNumber] = useState("");
 
-  // enums (as required by backend)
-  const [status, setStatus] = useState("1");     
-  const [visaStatus, setVisaStatus] = useState("1"); 
+  // enums
+  const [status, setStatus] = useState("1");
+  const [visaStatus, setVisaStatus] = useState("1");
 
   // UI state
   const [submitting, setSubmitting] = useState(false);
-  const [formKey, setFormKey] = useState(0); 
-  const [submitMsg, setSubmitMsg] = useState({ text: "", variant: "" }); 
+  const [formKey, setFormKey] = useState(0);
+  const [submitMsg, setSubmitMsg] = useState({ text: "", variant: "" });
 
-useEffect(() => {
-  if (!token) return;
+  // file refs
+  const photoRef = useRef(null);
+  const docRef = useRef(null);
+  const docsRef = docRef;
 
-  (async () => {
-    try {
-      setLoadingBranches(true);
-      const branchesData = await getActiveBranches();
-      setBranches(toList(branchesData));
-    } catch {
-      setBranches([]);
-    } finally {
-      setLoadingBranches(false);
-    }
+  useEffect(() => {
+    if (!token) return;
 
- try {
-      setLoadingVisas(true);
-      const visaData = await getActiveVisaTypes(token);  
-      console.log("Fetched Visa Data:", visaData);  
-      setVisas(toList(visaData));
-    } catch (err) {
-      console.error("Failed to fetch visa types", err);
-      setVisas([]); 
-    } finally {
-      setLoadingVisas(false);
-    }
+    (async () => {
+      try {
+        setLoadingBranches(true);
+        const branchesData = await getActiveBranches();
+        setBranches(toList(branchesData));
+      } catch {
+        setBranches([]);
+      } finally {
+        setLoadingBranches(false);
+      }
 
-    try {
-      setRoles(toList(await getAllRoles())); 
-    } catch {
-      setRoles([]);
-    } finally {
-      setLoadingRoles(false);
-    }
+      try {
+        setLoadingVisas(true);
+        const visaData = await getActiveVisaTypes(token);
+        setVisas(toList(visaData));
+      } catch {
+        setVisas([]);
+      } finally {
+        setLoadingVisas(false);
+      }
 
-    try {
-      setDocTypes(toList(await getActiveDocumentTypes())); // Assuming this is another API call
-    } catch {
-      setDocTypes([]);
-    } finally {
-      setLoadingDocTypes(false);
-    }
-  })();
-}, [token]); // Dependency on token to fetch data when it changes
+      try {
+        setLoadingRoles(true);
+        setRoles(toList(await getAllRoles()));
+      } catch {
+        setRoles([]);
+      } finally {
+        setLoadingRoles(false);
+      }
 
+      try {
+        setLoadingDocTypes(true);
+        setDocTypes(toList(await getActiveDocumentTypes()));
+      } catch {
+        setDocTypes([]);
+      } finally {
+        setLoadingDocTypes(false);
+      }
+    })();
+  }, [token]);
 
   const requiredOk = () =>
     name.trim() &&
@@ -131,75 +133,8 @@ useEffect(() => {
     setSelectedVisaType("");
     setStatus("1");
     setVisaStatus("1");
-    setFormKey((k) => k + 1); // resets uncontrolled inputs (file)
+    setFormKey((k) => k + 1); // resets file inputs
   };
-
- const handleSubmit = async (e) => {
-  e.preventDefault();
-  setSubmitMsg({ text: "", variant: "" });
-
-  if (!requiredOk()) {
-    setSubmitMsg({ text: "Fill all required fields.", variant: "error" });
-    return;
-  }
-
-  const roleObj = roles.find((r) => String(r.id ?? r._id) === String(selectedRole));
-  const roleName =
-    (roleObj?.role_name ?? roleObj?.name ?? roleObj?.title ?? "").trim() || "Staff";
-
-  // Create FormData object to handle file upload
-  const formData = new FormData();
-  formData.append("name", name.trim());
-  formData.append("email", email.trim());
-  formData.append("password", password);
-  formData.append("role", roleName);
-  formData.append("role_id", String(selectedRole));
-  formData.append("contact_number", contactNumber || "");
-  formData.append("branch_id", String(selectedBranch));
-  formData.append("status", status === "" ? 1 : Number(status));
-  formData.append("appointment_date", appointmentDate);  // YYYY-MM-DD
-  formData.append("visa_expiry_date", visaExpiryDate);  // YYYY-MM-DD
-  formData.append("visa_type_id", String(selectedVisaType));
-  formData.append("visa_status", visaStatus === "" ? 1 : Number(visaStatus));
-  formData.append("document_id", String(selectedDocType));
-  formData.append("document_number", documentNumber.trim());
-
-  // If a file is selected, append it to formData
-  const fileInput = document.querySelector('input[type="file"]');
-  if (fileInput && fileInput.files[0]) {
-    formData.append("photo", fileInput.files[0]);
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-  try {
-    setSubmitting(true);
-    const res = await staffRegister(formData, token, { signal: controller.signal });
-    // ✅ show success message below button
-    setSubmitMsg({
-      text: res?.message || "User registered successfully.",
-      variant: "success",
-    });
-    // ✅ reset all fields (message remains visible)
-    resetFields();
-  } catch (err) {
-    // show backend validation under the button
-    const respErrors =
-      err?.data?.errors || err?.response?.data?.errors || {};
-    const flat = Object.entries(respErrors).map(
-      ([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`
-    );
-    setSubmitMsg({
-      text: [err?.message || "Registration failed.", ...flat].join(" "),
-      variant: "error",
-    });
-  } finally {
-    clearTimeout(timeoutId);
-    setSubmitting(false); // <-- guarantees the button goes back to "Submit"
-  }
-};
-
 
   const getId = (x) => x?.id ?? x?._id ?? x?.value;
   const getBranchLabel = (b) => b?.branch_name ?? b?.name ?? b?.title ?? `Branch #${b?.id ?? b?._id}`;
@@ -208,7 +143,73 @@ useEffect(() => {
     d?.name ?? d?.document_name ?? d?.document_type ?? d?.type_name ?? d?.title ?? `Doc #${d?.id ?? d?._id}`;
   const getVisaTypeLabel = (v) => v?.type_name ?? v?.name ?? v?.title ?? `Visa #${v?.id ?? v?._id}`;
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitMsg({ text: "", variant: "" });
 
+    if (!requiredOk()) {
+      setSubmitMsg({ text: "Fill all required fields.", variant: "error" });
+      return;
+    }
+
+    const roleObj = roles.find((r) => String(getId(r)) === String(selectedRole));
+    const roleName = (roleObj?.role_name ?? roleObj?.name ?? roleObj?.title ?? "").trim() || "Staff";
+
+    const formData = new FormData();
+
+    // basic fields
+    formData.append("name", name.trim());
+    formData.append("email", email.trim());
+    formData.append("password", password);
+    formData.append("role", roleName);
+    formData.append("role_id", String(selectedRole));
+    formData.append("contact_number", contactNumber || "");
+    formData.append("branch_id", String(selectedBranch));
+    formData.append("status", status === "" ? 1 : Number(status));
+    formData.append("appointment_date", appointmentDate);   // e.g. 2025-09-01
+    formData.append("visa_expiry_date", visaExpiryDate);    // e.g. 2026-09-01
+    formData.append("visa_type_id", String(selectedVisaType));
+    formData.append("visa_status", visaStatus === "" ? 1 : Number(visaStatus));
+
+    // photo
+    if (photoRef.current?.files?.[0]) {
+      formData.append("photo", photoRef.current.files[0]);
+    }
+
+    const photo = photoRef.current?.files?.[0];
+      if (photo) {
+        formData.append("profile_pic", photo); 
+        formData.append("photo", photo);     
+      }
+
+    formData.append("document_id", String(selectedDocType));
+    formData.append("document_number", documentNumber.trim());
+
+    const docFiles = Array.from(docsRef.current?.files ?? []);
+    docFiles.forEach((f) => formData.append("documents[]", f));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      setSubmitting(true);
+      const res = await staffRegister(formData, token, { signal: controller.signal });
+      setSubmitMsg({ text: res?.message || "User registered successfully.", variant: "success" });
+      resetFields();
+    } catch (err) {
+      const errors = err?.response?.data?.errors || err?.data?.errors || {};
+      const flat = Object.entries(errors).map(([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`);
+      setSubmitMsg({
+        text: [err?.response?.data?.message || err?.message || "Registration failed.", ...flat].join(" "),
+        variant: "error",
+      });
+      console.error("Register failed",
+        err?.response?.status, err?.response?.data?.message, err?.response?.data?.errors);
+    } finally {
+      clearTimeout(timeoutId);
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex justify-center items-center w-full">
@@ -220,7 +221,6 @@ useEffect(() => {
           </h1>
         </div>
 
-        {/* key={formKey} resets file inputs on success */}
         <form key={formKey} className="space-y-6" onSubmit={handleSubmit}>
           {/* Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -235,7 +235,12 @@ useEffect(() => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Upload Photo</label>
-              <input type="file" className="mt-1 w-full text-gray-700 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer" />
+            <input
+                  ref={photoRef}
+                  type="file"
+                  accept="image/*"
+                  className="mt-1 w-full text-gray-700 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer"
+                />
             </div>
           </div>
 
@@ -361,7 +366,7 @@ useEffect(() => {
                 {!loadingDocTypes &&
                   docTypes.map((d) => (
                     <option key={getId(d)} value={String(getId(d))}>
-                      {d?.name ?? d?.document_name ?? d?.document_type ?? d?.type_name ?? d?.title}
+                      {getDocTypeLabel(d)}
                     </option>
                   ))}
               </select>
@@ -369,33 +374,40 @@ useEffect(() => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Type of Visa *</label>
-                <select
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
-                    disabled={loadingVisas}
-                    value={selectedVisaType}
-                    onChange={(e) => setSelectedVisaType(e.target.value)}
-                    required
-                  >
-                    <option value="">{loadingVisas ? "Loading visa types..." : "Select Visa Type"}</option>
-                    {!loadingVisas && visas.length === 0 && (
-                      <option value="">No visa types available</option>
-                    )}
-                    {!loadingVisas &&
-                      visas.map((v) => (
-                        <option key={getId(v)} value={String(getId(v))}>
-                          {getVisaTypeLabel(v)}
-                        </option>
-                      ))}
-                  </select>
-
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
+                disabled={loadingVisas}
+                value={selectedVisaType}
+                onChange={(e) => setSelectedVisaType(e.target.value)}
+                required
+              >
+                <option value="">{loadingVisas ? "Loading visa types..." : "Select Visa Type"}</option>
+                {!loadingVisas && visas.length === 0 && (
+                  <option value="">No visa types available</option>
+                )}
+                {!loadingVisas &&
+                  visas.map((v) => (
+                    <option key={getId(v)} value={String(getId(v))}>
+                      {getVisaTypeLabel(v)}
+                    </option>
+                  ))}
+              </select>
             </div>
           </div>
 
           {/* Row 6 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Upload Document</label>
-              <input type="file" className="mt-1 w-full text-gray-700 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer" />
+              <label className="block text-sm font-medium text-gray-700">Upload Document(s) *</label>
+              <input
+                ref={docRef}
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.webp"
+                className="mt-1 w-full text-gray-700 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">You can select multiple files. They’ll be sent as <code>documents[]</code>.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Visa Status *</label>
@@ -436,13 +448,8 @@ useEffect(() => {
             </button>
           </div>
 
-          {/* Message BELOW the buttons */}
           {submitMsg.text && (
-            <p
-              className={`mt-2 text-sm ${
-                submitMsg.variant === "success" ? "text-green-600" : "text-red-600"
-              }`}
-            >
+            <p className={`mt-2 text-sm ${submitMsg.variant === "success" ? "text-green-600" : "text-red-600"}`}>
               {submitMsg.text}
             </p>
           )}
