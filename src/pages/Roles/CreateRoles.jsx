@@ -18,7 +18,7 @@ function CreateRoles() {
 
     try {
       const response = await axios.post(
-        "https://gulfcargoapi.bhutanvoyage.in/api/role",
+        "https://gulfcargoapi.domaindude.in/public/api/role",
         { role_name: roleName },
         {
           headers: {

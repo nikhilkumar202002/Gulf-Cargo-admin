@@ -30,18 +30,20 @@ export const getVisaTypes = async () => {
   }
 };
 
-// Get all active visa types (GET)
-export const getActiveVisaTypes = async () => {
+
+export const getActiveVisaTypes = async (token) => {
   try {
-    const response = await axiosInstance.get('/active-visa-types', {
+    const response = await axiosInstance.get("/visa-types?status=1", {
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`, // Ensure token is correctly included here
       },
     });
+    console.log("Visa types response:", response.data); // Log response for debugging
     return response.data;
   } catch (error) {
-    console.error('Error fetching active visa types:', error);
-    throw error; // To handle this in the component
+    console.error("Error fetching active visa types:", error);
+    throw error; // Handle error properly
   }
 };
 

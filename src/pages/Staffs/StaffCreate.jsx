@@ -1,4 +1,4 @@
-// src/pages/staff/StaffCreate.jsx
+
 import React, { useEffect, useState } from "react";
 import { HiUserAdd } from "react-icons/hi";
 import { useAuth } from "../../auth/AuthContext";
@@ -8,9 +8,10 @@ import { getActiveBranches } from "../../api/branchApi";
 import { getActiveVisaTypes } from "../../api/visaType";
 import { getAllRoles } from "../../api/rolesApi";
 import { getActiveDocumentTypes } from "../../api/documentTypeApi";
-import { staffRegister } from "../../api/accountApi"; // <-- uses (data, token, axiosOpts?)
+import { staffRegister } from "../../api/accountApi"; 
 
 const toList = (res) => {
+  console.log("API Response:", res); 
   if (Array.isArray(res)) return res;
   if (Array.isArray(res?.data)) return res.data;
   if (Array.isArray(res?.data?.data)) return res.data.data;
@@ -50,31 +51,58 @@ const StaffCreate = () => {
   const [documentNumber, setDocumentNumber] = useState("");
 
   // enums (as required by backend)
-  const [status, setStatus] = useState("1");      // staff status: "1" active, "0" inactive
-  const [visaStatus, setVisaStatus] = useState("1"); // visa status: "1" active, "0" inactive
+  const [status, setStatus] = useState("1");     
+  const [visaStatus, setVisaStatus] = useState("1"); 
 
   // UI state
   const [submitting, setSubmitting] = useState(false);
-  const [formKey, setFormKey] = useState(0); // to reset file inputs
-  const [submitMsg, setSubmitMsg] = useState({ text: "", variant: "" }); // success | error
+  const [formKey, setFormKey] = useState(0); 
+  const [submitMsg, setSubmitMsg] = useState({ text: "", variant: "" }); 
 
-  useEffect(() => {
-    if (!token) return;
+useEffect(() => {
+  if (!token) return;
 
-    (async () => {
-      try { setBranches(toList(await getActiveBranches())); } catch { setBranches([]); }
-      finally { setLoadingBranches(false); }
+  (async () => {
+    try {
+      setLoadingBranches(true);
+      const branchesData = await getActiveBranches();
+      setBranches(toList(branchesData));
+    } catch {
+      setBranches([]);
+    } finally {
+      setLoadingBranches(false);
+    }
 
-      try { setVisas(toList(await getActiveVisaTypes())); } catch { setVisas([]); }
-      finally { setLoadingVisas(false); }
+ try {
+      setLoadingVisas(true);
+      const visaData = await getActiveVisaTypes(token);  
+      console.log("Fetched Visa Data:", visaData);  
+      setVisas(toList(visaData));
+    } catch (err) {
+      console.error("Failed to fetch visa types", err);
+      setVisas([]); 
+    } finally {
+      setLoadingVisas(false);
+    }
 
-      try { setRoles(toList(await getAllRoles())); } catch { setRoles([]); }
-      finally { setLoadingRoles(false); }
+    try {
+      setRoles(toList(await getAllRoles())); 
+    } catch {
+      setRoles([]);
+    } finally {
+      setLoadingRoles(false);
+    }
 
-      try { setDocTypes(toList(await getActiveDocumentTypes())); } catch { setDocTypes([]); }
-      finally { setLoadingDocTypes(false); }
-    })();
-  }, [token]);
+    try {
+      setDocTypes(toList(await getActiveDocumentTypes())); // Assuming this is another API call
+    } catch {
+      setDocTypes([]);
+    } finally {
+      setLoadingDocTypes(false);
+    }
+  })();
+}, [token]); // Dependency on token to fetch data when it changes
+
 
   const requiredOk = () =>
     name.trim() &&
@@ -106,66 +134,72 @@ const StaffCreate = () => {
     setFormKey((k) => k + 1); // resets uncontrolled inputs (file)
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitMsg({ text: "", variant: "" });
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setSubmitMsg({ text: "", variant: "" });
 
-    if (!requiredOk()) {
-      setSubmitMsg({ text: "Fill all required fields.", variant: "error" });
-      return;
-    }
+  if (!requiredOk()) {
+    setSubmitMsg({ text: "Fill all required fields.", variant: "error" });
+    return;
+  }
 
-    const roleObj = roles.find((r) => String(r.id ?? r._id) === String(selectedRole));
-    const roleName =
-      (roleObj?.role_name ?? roleObj?.name ?? roleObj?.title ?? "").trim() || "Staff";
+  const roleObj = roles.find((r) => String(r.id ?? r._id) === String(selectedRole));
+  const roleName =
+    (roleObj?.role_name ?? roleObj?.name ?? roleObj?.title ?? "").trim() || "Staff";
 
-    const payload = {
-      name: name.trim(),
-      email: email.trim(),
-      password,
-      role: roleName,
-      role_id: String(selectedRole),
-      contact_number: contactNumber || undefined,
-      branch_id: String(selectedBranch),
-      status: status === "" ? 1 : Number(status),               // 1/0
-      appointment_date: appointmentDate,                         // YYYY-MM-DD
-      visa_expiry_date: visaExpiryDate,                          // YYYY-MM-DD
-      visa_type_id: String(selectedVisaType),
-      visa_status: visaStatus === "" ? 1 : Number(visaStatus),   // 1/0
-      document_id: String(selectedDocType),
-      document_number: documentNumber.trim(),
-      documents: [],
-    };
+  // Create FormData object to handle file upload
+  const formData = new FormData();
+  formData.append("name", name.trim());
+  formData.append("email", email.trim());
+  formData.append("password", password);
+  formData.append("role", roleName);
+  formData.append("role_id", String(selectedRole));
+  formData.append("contact_number", contactNumber || "");
+  formData.append("branch_id", String(selectedBranch));
+  formData.append("status", status === "" ? 1 : Number(status));
+  formData.append("appointment_date", appointmentDate);  // YYYY-MM-DD
+  formData.append("visa_expiry_date", visaExpiryDate);  // YYYY-MM-DD
+  formData.append("visa_type_id", String(selectedVisaType));
+  formData.append("visa_status", visaStatus === "" ? 1 : Number(visaStatus));
+  formData.append("document_id", String(selectedDocType));
+  formData.append("document_number", documentNumber.trim());
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+  // If a file is selected, append it to formData
+  const fileInput = document.querySelector('input[type="file"]');
+  if (fileInput && fileInput.files[0]) {
+    formData.append("photo", fileInput.files[0]);
+  }
 
-    try {
-      setSubmitting(true);
-      const res = await staffRegister(payload, token, { signal: controller.signal });
-      // ✅ show success message below button
-      setSubmitMsg({
-        text: res?.message || "User registered successfully.",
-        variant: "success",
-      });
-      // ✅ reset all fields (message remains visible)
-      resetFields();
-    } catch (err) {
-      // show backend validation under the button
-      const respErrors =
-        err?.data?.errors || err?.response?.data?.errors || {};
-      const flat = Object.entries(respErrors).map(
-        ([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`
-      );
-      setSubmitMsg({
-        text: [err?.message || "Registration failed.", ...flat].join(" "),
-        variant: "error",
-      });
-    } finally {
-      clearTimeout(timeoutId);
-      setSubmitting(false); // <-- guarantees the button goes back to "Submit"
-    }
-  };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+  try {
+    setSubmitting(true);
+    const res = await staffRegister(formData, token, { signal: controller.signal });
+    // ✅ show success message below button
+    setSubmitMsg({
+      text: res?.message || "User registered successfully.",
+      variant: "success",
+    });
+    // ✅ reset all fields (message remains visible)
+    resetFields();
+  } catch (err) {
+    // show backend validation under the button
+    const respErrors =
+      err?.data?.errors || err?.response?.data?.errors || {};
+    const flat = Object.entries(respErrors).map(
+      ([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`
+    );
+    setSubmitMsg({
+      text: [err?.message || "Registration failed.", ...flat].join(" "),
+      variant: "error",
+    });
+  } finally {
+    clearTimeout(timeoutId);
+    setSubmitting(false); // <-- guarantees the button goes back to "Submit"
+  }
+};
+
 
   const getId = (x) => x?.id ?? x?._id ?? x?.value;
   const getBranchLabel = (b) => b?.branch_name ?? b?.name ?? b?.title ?? `Branch #${b?.id ?? b?._id}`;
@@ -173,6 +207,8 @@ const StaffCreate = () => {
   const getDocTypeLabel = (d) =>
     d?.name ?? d?.document_name ?? d?.document_type ?? d?.type_name ?? d?.title ?? `Doc #${d?.id ?? d?._id}`;
   const getVisaTypeLabel = (v) => v?.type_name ?? v?.name ?? v?.title ?? `Visa #${v?.id ?? v?._id}`;
+
+
 
   return (
     <div className="flex justify-center items-center w-full">
@@ -333,20 +369,25 @@ const StaffCreate = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Type of Visa *</label>
-              <select
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
-                disabled={loadingVisas}
-                value={selectedVisaType}
-                onChange={(e) => setSelectedVisaType(e.target.value)} required
-              >
-                <option value="">{loadingVisas ? "Loading visa types..." : "Select Visa Type"}</option>
-                {!loadingVisas &&
-                  visas.map((v) => (
-                    <option key={getId(v)} value={String(getId(v))}>
-                      {getVisaTypeLabel(v)}
-                    </option>
-                  ))}
-              </select>
+                <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
+                    disabled={loadingVisas}
+                    value={selectedVisaType}
+                    onChange={(e) => setSelectedVisaType(e.target.value)}
+                    required
+                  >
+                    <option value="">{loadingVisas ? "Loading visa types..." : "Select Visa Type"}</option>
+                    {!loadingVisas && visas.length === 0 && (
+                      <option value="">No visa types available</option>
+                    )}
+                    {!loadingVisas &&
+                      visas.map((v) => (
+                        <option key={getId(v)} value={String(getId(v))}>
+                          {getVisaTypeLabel(v)}
+                        </option>
+                      ))}
+                  </select>
+
             </div>
           </div>
 

@@ -21,7 +21,7 @@ function Register() {
 
     try {
       const response = await axios.post(
-        "https://gulfcargoapi.bhutanvoyage.in/api/register",
+        "https://gulfcargoapi.domaindude.in/public/api/register",
         {
           name,
           email,

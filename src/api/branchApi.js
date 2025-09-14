@@ -39,15 +39,10 @@ export const getAllBranches = async (params = {}) => {
   return normalizeArray(unwrap(res));
 };
 
-/**
- * Get Active Branches
- * 1) Tries /active-branches if it exists.
- * 2) Falls back to /branches with {active:1,status:'Active'} and filters client-side.
- */
 export const getActiveBranches = async (params = {}) => {
   // Try dedicated endpoint first
   try {
-    const res = await api.get("/active-branches", { params });
+    const res = await api.get("/branches?status=1", { params });
     const list = normalizeArray(unwrap(res));
     if (list.length) return list;
   } catch (_) {
@@ -65,11 +60,7 @@ export const getActiveBranches = async (params = {}) => {
   return list.filter(isActive);
 };
 
-/**
- * Get Inactive Branches
- * 1) Tries /inactive-branches if it exists.
- * 2) Falls back to /branches and filters client-side.
- */
+
 export const getInactiveBranches = async (params = {}) => {
   try {
     const res = await api.get("/inactive-branches", { params });

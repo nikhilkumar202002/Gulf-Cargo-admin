@@ -24,7 +24,7 @@ const VisaTypeList = () => {
     try {
       setLoading(true);
       const response = await axios.get(
-        "https://gulfcargoapi.bhutanvoyage.in/api/visa-types",
+        "https://gulfcargoapi.domaindude.in/public/api/visa-types",
         {
           headers: {
             Authorization: `Bearer ${token}`,

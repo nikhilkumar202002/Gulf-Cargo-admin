@@ -32,7 +32,7 @@ export const logout = async () => {
   try {
     await axiosInstance.post("/logout");
   } finally {
-    clearToken();                 // drop token client-side regardless
+    clearToken(); 
   }
 };
 
@@ -47,16 +47,21 @@ export const resetPassword = async (email, otp, password) => {
   return unwrap(res);
 };
 
-export const staffRegister = async (userData, _tokenArgIgnored, axiosOpts = {}) => {
-  const res = await axiosInstance.post("/register", userData, {
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    ...axiosOpts,
-  });
-  return unwrap(res);
+export const staffRegister = async (data, token, axiosOpts) => {
+  try {
+    const response = await axiosInstance.post("/register", data, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+      ...axiosOpts, 
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error registering staff:", error);
+    throw error; // Handle this in the component
+  }
 };
+
 
 
 export const listStaffs = async (params = {}) => {
