@@ -119,6 +119,9 @@ export const rolesMenu = {
       submenus: [
         { name: "All Roles", path: "/roles/allroles" },
         { name: "Create Role", path: "/roles/addroles" },
+        { name: "Shipment Methods", path: "/shipmentmethod/view" },
+        { name: "Ports", path: "/port/view" },
+        { name: "Shipment Status", path: "/shipmentstatus/view" },
       ]
     }
   ],

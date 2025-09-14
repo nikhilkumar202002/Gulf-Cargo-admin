@@ -1,45 +1,70 @@
-import React, { useState } from "react";
 
-function CreateCargo() {
-  // Dummy sender/receiver data (later replace with API)
-  const senders = [
-    { id: 1, name: "ABC Exports", address: "Delhi, India" },
-    { id: 2, name: "Global Traders", address: "Mumbai, India" },
-  ];
+import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../auth/AuthContext";
+import {
+  getActiveShipmentMethods,
+} from "../../api/shipmentMethodApi"; // active=1
+import {
+  getPorts, // we'll call with ?status=1 (Origin) and ?status=0 (Destination)
+} from "../../api/portApi";
+import {
+  getActiveShipmentStatuses,
+} from "../../api/shipmentStatusApi"; // active=1
+import {
+  getActiveBranches, // used for Clearing Agent select
+} from "../../api/branchApi";
 
-  const receivers = [
-    { id: 1, name: "XYZ Imports", address: "Dubai, UAE" },
-    { id: 2, name: "Skyline Retail", address: "London, UK" },
-  ];
+import { getParties, getPartiesByCustomerType } from "../../api/partiesApi";
 
-  // Dummy dropdown data (to be replaced with API later)
-  const shipmentTypes = ["IND Air", "IND Sea", "Export Air", "Export Sea"];
-  const portsOfOrigin = ["Delhi", "Mumbai", "Chennai", "Kolkata"];
-  const portsOfDestination = ["Dubai", "London", "Singapore", "New York"];
-  const clearingAgents = [
-    "ABC Clearing Co.",
-    "Global Freight Ltd.",
-    "FastClear Logistics",
-  ];
-  const shipmentStatuses = [
-    "Booked",
-    "Forwarded",
-    "In Transit",
-    "Received",
-    "Delivered",
-    "Cancelled",
-  ];
 
+function classNames(...cls) {
+  return cls.filter(Boolean).join(" ");
+}
+
+const Spinner = ({ className = "h-4 w-4 text-indigo-600" }) => (
+  <svg
+    className={classNames("animate-spin", className)}
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+  >
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+  </svg>
+);
+
+// Try to show a reasonable label regardless of backend shape
+const labelOf = (o, fall = "-") =>
+  o?.name ?? o?.title ?? o?.label ?? o?.branch_name ?? fall;
+
+export default function CreateCargo() {
+  const { token } = useAuth();
+
+  // Dropdown data (fetched)
+  const [methods, setMethods] = useState([]);              // shipment methods (active)
+  const [statuses, setStatuses] = useState([]);            // shipment statuses (active)
+  const [originPorts, setOriginPorts] = useState([]);      // ports?status=1
+  const [destPorts, setDestPorts] = useState([]);          // ports?status=0
+  const [branches, setBranches] = useState([]);            // active branches -> clearing agents
+
+  const [loadingOpts, setLoadingOpts] = useState(true);
+  const [msg, setMsg] = useState({ text: "", variant: "" });
+
+  // Sender/Receiver still placeholders (you didn’t share those APIs)
+const [senders, setSenders] = useState([]);
+const [receivers, setReceivers] = useState([]);
+
+  // Form state (store IDs from selects)
   const [formData, setFormData] = useState({
     shipmentId: "AUTO-123456",
     awbNumber: "",
-    shipmentType: "",
-    portOfOrigin: "",
-    portOfDestination: "",
-    clearingAgent: "",
+    shipmentMethodId: "",
+    shipmentStatusId: "",
+    originPortId: "",
+    destinationPortId: "",
+    clearingAgentId: "",
     senderId: "",
     receiverId: "",
-    status: "Booked", // default status
     createdOn: new Date().toISOString().split("T")[0],
     notes: "",
     remarks: "",
@@ -47,83 +72,95 @@ function CreateCargo() {
   });
 
   const [cargoItems, setCargoItems] = useState([
-    {
-      description: "",
-      hsnCode: "",
-      pcs: 1,
-      boxNumbers: "",
-      weight: 0,
-      invoiceValue: 0,
-      unitPrice: 0,
-    },
+    { description: "", hsnCode: "", pcs: 1, boxNumbers: "", weight: 0, invoiceValue: 0, unitPrice: 0 },
   ]);
-
   const [statusLog, setStatusLog] = useState([]);
 
-  const handleChange = (e) => {
-    const { name, value, files } = e.target;
+  // Fetch all active options
+  useEffect(() => {
+    (async () => {
+          let senderList = [];
+    let receiverList = [];
+      setLoadingOpts(true);
+      setMsg({ text: "", variant: "" });
+      try {
+        const [
+          methodList,
+          statusList,
+          originList,
+          destList,
+          branchList,
+        ] = await Promise.all([
+          getActiveShipmentMethods(token),              // /shipment-methods?status=1
+          getActiveShipmentStatuses(token),            // /shipment-status?status=1
+          getPorts({ status: 1 }, token),              // /ports?status=1  (Origin)
+          getPorts({ status: 0 }, token),              // /ports?status=0  (Destination)
+          getActiveBranches(),                         // branches (active only)
+        ]);
 
-    if (name === "uploadedDocuments") {
-      setFormData({ ...formData, uploadedDocuments: [...files] });
-    } else if (name === "status") {
-      // Add to status log when status changes
-      setStatusLog((prev) => [
-        ...prev,
-        {
-          status: value,
-          date: new Date().toLocaleString(),
-          updatedBy: "Admin User", // Replace with logged-in user later
-        },
-      ]);
-      setFormData({ ...formData, status: value });
-    } else {
-      setFormData({ ...formData, [name]: value });
-    }
-  };
+        setMethods(methodList ?? []);
+        setStatuses(statusList ?? []);
+        setOriginPorts(originList ?? []);
+        setDestPorts(destList ?? []);
+        setBranches(branchList ?? []);
+      }
+       catch (err) {
+        console.error("Failed to load dropdown data", err?.response || err);
+        setMsg({
+          text: err?.response?.data?.message || "Failed to load form options.",
+          variant: "error",
+        });
+      } finally {
+        setLoadingOpts(false);
+      }
+    })();
+  }, [token]);
 
-  const handleCargoChange = (index, field, value) => {
-    const updated = [...cargoItems];
-    updated[index][field] = value;
-    setCargoItems(updated);
-  };
-
-  const addCargoItem = () => {
-    setCargoItems([
-      ...cargoItems,
-      {
-        description: "",
-        hsnCode: "",
-        pcs: 1,
-        boxNumbers: "",
-        weight: 0,
-        invoiceValue: 0,
-        unitPrice: 0,
-      },
-    ]);
-  };
-
-  const removeCargoItem = (index) => {
-    setCargoItems(cargoItems.filter((_, i) => i !== index));
-  };
-
-  const calculateSubtotal = () => {
-    return cargoItems.reduce((sum, item) => sum + item.pcs * item.unitPrice, 0);
-  };
-
-  const calculateTotalWeight = () => {
-    return cargoItems.reduce((sum, item) => sum + Number(item.weight || 0), 0);
-  };
-
-  const calculateTotalBoxes = () => {
-    return cargoItems.reduce((sum, item) => sum + Number(item.pcs || 0), 0);
-  };
-
+  // ——— calculations
+  const calculateSubtotal = () =>
+    cargoItems.reduce((sum, item) => sum + Number(item.pcs || 0) * Number(item.unitPrice || 0), 0);
+  const calculateTotalWeight = () =>
+    cargoItems.reduce((sum, item) => sum + Number(item.weight || 0), 0);
+  const calculateTotalBoxes = () =>
+    cargoItems.reduce((sum, item) => sum + Number(item.pcs || 0), 0);
   const tax = calculateSubtotal() * 0.05;
   const total = calculateSubtotal() + tax;
 
+  // ——— handlers
+  const handleChange = (e) => {
+    const { name, value, files } = e.target;
+    if (name === "uploadedDocuments") {
+      setFormData((s) => ({ ...s, uploadedDocuments: [...files] }));
+      return;
+    }
+    if (name === "shipmentStatusId") {
+      setStatusLog((prev) => [
+        ...prev,
+        { status: value, date: new Date().toLocaleString(), updatedBy: "Admin User" },
+      ]);
+    }
+    setFormData((s) => ({ ...s, [name]: value }));
+  };
+
+  const handleCargoChange = (idx, field, value) => {
+    setCargoItems((prev) => {
+      const next = [...prev];
+      next[idx][field] = value;
+      return next;
+    });
+  };
+
+  const addCargoItem = () =>
+    setCargoItems((prev) => [
+      ...prev,
+      { description: "", hsnCode: "", pcs: 1, boxNumbers: "", weight: 0, invoiceValue: 0, unitPrice: 0 },
+    ]);
+
+  const removeCargoItem = (index) =>
+    setCargoItems((prev) => prev.filter((_, i) => i !== index));
+
   const handleExcelImport = () => {
     alert("Excel Import feature coming soon!");
-    // Later, implement Excel parsing & bulk cargo item addition
   };
 
   const handleSubmit = (e) => {
@@ -141,24 +178,34 @@ function CreateCargo() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
       <div className="w-full max-w-6xl bg-white rounded-2xl shadow-lg p-8">
-        <h2 className="text-2xl font-bold mb-6">Create Shipment</h2>
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Create Shipment</h2>
+          {loadingOpts && (
+            <div className="inline-flex items-center gap-2 text-sm text-gray-500">
+              <Spinner /> Loading options…
+            </div>
+          )}
+        </div>
+
+        {msg.text && (
+          <div
+            className={classNames(
+              "mb-4 rounded-xl border px-3 py-2 text-sm",
+              msg.variant === "error"
+                ? "border-rose-200 bg-rose-50 text-rose-800"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            )}
+          >
+            {msg.text}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Shipment Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Shipment ID */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Shipment ID</label>
-              <input
-                type="text"
-                value={formData.shipmentId}
-                readOnly
-                className="w-full border rounded-lg px-3 py-2 bg-gray-100 text-gray-500"
-              />
-            </div>
-
             {/* AWB Number */}
             <div>
-              <label className="block text-sm font-medium mb-1">AWB Number</label>
+              <label className="block text-sm font-medium mb-1 w-full">AWB Number</label>
               <input
                 type="text"
                 name="awbNumber"
@@ -169,90 +216,96 @@ function CreateCargo() {
               />
             </div>
 
-            {/* Shipment Type */}
+            {/* Shipment Method (active) */}
             <div>
-              <label className="block text-sm font-medium mb-1">Shipment Type</label>
+              <label className="block text-sm font-medium mb-1">Shipment Method</label>
               <select
-                name="shipmentType"
-                value={formData.shipmentType}
+                name="shipmentMethodId"
+                value={formData.shipmentMethodId}
                 onChange={handleChange}
                 className="w-full border rounded-lg px-3 py-2"
+                disabled={loadingOpts}
               >
-                <option value="">Select Shipment Type</option>
-                {shipmentTypes.map((type, idx) => (
-                  <option key={idx} value={type}>
-                    {type}
+                <option value="">Select Shipment Method</option>
+                {methods.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {labelOf(m)}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Shipment Status */}
+            {/* Shipment Status (active) */}
             <div>
               <label className="block text-sm font-medium mb-1">Shipment Status</label>
               <select
-                name="status"
-                value={formData.status}
+                name="shipmentStatusId"
+                value={formData.shipmentStatusId}
                 onChange={handleChange}
                 className="w-full border rounded-lg px-3 py-2"
+                disabled={loadingOpts}
               >
-                {shipmentStatuses.map((status, idx) => (
-                  <option key={idx} value={status}>
-                    {status}
+                <option value="">Select Status</option>
+                {statuses.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {labelOf(s)}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Port of Origin */}
+            {/* Port of Origin (status=1) */}
             <div>
               <label className="block text-sm font-medium mb-1">Port of Origin</label>
               <select
-                name="portOfOrigin"
-                value={formData.portOfOrigin}
+                name="originPortId"
+                value={formData.originPortId}
                 onChange={handleChange}
                 className="w-full border rounded-lg px-3 py-2"
+                disabled={loadingOpts}
               >
                 <option value="">Select Origin Port</option>
-                {portsOfOrigin.map((port, idx) => (
-                  <option key={idx} value={port}>
-                    {port}
+                {originPorts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code ? `${p.name} (${p.code})` : labelOf(p)}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Port of Destination */}
+            {/* Port of Destination (status=0) */}
             <div>
               <label className="block text-sm font-medium mb-1">Port of Destination</label>
               <select
-                name="portOfDestination"
-                value={formData.portOfDestination}
+                name="destinationPortId"
+                value={formData.destinationPortId}
                 onChange={handleChange}
                 className="w-full border rounded-lg px-3 py-2"
+                disabled={loadingOpts}
               >
                 <option value="">Select Destination Port</option>
-                {portsOfDestination.map((port, idx) => (
-                  <option key={idx} value={port}>
-                    {port}
+                {destPorts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code ? `${p.name} (${p.code})` : labelOf(p)}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Clearing Agent */}
+            {/* Clearing Agent (Active Branches) */}
             <div>
               <label className="block text-sm font-medium mb-1">Clearing Agent</label>
               <select
-                name="clearingAgent"
-                value={formData.clearingAgent}
+                name="clearingAgentId"
+                value={formData.clearingAgentId}
                 onChange={handleChange}
                 className="w-full border rounded-lg px-3 py-2"
+                disabled={loadingOpts}
               >
                 <option value="">Select Clearing Agent</option>
-                {clearingAgents.map((agent, idx) => (
-                  <option key={idx} value={agent}>
-                    {agent}
+                {branches.map((b) => (
+                  <option key={b.id ?? b.branch_id ?? labelOf(b)} value={b.id ?? b.branch_id}>
+                    {labelOf(b)}
                   </option>
                 ))}
               </select>
@@ -271,9 +324,8 @@ function CreateCargo() {
             </div>
           </div>
 
-          {/* Sender & Receiver */}
+          {/* Sender & Receiver (placeholder lists for now) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Sender */}
             <div>
               <label className="block text-sm font-medium mb-1">Sender</label>
               <select
@@ -291,7 +343,6 @@ function CreateCargo() {
               </select>
             </div>
 
-            {/* Receiver */}
             <div>
               <label className="block text-sm font-medium mb-1">Receiver</label>
               <select
@@ -325,71 +376,54 @@ function CreateCargo() {
             </div>
 
             {cargoItems.map((item, index) => (
-              <div
-                key={index}
-                className="grid grid-cols-1 md:grid-cols-8 gap-3 items-end mb-3 border p-3 rounded-lg bg-gray-50"
-              >
+              <div key={index} className="grid grid-cols-1 md:grid-cols-8 gap-3 items-end mb-3 border p-3 rounded-lg bg-gray-50">
                 <input
                   type="text"
                   placeholder="Description"
                   value={item.description}
-                  onChange={(e) =>
-                    handleCargoChange(index, "description", e.target.value)
-                  }
+                  onChange={(e) => handleCargoChange(index, "description", e.target.value)}
                   className="border rounded-lg px-3 py-2"
                 />
                 <input
                   type="text"
                   placeholder="HSN Code"
                   value={item.hsnCode}
-                  onChange={(e) =>
-                    handleCargoChange(index, "hsnCode", e.target.value)
-                  }
+                  onChange={(e) => handleCargoChange(index, "hsnCode", e.target.value)}
                   className="border rounded-lg px-3 py-2"
                 />
                 <input
                   type="number"
                   placeholder="Pcs"
                   value={item.pcs}
-                  onChange={(e) =>
-                    handleCargoChange(index, "pcs", parseInt(e.target.value))
-                  }
+                  onChange={(e) => handleCargoChange(index, "pcs", parseInt(e.target.value || 0, 10))}
                   className="border rounded-lg px-3 py-2"
                 />
                 <input
                   type="text"
                   placeholder="Box Numbers"
                   value={item.boxNumbers}
-                  onChange={(e) =>
-                    handleCargoChange(index, "boxNumbers", e.target.value)
-                  }
+                  onChange={(e) => handleCargoChange(index, "boxNumbers", e.target.value)}
                   className="border rounded-lg px-3 py-2"
                 />
                 <input
                   type="number"
                   placeholder="Weight"
                   value={item.weight}
-                  onChange={(e) =>
-                    handleCargoChange(index, "weight", parseFloat(e.target.value))
-                  }
+                  onChange={(e) => handleCargoChange(index, "weight", parseFloat(e.target.value || 0))}
                   className="border rounded-lg px-3 py-2"
                 />
                 <input
                   type="number"
                   placeholder="Unit Price"
                   value={item.unitPrice}
-                  onChange={(e) =>
-                    handleCargoChange(index, "unitPrice", parseFloat(e.target.value))
-                  }
+                  onChange={(e) => handleCargoChange(index, "unitPrice", parseFloat(e.target.value || 0))}
                   className="border rounded-lg px-3 py-2"
                 />
                 <input
                   type="number"
                   placeholder="Invoice Value"
                   value={item.invoiceValue}
-                  onChange={(e) =>
-                    handleCargoChange(index, "invoiceValue", parseFloat(e.target.value))
-                  }
+                  onChange={(e) => handleCargoChange(index, "invoiceValue", parseFloat(e.target.value || 0))}
                   className="border rounded-lg px-3 py-2"
                 />
                 <button
@@ -423,21 +457,16 @@ function CreateCargo() {
           {/* Totals */}
           <div className="bg-gray-100 p-4 rounded-lg space-y-2">
             <p className="text-sm">
-              Subtotal:{" "}
-              <span className="font-semibold">
-                ${calculateSubtotal().toFixed(2)}
-              </span>
+              Subtotal: <span className="font-semibold">${calculateSubtotal().toFixed(2)}</span>
             </p>
             <p className="text-sm">
               Tax (5%): <span className="font-semibold">${tax.toFixed(2)}</span>
             </p>
             <p className="text-sm">
-              <span className="font-semibold">Total Weight:</span>{" "}
-              {calculateTotalWeight()} Kg
+              <span className="font-semibold">Total Weight:</span> {calculateTotalWeight()} Kg
             </p>
             <p className="text-sm">
-              <span className="font-semibold">Total Box Count:</span>{" "}
-              {calculateTotalBoxes()}
+              <span className="font-semibold">Total Box Count:</span> {calculateTotalBoxes()}
             </p>
             <p className="text-lg font-bold">Total: ${total.toFixed(2)}</p>
           </div>
@@ -480,8 +509,7 @@ function CreateCargo() {
               <ul className="space-y-1 text-sm">
                 {statusLog.map((log, idx) => (
                   <li key={idx}>
-                    <span className="font-medium">{log.status}</span> —{" "}
-                    {log.date} by {log.updatedBy}
+                    <span className="font-medium">{log.status}</span> — {log.date} by {log.updatedBy}
                   </li>
                 ))}
               </ul>
@@ -490,10 +518,7 @@ function CreateCargo() {
 
           {/* Submit */}
           <div>
-            <button
-              type="submit"
-              className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700"
-            >
+            <button type="submit" className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700">
               Create Shipment & Generate Invoice
             </button>
           </div>
@@ -502,5 +527,3 @@ function CreateCargo() {
     </div>
   );
 }
-
-export default CreateCargo;

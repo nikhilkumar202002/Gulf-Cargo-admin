@@ -47,6 +47,13 @@ import DeliveryPerformance from "./pages/Shipment Reports/DeliveryPerformance";
 import RevenueExpenseReport from "./pages/Shipment Reports/RevenueExpenseReport";
 
 import SenderShow from "./pages/SenderReceiver/SenderShow";
+import Invoice from "./components/Invoice";
+
+import ShipmentMethodCreate from "./pages/Shipment Method/ShipmentMethodCreate";
+import ShipmentMethodView from "./pages/Shipment Method/ShipmentMethodView";
+import PortCreate from "./pages/Ports/portCreate";
+import PortView from "./pages/Ports/portView";
+import ShipmentStatusView from "./pages/Shipment Status/ShipmentStatusView";
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -124,7 +131,12 @@ function App() {
           <Route path="shipmentreport/branchanalysis" element={<PrivateRoute><BranchAnalysis /></PrivateRoute>} />
           <Route path="shipmentreport/deliveryperformance" element={<PrivateRoute><DeliveryPerformance /></PrivateRoute>} />
           <Route path="shipmentreport/revenueexpensereport" element={<PrivateRoute><RevenueExpenseReport /></PrivateRoute>} />
-
+          <Route path="invoice" element={<PrivateRoute><Invoice /></PrivateRoute>} />
+          <Route path="shipmentmethod/create" element={<PrivateRoute><ShipmentMethodCreate /></PrivateRoute>} />
+          <Route path="shipmentmethod/view" element={<PrivateRoute><ShipmentMethodView /></PrivateRoute>} />
+          <Route path="port/view" element={<PrivateRoute><PortView /></PrivateRoute>} />
+          <Route path="port/create" element={<PrivateRoute><PortCreate /></PrivateRoute>} />
+          <Route path="shipmentstatus/view" element={<PrivateRoute><ShipmentStatusView /></PrivateRoute>} />
 
           {/* Super Admin only examples */}
           <Route
