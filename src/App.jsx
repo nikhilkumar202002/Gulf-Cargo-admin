@@ -20,6 +20,8 @@ import AddDriver from "./pages/Drivers/AddDriver";
 import ViewAllDriver from "./pages/Drivers/ViewAllDriver";
 import CreateCargo from "./pages/CargoShipment/CreateCargo";
 import ShippingReport from "./pages/CargoShipment/ShipmentReport";
+import ShipmentList from "./pages/CargoShipment/ShipmentList";
+
 import UserProfile from "./pages/Profile/UserProfile";
 import EditBranch from "./pages/Branches/EditBranch";
 import AllRoles from "./pages/Roles/AllRoles";
@@ -164,6 +166,7 @@ function App() {
           <Route path="branch/viewbranch/:id" element={<PrivateRoute><ViewBranch /></PrivateRoute>} />
           <Route path="/senderreceiver/senderview/:id" element={<PrivateRoute><SenderShow /></PrivateRoute>} />
           <Route path="branches/edit/:id" element={<PrivateRoute><EditBranch /></PrivateRoute>} />
+          <Route path="shipments/shipmentsview/:id" element={<PrivateRoute><ShipmentList /></PrivateRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

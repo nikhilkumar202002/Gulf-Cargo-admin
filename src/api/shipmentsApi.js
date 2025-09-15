@@ -82,13 +82,67 @@ export async function trackShipment(trackingCode, axiosOpts = {}) {
   }
 }
 
-// PUT /shipment/{id}/status  (send { status_id } or { status } as your API expects)
-export async function updateShipmentStatus(shipmentId, payload = {}, axiosOpts = {}) {
-  if (!shipmentId) throw new Error("updateShipmentStatus: shipmentId is required");
+export async function listShipments({
+  page = 1,
+  perPage = 10,
+  query = "",
+  status = "all",
+  from = "",
+  to = "",
+  axiosOpts = {},
+} = {}) {
   try {
-    const res = await api.put(`/shipment/${shipmentId}/status`, payload, { ...axiosOpts });
+    const params = {};
+    if (page) params.page = page;
+    if (perPage) params.per_page = perPage;
+    if (query?.trim()) params.query = query.trim();
+    if (status && status !== "all") params.status = status;
+    if (from) params.from = from;       // yyyy-mm-dd
+    if (to) params.to = to;             // yyyy-mm-dd
+
+    const res = await api.get("/shipments", { params, ...axiosOpts });
+    const d = res?.data ?? res;
+
+    const list = Array.isArray(d?.shipments)
+      ? d.shipments
+      : Array.isArray(d)
+      ? d
+      : Array.isArray(d?.data)
+      ? d.data
+      : [];
+
+    const meta = d?.meta || null;
+
+    return { list, meta };
+  } catch (err) {
+    throw normalizeError(err, "listShipments");
+  }
+}
+
+export async function getShipment(id, axiosOpts = {}) {
+  if (!id) throw new Error("getShipment: id is required");
+  try {
+    const res = await api.get(`/shipments/${id}`, { ...axiosOpts });
+    const d = res?.data ?? res;
+    return d?.shipment || d?.data || d || null;
+  } catch (err) {
+    throw normalizeError(err, "getShipment");
+  }
+}
+
+/* --- update status: try POST; fall back to PUT if server says 405/404 --- */
+export async function updateShipmentStatus(shipmentId, status, axiosOpts = {}) {
+  if (!shipmentId) throw new Error("updateShipmentStatus: shipmentId is required");
+  if (!status) throw new Error("updateShipmentStatus: status is required");
+  try {
+    const res = await api.post(`/shipment/${shipmentId}/status`, { status }, { ...axiosOpts });
     return res?.data ?? res;
   } catch (err) {
+    const code = err?.response?.status;
+    if (code === 405 || code === 404) {
+      const res2 = await api.put(`/shipment/${shipmentId}/status`, { status }, { ...axiosOpts });
+      return res2?.data ?? res2;
+    }
     throw normalizeError(err, "updateShipmentStatus");
   }
 }
