@@ -15,39 +15,39 @@ const Spinner = ({ className = "h-4 w-4 text-indigo-600" }) => (
   </svg>
 );
 
-const PortTypeChip = ({ origin }) => (
+const StatusChip = ({ active }) => (
   <span
     className={classNames(
       "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
-      origin ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
-             : "bg-blue-50 text-blue-700 ring-blue-600/20"
+      active ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+             : "bg-gray-100 text-gray-700 ring-gray-500/20"
     )}
   >
-    <span className={classNames("mr-1 h-1.5 w-1.5 rounded-full", origin ? "bg-emerald-500" : "bg-blue-500")} />
-    {origin ? "Origin" : "Destination"}
+    <span className={classNames("mr-1 h-1.5 w-1.5 rounded-full", active ? "bg-emerald-500" : "bg-gray-400")} />
+    {active ? "Active" : "Inactive"}
   </span>
 );
 
 // --- helpers ---------------------------------------------------------------
-// Normalize many shapes into 1 (Origin) / 0 (Destination) / null (unknown)
-const normalizeStatus = (val) => {
+// Normalize many shapes into Active(1)/Inactive(0)/null(unknown)
+const normalizeActive = (val) => {
   if (val === true) return 1;
   if (val === false) return 0;
   const s = String(val ?? "").trim().toLowerCase();
-  if (s === "1" || s === "origin") return 1;
-  if (s === "0" || s === "destination") return 0;
+  if (["1", "active", "true", "enabled"].includes(s)) return 1;
+  if (["0", "inactive", "false", "disabled"].includes(s)) return 0;
   const n = Number(s);
   if (!Number.isNaN(n)) return n ? 1 : 0;
   return null;
 };
 
 // Look across common field names from the API row
-const resolveRowOrigin = (row) => {
-  const candidates = [row?.status, row?.type, row?.port_type, row?.is_origin, row?.isOrigin];
+const resolveRowActive = (row) => {
+  const candidates = [row?.status, row?.is_active, row?.active, row?.isActive, row?.enabled];
   for (const v of candidates) {
-    const n = normalizeStatus(v);
-    if (n === 1) return true;   // origin
-    if (n === 0) return false;  // destination
+    const n = normalizeActive(v);
+    if (n === 1) return true;   // active
+    if (n === 0) return false;  // inactive
   }
   return null; // unknown
 };
@@ -59,7 +59,7 @@ export default function PortView() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState({ text: "", variant: "" });
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "1" (Origin) | "0" (Destination)
+  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "1" (Active) | "0" (Inactive)
 
   const [toast, setToast] = useState(null);
   const location = useLocation();
@@ -70,7 +70,7 @@ export default function PortView() {
     setMsg({ text: "", variant: "" });
     try {
       const params = {};
-      if (statusFilter === "0" || statusFilter === "1") params.status = Number(statusFilter);
+      if (statusFilter === "0" || statusFilter === "1") params.status = Number(statusFilter); // Active/Inactive
       const list = await getPorts(params, token);
       setRows(Array.isArray(list) ? list : []);
     } catch (err) {
@@ -103,10 +103,10 @@ export default function PortView() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
+    // Kept code in the search string in case you still want to search by code,
+    // but it's not shown in the table anymore.
     return rows.filter((r) => `${r?.name ?? ""} ${r?.code ?? ""}`.toLowerCase().includes(q));
   }, [rows, query]);
-
-  const skeletonRows = Array.from({ length: 6 });
 
   return (
     <section className="mx-auto max-w-6xl p-4">
@@ -145,12 +145,12 @@ export default function PortView() {
           <div className="flex flex-1 flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
             {/* Search */}
             <label className="relative w-full sm:max-w-xs">
-              <span className="sr-only">Search by name or code</span>
+              <span className="sr-only">Search by name</span>
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by name or code…"
+                placeholder="Search by name…"
                 className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
               />
               <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
@@ -158,18 +158,18 @@ export default function PortView() {
               </svg>
             </label>
 
-            {/* Type filter */}
+            {/* Status filter */}
             <label className="relative">
-              <span className="sr-only">Filter by type</span>
+              <span className="sr-only">Filter by status</span>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="min-w-[11rem] appearance-none rounded-xl border border-gray-300 bg-white px-3 py-2 pr-8 text-sm text-gray-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
-                title="Filter by port type"
+                title="Filter by status"
               >
-                <option value="all">All Types</option>
-                <option value="1">Origin</option>        {/* 1 = Origin */}
-                <option value="0">Destination</option>   {/* 0 = Destination */}
+                <option value="all">All Status</option>
+                <option value="1">Active</option>      {/* 1 = Active */}
+                <option value="0">Inactive</option>    {/* 0 = Inactive */}
               </select>
               <svg className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.25 8.29a.75.75 0 01-.02-1.08z" clipRule="evenodd" />
@@ -234,8 +234,7 @@ export default function PortView() {
               <tr className="border-b border-gray-200">
                 <th className="w-16 px-4 py-3 font-semibold">#</th>
                 <th className="px-4 py-3 font-semibold">Name</th>
-                <th className="w-40 px-4 py-3 font-semibold">Code</th>
-                <th className="w-40 px-4 py-3 font-semibold">Type</th>
+                <th className="w-40 px-4 py-3 font-semibold">Status</th>
                 <th className="w-44 px-4 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
@@ -245,32 +244,30 @@ export default function PortView() {
                     <tr key={`sk-${i}`} className="animate-pulse">
                       <td className="px-4 py-4"><div className="h-4 w-6 rounded bg-gray-200" /></td>
                       <td className="px-4 py-4"><div className="h-4 w-56 rounded bg-gray-200" /></td>
-                      <td className="px-4 py-4"><div className="h-4 w-24 rounded bg-gray-200" /></td>
                       <td className="px-4 py-4"><div className="h-5 w-28 rounded-full bg-gray-200" /></td>
                       <td className="px-4 py-4"><div className="h-8 w-24 rounded bg-gray-200" /></td>
                     </tr>
                   ))
                 : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-gray-500">No ports found.</td>
+                    <td colSpan={4} className="px-4 py-10 text-center text-gray-500">No ports found.</td>
                   </tr>
                 ) : (
                   filtered.map((r, idx) => {
-                    // If a filter is active, we *know* the type from the filter.
-                    // Otherwise, resolve from the row (handles 1/0 or "origin"/"destination" or other fields).
-                    const resolved = statusFilter === "all" ? resolveRowOrigin(r) : Number(statusFilter) === 1;
+                    // If a filter is active, we *know* the status from the filter.
+                    // Otherwise, resolve from the row (handles 1/0 or true/false or strings).
+                    const resolved = statusFilter === "all" ? resolveRowActive(r) : Number(statusFilter) === 1;
                     return (
                       <tr key={r?.id ?? idx} className="odd:bg-white even:bg-gray-50 hover:bg-indigo-50/40 transition-colors">
                         <td className="px-4 py-4 text-gray-700">{idx + 1}</td>
                         <td className="px-4 py-4 text-gray-900">{r?.name ?? "-"}</td>
-                        <td className="px-4 py-4 text-gray-700">{r?.code ?? "-"}</td>
                         <td className="px-4 py-4">
                           {resolved === null ? (
                             <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-300/60">
                               Unknown
                             </span>
                           ) : (
-                            <PortTypeChip origin={resolved} />
+                            <StatusChip active={resolved} />
                           )}
                         </td>
                         <td className="px-4 py-4">

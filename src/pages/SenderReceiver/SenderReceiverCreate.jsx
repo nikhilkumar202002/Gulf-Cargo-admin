@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { FaUserTie } from "react-icons/fa";
 import { getCustomerTypes } from "../../api/customerTypeApi";
@@ -104,6 +103,62 @@ const resolveLabel = (id, list, getLabelFn) => {
   return item ? getLabelFn(item) : String(id);
 };
 
+/* ---------------------- Upload Controls (413 prevention) ---------------------- */
+// limits (tune as needed)
+const MAX_FILE_MB = 8; // per file
+const MAX_TOTAL_MB = 24; // all files combined
+const MAX_DIMENSION = 2000; // px, longest side after resize
+const WEBP_QUALITY = 0.82; // 0..1
+
+const bytesToMB = (b) => b / (1024 * 1024);
+
+// Load an image File → HTMLImageElement
+const loadImageFromFile = (file) =>
+  new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = (e) => {
+      URL.revokeObjectURL(url);
+      reject(e);
+    };
+    img.src = url;
+  });
+
+async function compressIfImage(file) {
+  if (!file.type.startsWith("image/")) return file; // only compress images
+  try {
+    const img = await loadImageFromFile(file);
+    let { width, height } = img;
+
+    const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height));
+    if (scale < 1) {
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/webp", WEBP_QUALITY));
+    if (!blob) return file;
+
+    if (blob.size >= file.size) return file; // keep original if not smaller
+
+    return new File([blob], file.name.replace(/\.\w+$/, "") + ".webp", {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  } catch {
+    return file; // fail-open
+  }
+}
 
 /* ---------------------- Main Component ---------------------- */
 
@@ -160,6 +215,7 @@ const SenderCreate = () => {
   /* submit state */
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [submitNotice, setSubmitNotice] = useState(""); // soft warnings (trimmed, oversized, etc.)
   const [fieldErrors, setFieldErrors] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdData, setCreatedData] = useState(null);
@@ -170,20 +226,62 @@ const SenderCreate = () => {
     setFormData(makeInitialForm());
     setFieldErrors({});
     setSubmitError("");
+    setSubmitNotice("");
     setCreatedData(null);
     setDisplayDetails(null);
     setFileKey((k) => k + 1);
   };
 
   /* handle input */
-  const handleChange = (e) => {
+  const handleChange = async (e) => {
     const { name, value, files } = e.target;
-    setFormData((prev) => {
-      if (name === "country") return { ...prev, country: value, state: "", district: "" };
-      if (name === "state") return { ...prev, state: value, district: "" };
-      if (name === "documents") return { ...prev, documents: Array.from(files || []) };
-      return { ...prev, [name]: value };
-    });
+
+    // document uploads: compress → filter per-file → cap total
+    if (name === "documents") {
+      setSubmitNotice("");
+      const picked = Array.from(files || []);
+
+      // compress images (non-images pass through)
+      const processed = await Promise.all(picked.map(compressIfImage));
+
+      // filter by per-file size
+      const overs = processed.filter((f) => bytesToMB(f.size) > MAX_FILE_MB);
+      if (overs.length) {
+        setSubmitNotice(
+          `Some files exceed ${MAX_FILE_MB}MB: ${overs.map((f) => f.name).join(", ")}`
+        );
+      }
+      const kept = processed.filter((f) => bytesToMB(f.size) <= MAX_FILE_MB);
+
+      // cap total size
+      const totalMB = kept.reduce((s, f) => s + bytesToMB(f.size), 0);
+      if (totalMB > MAX_TOTAL_MB) {
+        let running = 0;
+        const trimmed = [];
+        for (const f of kept) {
+          const next = running + bytesToMB(f.size);
+          if (next > MAX_TOTAL_MB) break;
+          running = next;
+          trimmed.push(f);
+        }
+        setFormData((prev) => ({ ...prev, documents: trimmed }));
+        setSubmitNotice(
+          `Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length} file(s).`
+        );
+        return;
+      }
+
+      setFormData((prev) => ({ ...prev, documents: kept }));
+      return;
+    }
+
+    // cascading selects
+    if (name === "country")
+      return setFormData((prev) => ({ ...prev, country: value, state: "", district: "" }));
+    if (name === "state")
+      return setFormData((prev) => ({ ...prev, state: value, district: "" }));
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   /* load customer types + doc types + branches (once) */
@@ -198,7 +296,6 @@ const SenderCreate = () => {
         setDocsError("");
         setBranchError("");
 
-        // IMPORTANT: order of Promise.all must match destructuring below
         const [branchesRes, docsRes, custTypesRes] = await Promise.all([
           getAllBranches({ per_page: 500 }),
           getDocumentTypes({ per_page: 1000 }),
@@ -386,9 +483,16 @@ const SenderCreate = () => {
       setCreatedData(created ?? null);
       setDisplayDetails(details);
       setShowSuccess(true);
-      // resetForm();
+      // resetForm(); // keep filled until modal close
     } catch (err) {
       console.error(err);
+      const status = err?.response?.status;
+      if (status === 413) {
+        setSubmitError(
+          `Your attachments are too large for the server limit (413). Trim files or upload fewer/smaller files.`
+        );
+        return;
+      }
       const apiMsg = err?.response?.data?.message || "Failed to submit form.";
       const apiErrors = err?.response?.data?.errors;
       setSubmitError(apiMsg);
@@ -586,13 +690,14 @@ const SenderCreate = () => {
                 type="file"
                 name="documents"
                 multiple
+                accept="image/*,application/pdf"
                 onChange={handleChange}
                 className="w-full border rounded-lg px-1 py-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-red-500 file:text-white hover:file:bg-red-600 cursor-pointer"
               />
+              {submitNotice && <p className="text-xs text-amber-700 mt-1">{submitNotice}</p>}
               {formData.documents?.length > 0 && (
                 <p className="text-xs text-gray-600 mt-1">
-                  {formData.documents.length} file(s):{" "}
-                  {formData.documents.map((f) => f.name).join(", ")}
+                  {formData.documents.length} file(s): {formData.documents.map((f) => f.name).join(", ")}
                 </p>
               )}
               {fieldErrors["documents.0"] && (
@@ -738,13 +843,13 @@ const SenderCreate = () => {
       </div>
 
       <ErrorBoundary onClose={handleCloseSuccess}>
-<CreateReceiverSenderModal
-  open={showSuccess}
-  onClose={handleCloseSuccess}
-  data={createdData}          // <-- pass whole response; component normalizes internally
-  details={displayDetails}
-/>
-</ErrorBoundary>
+        <CreateReceiverSenderModal
+          open={showSuccess}
+          onClose={handleCloseSuccess}
+          data={createdData}          // <-- pass whole response; component normalizes internally
+          details={displayDetails}
+        />
+      </ErrorBoundary>
     </div>
   );
 };

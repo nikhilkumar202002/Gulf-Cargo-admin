@@ -9,7 +9,7 @@ export default function PortCreate() {
 
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [status, setStatus] = useState("1"); // ✅ 1 = Origin, 0 = Destination
+  const [status, setStatus] = useState("1"); // ✅ 1 = Active, 0 = Inactive
 
   const [submitting, setSubmitting] = useState(false);
   const [touchedName, setTouchedName] = useState(false);
@@ -38,18 +38,21 @@ export default function PortCreate() {
     const payload = {
       name: trimmedName,
       ...(trimmedCode ? { code: trimmedCode } : {}),
-      status: status === "" ? 1 : Number(status), // backend wants 0|1
+      status: status === "" ? 1 : Number(status), // backend expects 0|1
     };
 
     try {
       setSubmitting(true);
       await createPort(payload, token);
+
+      const statusLabel = status === "1" ? "Active" : "Inactive";
+
       navigate("/port/view", {
         state: {
           toast: {
             type: "success",
             title: "Port created",
-            message: `“${trimmedName}” (${status === "1" ? "Origin" : "Destination"}) was added successfully.`,
+            message: `“${trimmedName}” (${statusLabel}) was added successfully.`,
           },
         },
       });
@@ -77,8 +80,8 @@ export default function PortCreate() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 mb-4">
         <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Create Port</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Add a new port and mark it as <span className="font-medium">Origin</span> or{" "}
-          <span className="font-medium">Destination</span>.
+          Add a new port and set its <span className="font-medium">Status</span> to{" "}
+          <span className="font-medium">Active</span> or <span className="font-medium">Inactive</span>.
         </p>
       </div>
 
@@ -103,29 +106,20 @@ export default function PortCreate() {
                 aria-describedby={nameError ? "port-name-error" : undefined}
                 required
               />
-              {nameError && <p id="port-name-error" className="mt-1 text-xs text-red-600">Name is required.</p>}
+              {nameError && (
+                <p id="port-name-error" className="mt-1 text-xs text-red-600">
+                  Name is required.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label htmlFor="port-code" className="block text-sm font-medium text-gray-900">
-                  Port Code (optional)
-                </label>
-                <input
-                  id="port-code"
-                  type="text"
-                  className="mt-2 block w-full rounded-xl border border-gray-300 px-3.5 py-2.5 shadow-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="e.g., COK"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  maxLength={6}
-                />
-              </div>
+
 
               <div>
-                <span className="block text-sm font-medium text-gray-900">Port Type</span>
+                <span className="block text-sm font-medium text-gray-900">Status</span>
                 <div className="mt-3 flex items-center gap-3">
-                  {/* Origin = 1 */}
+                  {/* Active = 1 */}
                   <button
                     type="button"
                     onClick={() => setStatus("1")}
@@ -133,20 +127,28 @@ export default function PortCreate() {
                       ${status === "1" ? "bg-green-50 text-green-700 ring-green-200" : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50"}`}
                     aria-pressed={status === "1"}
                   >
-                    <span className={`h-2.5 w-2.5 rounded-full ${status === "1" ? "bg-green-500" : "bg-gray-300"}`} />
-                    Origin
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        status === "1" ? "bg-green-500" : "bg-gray-300"
+                      }`}
+                    />
+                    Active
                   </button>
 
-                  {/* Destination = 0 */}
+                  {/* Inactive = 0 */}
                   <button
                     type="button"
                     onClick={() => setStatus("0")}
                     className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium ring-1
-                      ${status === "0" ? "bg-blue-50 text-blue-700 ring-blue-200" : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50"}`}
+                      ${status === "0" ? "bg-red-50 text-red-700 ring-red-200" : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50"}`}
                     aria-pressed={status === "0"}
                   >
-                    <span className={`h-2.5 w-2.5 rounded-full ${status === "0" ? "bg-blue-500" : "bg-gray-300"}`} />
-                    Destination
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        status === "0" ? "bg-red-500" : "bg-gray-300"
+                      }`}
+                    />
+                    Inactive
                   </button>
                 </div>
               </div>
