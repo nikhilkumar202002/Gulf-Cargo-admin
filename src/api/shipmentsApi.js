@@ -70,3 +70,25 @@ export function assertMaxFileSize(file, max = FILE_SIZE_2MB) {
     throw new Error(`File "${file.name}" exceeds ${mb}MB limit`);
   }
 }
+
+// GET /shipment/track/{trackingCode}
+export async function trackShipment(trackingCode, axiosOpts = {}) {
+  if (!trackingCode) throw new Error("trackShipment: trackingCode is required");
+  try {
+    const res = await api.get(`/shipment/track/${encodeURIComponent(trackingCode)}`, { ...axiosOpts });
+    return res?.data ?? res;
+  } catch (err) {
+    throw normalizeError(err, "trackShipment");
+  }
+}
+
+// PUT /shipment/{id}/status  (send { status_id } or { status } as your API expects)
+export async function updateShipmentStatus(shipmentId, payload = {}, axiosOpts = {}) {
+  if (!shipmentId) throw new Error("updateShipmentStatus: shipmentId is required");
+  try {
+    const res = await api.put(`/shipment/${shipmentId}/status`, payload, { ...axiosOpts });
+    return res?.data ?? res;
+  } catch (err) {
+    throw normalizeError(err, "updateShipmentStatus");
+  }
+}
