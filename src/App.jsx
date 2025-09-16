@@ -49,7 +49,7 @@ import DeliveryPerformance from "./pages/Shipment Reports/DeliveryPerformance";
 import RevenueExpenseReport from "./pages/Shipment Reports/RevenueExpenseReport";
 
 import SenderShow from "./pages/SenderReceiver/SenderShow";
-import Invoice from "./components/Invoice";
+import InvoiceView from "./components/InvoiceView";
 
 import ShipmentMethodCreate from "./pages/Shipment Method/ShipmentMethodCreate";
 import ShipmentMethodView from "./pages/Shipment Method/ShipmentMethodView";
@@ -133,7 +133,7 @@ function App() {
           <Route path="shipmentreport/branchanalysis" element={<PrivateRoute><BranchAnalysis /></PrivateRoute>} />
           <Route path="shipmentreport/deliveryperformance" element={<PrivateRoute><DeliveryPerformance /></PrivateRoute>} />
           <Route path="shipmentreport/revenueexpensereport" element={<PrivateRoute><RevenueExpenseReport /></PrivateRoute>} />
-          <Route path="invoice" element={<PrivateRoute><Invoice /></PrivateRoute>} />
+
           <Route path="shipmentmethod/create" element={<PrivateRoute><ShipmentMethodCreate /></PrivateRoute>} />
           <Route path="shipmentmethod/view" element={<PrivateRoute><ShipmentMethodView /></PrivateRoute>} />
           <Route path="port/view" element={<PrivateRoute><PortView /></PrivateRoute>} />
@@ -167,6 +167,8 @@ function App() {
           <Route path="/senderreceiver/senderview/:id" element={<PrivateRoute><SenderShow /></PrivateRoute>} />
           <Route path="branches/edit/:id" element={<PrivateRoute><EditBranch /></PrivateRoute>} />
           <Route path="shipments/shipmentsview/:id" element={<PrivateRoute><ShipmentList /></PrivateRoute>} />
+
+          <Route path="shipments/shipmentsview/:id/invoice" element={<PrivateRoute><InvoiceView /></PrivateRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

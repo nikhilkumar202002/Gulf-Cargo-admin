@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Link } from "react-router-dom";
-import { listShipments } from "../../api/shipmentsApi";
+import { listShipments, updateShipmentStatus } from "../../api/shipmentsApi";
+import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi"; // optional; falls back if missing
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
@@ -44,50 +45,85 @@ export default function ShipmentReport() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // filters (sent to server; backend may ignore some — harmless)
+  // filters
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [from, setFrom] = useState(""); // yyyy-mm-dd
   const [to, setTo] = useState("");     // yyyy-mm-dd
 
-  // pagination (server-side)
+  // pagination
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
-  const load = async () => {
-    setLoading(true);
-    setErr("");
-    try {
-      const { list, meta } = await listShipments({ page, perPage, query, status, from, to });
-      setRows(Array.isArray(list) ? list : []);
-      setMeta(
-        meta || {
-          current_page: page,
-          per_page: perPage,
-          last_page: 1,
-          total: Array.isArray(list) ? list.length : 0,
-        }
-      );
-    } catch (e) {
-      setErr(e?.message || "Failed to load shipments");
-      setRows([]);
-      setMeta({ current_page: 1, per_page: perPage, last_page: 1, total: 0 });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // bulk update UI state
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [updating, setUpdating] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
 
-  // initial + when page/perPage change (server pagination)
+  // status options (from API if available, else fallback)
+  const [statusOptions, setStatusOptions] = useState([
+    "Shipment booked",
+    "Shipment received",
+    "Waiting for clearance",
+    "In transit",
+    "Cleared",
+    "Delivered",
+    "On hold",
+    "Cancelled",
+  ]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const apiList = await getActiveShipmentStatuses(); // expects objects with .name
+        const names = Array.isArray(apiList) ? apiList.map((s) => s?.name).filter(Boolean) : [];
+        if (names.length) setStatusOptions(names);
+      } catch (_) {
+        // ignore — fallback list already set
+      }
+    })();
+  }, []);
+
+// replace your load() with this
+const load = async (overrides = {}) => {
+  setLoading(true);
+  setErr("");
+  try {
+    const args = {
+      page, perPage, query, status, from, to,   // current state
+      ...overrides                              // explicit overrides win
+    };
+    const { list, meta } = await listShipments(args);
+    setRows(Array.isArray(list) ? list : []);
+    setMeta(
+      meta || {
+        current_page: args.page,
+        per_page: args.perPage,
+        last_page: 1,
+        total: Array.isArray(list) ? list.length : 0,
+      }
+    );
+  } catch (e) {
+    setErr(e?.message || "Failed to load shipments");
+    setRows([]);
+    setMeta({ current_page: 1, per_page: perPage, last_page: 1, total: 0 });
+  } finally {
+    setLoading(false);
+  }
+};
+
+// and change onApply to *force* page=1 on the request it fires
+const onApply = async (e) => {
+  e?.preventDefault?.();
+  setPage(1);
+  await load({ page: 1 });  // guarantees the request uses page 1
+};
+
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, perPage]);
-
-  const onApply = (e) => {
-    e?.preventDefault?.();
-    setPage(1);
-    load();
-  };
 
   const onReset = () => {
     setQuery("");
@@ -126,16 +162,75 @@ export default function ShipmentReport() {
     []
   );
 
-  // footer counts using server meta
   const showingFrom = rows.length ? (meta.current_page - 1) * meta.per_page + 1 : 0;
   const showingTo = rows.length ? showingFrom + rows.length - 1 : 0;
+
+  // ---- BULK UPDATE: fetch all filtered IDs, then update each ----
+  const fetchAllFilteredIds = async () => {
+    const ids = [];
+    let p = 1;
+    const size = 100; // bigger page to cut trips
+    for (;;) {
+      const { list, meta: m } = await listShipments({
+        page: p,
+        perPage: size,
+        query,
+        status,
+        from,
+        to,
+      });
+      const batch = (list || []).map((r) => r.id).filter(Boolean);
+      ids.push(...batch);
+      const last = (m && m.last_page) || (batch.length < size); // fallback stop
+      if (last === true || (m && p >= m.last_page)) break;
+      p += 1;
+      if (p > 2000) break; // safety
+    }
+    return ids;
+  };
+
+  const onBulkUpdate = async () => {
+    if (!bulkStatus) {
+      alert("Choose a status to update.");
+      return;
+    }
+    setUpdating(true);
+    setProgress({ done: 0, total: 0, errors: [] });
+
+    try {
+      const ids = await fetchAllFilteredIds(); // across all pages
+      if (!ids.length) {
+        setUpdating(false);
+        return;
+      }
+      setProgress({ done: 0, total: ids.length, errors: [] });
+
+      // sequential updates (simple & safe)
+      let done = 0;
+      const errors = [];
+      for (const id of ids) {
+        try {
+          await updateShipmentStatus(id, bulkStatus);
+        } catch (e) {
+          errors.push({ id, message: e?.message || "Failed" });
+        }
+        done += 1;
+        setProgress({ done, total: ids.length, errors });
+      }
+
+      // reload current page data
+      await load();
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b bg-white">
         <div className="mx-auto w-full px-4 py-6 sm:px-6 lg:px-8">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Shipment Report</h1>
-          <p className="mt-1 text-sm text-slate-600">View, filter, and navigate shipments.</p>
+          <p className="mt-1 text-sm text-slate-600">View, filter, and update status for filtered shipments.</p>
         </div>
       </header>
 
@@ -143,7 +238,7 @@ export default function ShipmentReport() {
         {/* Filters */}
         <form
           onSubmit={onApply}
-          className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-6"
+          className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-6"
         >
           <div className="lg:col-span-2">
             <label className="mb-1 block text-xs font-medium text-slate-600">Search</label>
@@ -163,14 +258,9 @@ export default function ShipmentReport() {
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="all">All</option>
-              <option value="Shipment booked">Shipment booked</option>
-              <option value="Shipment received">Shipment received</option>
-              <option value="Waiting for clearance">Waiting for clearance</option>
-              <option value="In transit">In transit</option>
-              <option value="Cleared">Cleared</option>
-              <option value="Delivered">Delivered</option>
-              <option value="On hold">On hold</option>
-              <option value="Cancelled">Cancelled</option>
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </select>
           </div>
 
@@ -204,7 +294,7 @@ export default function ShipmentReport() {
               }}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              {[10, 20, 50].map((n) => (
+              {[10, 20, 50, 100].map((n) => (
                 <option key={n} value={n}>
                   {n} / page
                 </option>
@@ -228,6 +318,42 @@ export default function ShipmentReport() {
             </button>
           </div>
         </form>
+
+        {/* Bulk update toolbar */}
+        <div className="mb-6 flex flex-col items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-slate-700">Bulk update status for filtered results</label>
+            <select
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Select status…</option>
+              {statusOptions.map((s) => (
+                <option key={`bulk-${s}`} value={s}>{s}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={updating || !bulkStatus}
+              onClick={onBulkUpdate}
+              className={cx(
+                "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm",
+                updating || !bulkStatus ? "bg-indigo-300" : "bg-indigo-600 hover:bg-indigo-700"
+              )}
+              title={meta?.total ? `Will update ~${meta.total} shipments` : undefined}
+            >
+              {updating ? <Spinner className="h-4 w-4 text-white" /> : null}
+              {updating ? `Updating ${progress.done}/${progress.total}…` : `Update ${meta?.total ?? 0} shipments`}
+            </button>
+          </div>
+
+          {progress.errors.length > 0 && (
+            <div className="max-w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {progress.errors.length} failed. First error: {progress.errors[0].id} – {progress.errors[0].message}
+            </div>
+          )}
+        </div>
 
         {/* Table */}
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -298,7 +424,8 @@ export default function ShipmentReport() {
                         <td className="px-4 py-3 text-sm">
                           <Badge text={r.status ?? "—"} color={statusColor(r.status)} />
                         </td>
-                        <td className="px-4 py-3 text-sm">
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex items-center gap-2">
                           <Link
                             to={`/shipments/shipmentsview/${r.id}`}
                             state={{ shipment: r }}
@@ -309,7 +436,18 @@ export default function ShipmentReport() {
                               <path d="M9 18l6-6-6-6" />
                             </svg>
                           </Link>
-                        </td>
+
+                          <Link
+                            to={`/shipments/shipmentsview/${r.id}/invoice`}
+                            state={{ shipment: r }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-3 py-1.5 font-medium text-indigo-700 hover:bg-indigo-50"
+                          >
+                            Invoice
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                          </Link>
+                        </div>
+                      </td>
+
                       </tr>
                     );
                   })}
@@ -317,7 +455,7 @@ export default function ShipmentReport() {
             </table>
           </div>
 
-          {/* Footer / Pagination (server-side) */}
+          {/* Footer / Pagination */}
           <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 p-3 sm:flex-row">
             <div className="text-sm text-slate-600">
               Showing <span className="font-medium">{rows.length ? showingFrom : 0}</span> to{" "}

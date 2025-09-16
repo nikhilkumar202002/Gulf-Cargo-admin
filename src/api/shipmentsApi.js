@@ -93,12 +93,30 @@ export async function listShipments({
 } = {}) {
   try {
     const params = {};
+
     if (page) params.page = page;
-    if (perPage) params.per_page = perPage;
-    if (query?.trim()) params.query = query.trim();
-    if (status && status !== "all") params.status = status;
-    if (from) params.from = from;       // yyyy-mm-dd
-    if (to) params.to = to;             // yyyy-mm-dd
+    if (perPage) { params.per_page = perPage; params.perPage = perPage; }
+
+    const q = (query || "").trim();
+    if (q) { params.query = q; params.search = q; params.q = q; }
+
+    if (status && status !== "all") {
+      params.status = status;
+      params.status_name = status;
+    }
+
+    if (from) {
+      params.from = from;
+      params.from_date = from;
+      params.start_date = from;
+      params.date_from = from;
+    }
+    if (to) {
+      params.to = to;
+      params.to_date = to;
+      params.end_date = to;
+      params.date_to = to;
+    }
 
     const res = await api.get("/shipments", { params, ...axiosOpts });
     const d = res?.data ?? res;
@@ -112,12 +130,12 @@ export async function listShipments({
       : [];
 
     const meta = d?.meta || null;
-
     return { list, meta };
   } catch (err) {
     throw normalizeError(err, "listShipments");
   }
 }
+
 
 export async function getShipment(id, axiosOpts = {}) {
   if (!id) throw new Error("getShipment: id is required");

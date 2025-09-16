@@ -2,14 +2,14 @@ import React, { useMemo, useState, useEffect } from "react";
 import {
   FaUsers, FaClock, FaInbox, FaTruck, FaUserCheck, FaUserTimes, FaUserMinus,
   FaBoxOpen, FaRegClock, FaPeopleCarry, FaExchangeAlt, FaCircle,
-  FaChevronRight, FaChevronLeft, FaFilter, FaSearch, FaSyncAlt,
+  FaChevronRight, FaChevronLeft,
   FaDollarSign, FaShieldAlt, FaExclamationTriangle, FaMoneyBillWave, FaMapMarkerAlt, FaChartBar
 } from "react-icons/fa";
 import "../Styles.css";
 
 /* ---------- helpers ---------- */
 const fmtCurrency = (n, currency = "USD") =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency }).format(n);
+  new Intl.NumberFormat("en-US", { style: "currency", currency }).format(n ?? 0);
 
 const StatusPill = ({ status }) => {
   const map = {
@@ -43,10 +43,10 @@ const Card = ({ icon, title, value, sub }) => (
 
 const PagedBars = ({
   title,
-  items,                     
+  items,
   icon: HeadingIcon = FaChartBar,
   itemsPerPage = 5,
-  barColor = "#262262",     
+  barColor = "#262262",
 }) => {
   const [page, setPage] = useState(1);
   const [branchSel, setBranchSel] = useState("ALL");
@@ -77,7 +77,6 @@ const PagedBars = ({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Branch selector in header */}
           <select
             value={branchSel}
             onChange={(e) => setBranchSel(e.target.value)}
@@ -87,7 +86,6 @@ const PagedBars = ({
             {branchOptions.map(opt => <option key={opt} value={opt}>{opt === "ALL" ? "All Branches" : opt}</option>)}
           </select>
 
-          {/* Pager */}
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -151,72 +149,51 @@ const aDay = (d) => new Date(today.getFullYear(), today.getMonth(), today.getDat
 const SHIPMENTS = [
   { date: aDay(0),  dateLabel: "Today", shipmentId: "CARGO-2023123", sender: "Acme Logistics",  destination: "New York, NY",   branch: "NYC", mode: "Road", service: "Express",   status: "Out for Delivery", onTime: true,  amount: 120, cost: 84 },
   { date: aDay(0),  dateLabel: "Today", shipmentId: "CARGO-2023124", sender: "FastShip",       destination: "Los Angeles, CA", branch: "LAX", mode: "Road", service: "Standard",  status: "Pending",           onTime: false, amount: 45,  cost: 30 },
-  { date: aDay(109),dateLabel: "20.05", shipmentId: "CARGO-2023125", sender: "Eagle Carriers", destination: "Chicago, IL",     branch: "CHI", mode: "Air",  service: "Overnight", status: "Delivered",         onTime: true,  amount: 150, cost: 105 },
-  { date: aDay(110),dateLabel: "19.05", shipmentId: "CARGO-2023126", sender: "ShipRight",      destination: "Houston, TX",     branch: "HOU", mode: "Road", service: "Standard",  status: "Cleared",           onTime: true,  amount: 100, cost: 68 },
-  { date: aDay(111),dateLabel: "18.05", shipmentId: "CARGO-2023127", sender: "Urban Movers",   destination: "Miami, FL",       branch: "MIA", mode: "Air",  service: "Express",   status: "In Transit",        onTime: true,  amount: 85,  cost: 57 },
+  { date: aDay(2),  dateLabel: "2d ago", shipmentId: "CARGO-2023125", sender: "Eagle Carriers", destination: "Chicago, IL",     branch: "CHI", mode: "Air",  service: "Overnight", status: "Delivered",         onTime: true,  amount: 150, cost: 105 },
+  { date: aDay(3),  dateLabel: "3d ago", shipmentId: "CARGO-2023126", sender: "ShipRight",      destination: "Houston, TX",     branch: "HOU", mode: "Road", service: "Standard",  status: "Cleared",           onTime: true,  amount: 100, cost: 68 },
+  { date: aDay(4),  dateLabel: "4d ago", shipmentId: "CARGO-2023127", sender: "Urban Movers",   destination: "Miami, FL",       branch: "MIA", mode: "Air",  service: "Express",   status: "In Transit",        onTime: true,  amount: 85,  cost: 57 },
 ];
 
 /* ---------- main ---------- */
 const SuperAdminPanel = () => {
-  /* global filters */
-  const [branch, setBranch] = useState("ALL");
-  const [mode, setMode] = useState("ALL");
-  const [service, setService] = useState("ALL");
-  const [start, setStart] = useState(() => aDay(30).toISOString().slice(0, 10));
-  const [end, setEnd] = useState(() => today.toISOString().slice(0, 10));
-  const [query, setQuery] = useState("");
+  // Removed: global filters (date/branch/mode/service/search)
+
+  /* table filters */
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
+
+  /* paging */
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
-  const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  const handleRefresh = () => setLastUpdated(new Date());
-
-  /* filtered shipments */
+  /* filtered shipments (only using table filters now) */
   const filteredShipments = useMemo(() => {
-    const startD = new Date(start);
-    const endD = new Date(end);
-    const q = query.trim().toLowerCase();
+    let rows = [...SHIPMENTS];
 
-    let rows = SHIPMENTS.filter(s =>
-      s.date >= startD && s.date <= new Date(endD.getTime() + 24*60*60*1000 - 1)
-    );
-
-    if (branch !== "ALL") rows = rows.filter(s => s.branch === branch);
-    if (mode !== "ALL") rows = rows.filter(s => s.mode === mode);
-    if (service !== "ALL") rows = rows.filter(s => s.service === service);
     if (statusFilter !== "ALL") rows = rows.filter(s => s.status === statusFilter);
-    if (q) {
-      rows = rows.filter(s =>
-        s.shipmentId.toLowerCase().includes(q) ||
-        s.sender.toLowerCase().includes(q) ||
-        s.destination.toLowerCase().includes(q)
-      );
-    }
 
     const compare = (a, b) => {
       let res = 0;
       if (sortBy === "date") res = a.date - b.date;
-      if (sortBy === "amount") res = a.amount - b.amount;
+      if (sortBy === "amount") res = (a.amount ?? 0) - (b.amount ?? 0);
       if (sortBy === "destination") res = a.destination.localeCompare(b.destination);
       return sortDir === "asc" ? res : -res;
     };
-    rows.sort(compare);
-    return rows;
-  }, [branch, mode, service, start, end, query, statusFilter, sortBy, sortDir]);
+    return rows.sort(compare);
+  }, [statusFilter, sortBy, sortDir]);
 
   const paged = useMemo(() => {
     const startIdx = (page - 1) * PAGE_SIZE;
     return filteredShipments.slice(startIdx, startIdx + PAGE_SIZE);
   }, [filteredShipments, page]);
 
-  useEffect(() => setPage(1), [branch, mode, service, start, end, query, statusFilter]);
+  useEffect(() => setPage(1), [statusFilter, sortBy, sortDir]);
 
-  /* KPIs */
+  /* KPIs (computed off filtered set) */
   const kpis = useMemo(() => {
-    const todayRows = filteredShipments.filter(s => s.date.toDateString() === today.toDateString());
+    const todayStr = today.toDateString();
+    const todayRows = filteredShipments.filter(s => s.date.toDateString() === todayStr);
     const shipmentsToday = todayRows.length;
 
     const delivered = filteredShipments.filter(s => s.status === "Delivered");
@@ -227,8 +204,8 @@ const SuperAdminPanel = () => {
       ["Pending", "Waiting for Clearance"].includes(s.status)
     ).length;
 
-    const revenue = filteredShipments.reduce((sum, s) => sum + s.amount, 0);
-    const cost = filteredShipments.reduce((sum, s) => sum + s.cost, 0);
+    const revenue = filteredShipments.reduce((sum, s) => sum + (s.amount ?? 0), 0);
+    const cost = filteredShipments.reduce((sum, s) => sum + (s.cost ?? 0), 0);
     const marginPct = revenue ? Math.round(((revenue - cost) / revenue) * 100) : 0;
 
     return { shipmentsToday, onTimePct, exceptionsOpen, revenue, marginPct };
@@ -254,7 +231,7 @@ const SuperAdminPanel = () => {
     filteredShipments.forEach(s => {
       if (!map[s.branch]) map[s.branch] = { count: 0, rev: 0 };
       map[s.branch].count += 1;
-      map[s.branch].rev += s.amount;
+      map[s.branch].rev += (s.amount ?? 0);
     });
     const itemsCount = Object.entries(map).map(([label, v]) => ({ label, value: v.count }));
     const itemsRev   = Object.entries(map).map(([label, v]) => ({ label, value: v.rev }));
@@ -265,7 +242,7 @@ const SuperAdminPanel = () => {
     { title: "Shipments Today", value: kpis.shipmentsToday, icon: <FaTruck /> },
     { title: "On-Time Delivery %", value: `${kpis.onTimePct}%`, icon: <FaClock /> },
     { title: "Exceptions Open", value: kpis.exceptionsOpen, icon: <FaExclamationTriangle/> },
-    { title: "Revenue (MTD View)", value: fmtCurrency(kpis.revenue), sub: `Gross Margin ${kpis.marginPct}%`, icon: <FaDollarSign /> },
+    { title: "Revenue (Filtered)", value: fmtCurrency(kpis.revenue), sub: `Gross Margin ${kpis.marginPct}%`, icon: <FaDollarSign /> },
   ];
 
   const topInfoCards = [
@@ -280,73 +257,6 @@ const SuperAdminPanel = () => {
     <section className="dashboard min-h-screen bg-gray-50">
       <div className="dashboard-container max-w-7xl mx-auto py-8 px-4">
 
-        {/* Top bar: global filters + freshness */}
-        <div className="bg-white rounded-2xl p-4 mb-2">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-center gap-2 text-gray-600">
-              <FaFilter className="text-gray-400" />
-              <span className="font-medium">Global Filters</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <FaSyncAlt className="text-gray-400" />
-              <span>Last updated {lastUpdated.toLocaleTimeString()}</span>
-              <button
-                onClick={handleRefresh}
-                className="ml-2 px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200"
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-            <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">From</label>
-              <input type="date" value={start} onChange={e => setStart(e.target.value)}
-                     className="px-3 py-2 rounded-lg border bg-white" />
-            </div>
-            <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">To</label>
-              <input type="date" value={end} onChange={e => setEnd(e.target.value)}
-                     className="px-3 py-2 rounded-lg border bg-white" />
-            </div>
-            <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">Branch</label>
-              <select value={branch} onChange={e => setBranch(e.target.value)} className="px-3 py-2 rounded-lg border">
-                <option>ALL</option>
-                <option>NYC</option>
-                <option>LAX</option>
-                <option>CHI</option>
-                <option>HOU</option>
-                <option>MIA</option>
-              </select>
-            </div>
-            <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">Mode</label>
-              <select value={mode} onChange={e => setMode(e.target.value)} className="px-3 py-2 rounded-lg border">
-                <option>ALL</option><option>Road</option><option>Air</option><option>Sea</option>
-              </select>
-            </div>
-            <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">Service</label>
-              <select value={service} onChange={e => setService(e.target.value)} className="px-3 py-2 rounded-lg border">
-                <option>ALL</option><option>Express</option><option>Standard</option><option>Overnight</option>
-              </select>
-            </div>
-            <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">Search</label>
-              <div className="relative">
-                <FaSearch className="absolute left-3 top-3 text-gray-400" />
-                <input
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder="AWB, sender, destination"
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* KPI cards */}
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 mb-2">
           {mainCards.map((c, i) => <Card key={i} {...c} />)}
@@ -358,7 +268,7 @@ const SuperAdminPanel = () => {
         </div>
 
         {/* Exceptions / Finance / Compliance */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-2">
           {/* Exceptions */}
           <div className="bg-white rounded-2xl shadow-md p-6">
             <div className="flex items-center justify-between mb-2">
@@ -405,23 +315,7 @@ const SuperAdminPanel = () => {
             </div>
           </div>
 
-          {/* Compliance */}
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2"><FaShieldAlt /> Compliance & Expiries</h2>
-            </div>
-            <ul className="space-y-3 text-sm">
-              <li className="flex items-center justify-between">
-                <span>Driver Licenses expiring ≤30 days</span><span className="font-semibold">4</span>
-              </li>
-              <li className="flex items-center justify-between">
-                <span>Vehicle Insurance expiring ≤60 days</span><span className="font-semibold">7</span>
-              </li>
-              <li className="flex items-center justify-between">
-                <span>Visa/Work Permits expiring ≤90 days</span><span className="font-semibold">5</span>
-              </li>
-            </ul>
-          </div>
+  
         </div>
 
         {/* Operations Overview */}
@@ -481,23 +375,8 @@ const SuperAdminPanel = () => {
           </div>
         </div>
 
-        {/* Branch Performance (bar cards with Branch selector, icons, 5 per page) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-6">
-          <PagedBars
-            title="Shipments by Branch"
-            items={branchPerf.itemsCount}
-            icon={FaMapMarkerAlt}
-            itemsPerPage={5}    
-            barColor="#262262"   // brand blue
-          />
-          <PagedBars
-            title="Revenue by Branch"
-            items={branchPerf.itemsRev}
-            icon={FaMoneyBillWave}
-            itemsPerPage={5}
-            barColor="#10b981"   // green for money
-          />
-        </div>
+        {/* Branch Performance */}
+      
 
         {/* Latest Shipments */}
         <div className="dashboard-cargo-list mt-10">

@@ -61,6 +61,10 @@ const StaffCreate = () => {
   const [phoneCodes, setPhoneCodes] = useState([]);
 const [phoneCode, setPhoneCode] = useState("+91");
 
+// add
+const [phoneCodeId, setPhoneCodeId] = useState("");
+
+
   // file refs
   const photoRef = useRef(null);
   const docRef = useRef(null);
@@ -118,18 +122,19 @@ const [phoneCode, setPhoneCode] = useState("+91");
     })();
   }, [token]);
 
-  const requiredOk = () =>
-    name.trim() &&
-    email.trim() &&
-    password.trim() &&
-    selectedRole &&
-    selectedBranch &&
-    appointmentDate &&
-    visaExpiryDate &&
-    selectedVisaType &&
-    visaStatus !== "" &&
-    selectedDocType &&
-    documentNumber.trim();
+const requiredOk = () =>
+  name.trim() &&
+  email.trim() &&
+  password.trim() &&
+  selectedRole &&
+  selectedBranch &&
+  appointmentDate &&
+  visaExpiryDate &&
+  selectedVisaType &&
+  visaStatus !== "" &&
+  selectedDocType &&
+  documentNumber.trim() &&
+  phoneCodeId; // <-- added
 
   const resetFields = () => {
     setName("");
@@ -175,7 +180,7 @@ const [phoneCode, setPhoneCode] = useState("+91");
     formData.append("password", password);
     formData.append("role", roleName);
     formData.append("role_id", String(selectedRole));
-    formData.append("phone_code", phoneCode || "");
+    formData.append("phone_code_id", String(phoneCodeId));
     formData.append("contact_number", contactNumber || "");
     formData.append("branch_id", String(selectedBranch));
     formData.append("status", status === "" ? 1 : Number(status));
@@ -184,6 +189,9 @@ const [phoneCode, setPhoneCode] = useState("+91");
     formData.append("visa_type_id", String(selectedVisaType));
     formData.append("visa_status", visaStatus === "" ? 1 : Number(visaStatus));
     
+    for (const [k, v] of formData.entries()) {
+  if (["phone_code_id","contact_number"].includes(k)) console.log("FD:", k, v);
+}
 
     // photo
     if (photoRef.current?.files?.[0]) {
@@ -226,25 +234,28 @@ const [phoneCode, setPhoneCode] = useState("+91");
   };
 
 useEffect(() => {
-  const count = Array.isArray(phoneCodes) ? phoneCodes.length : 0;
-  console.log(`[PhoneCodes] list ${count ? "loaded" : "empty"} (${count} items)`);
-
-  if (count) {
-    const exists = phoneCodes.some((c) => extractDial(c) === phoneCode);
-    console.log(`[PhoneCodes] selected code "${phoneCode}" ${exists ? "FOUND" : "NOT FOUND"} in list`);
-    if (!exists) {
-      const sample = phoneCodes.slice(0, 5).map(extractDial).filter(Boolean);
-      console.log("[PhoneCodes] first few codes:", sample);
+  if (Array.isArray(phoneCodes) && phoneCodes.length && !phoneCodeId) {
+    const india = phoneCodes.find(c => extractDial(c) === "+91");
+    if (india) {
+      setPhoneCodeId(String(getId(india)));
+      setPhoneCode(extractDial(india)); // keep the "+91" for display if you want
     }
   }
-}, [phoneCodes, phoneCode]);
+}, [phoneCodes]); // <-- keep existing effect that logs phone codes
 
-  const extractDial = (c) => {
-  const raw = c?.code ?? c?.dial_code ?? c?.phone_code ?? c?.prefix ?? (c?.calling_code ? `+${c.calling_code}` : "");
+
+const extractDial = (c) => {
+  const raw =
+    c?.code ?? c?.dial_code ?? c?.phone_code ?? c?.prefix ?? (c?.calling_code ? `+${c.calling_code}` : "");
   if (!raw) return "";
   const s = String(raw).trim();
   return s.startsWith("+") ? s : `+${s}`;
 };
+
+const toDigits = (cc) => String(cc || "").replace(/[^\d]/g, "");
+
+// if your backend wants a different field name, change here only:
+const PHONE_CODE_KEY = "phone_code";
 
   return (
     <div className="flex justify-center items-center w-full">
@@ -307,29 +318,33 @@ useEffect(() => {
           <div>
               <label className="block text-sm font-medium text-gray-700">Contact Number</label>
               <div className="mt-1 flex gap-2">
-                <select
-                  className="w-28 rounded-lg border border-gray-300 px-2 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
-                  value={phoneCode}
-                  onChange={(e) => setPhoneCode(e.target.value)}
-                >
-                  {phoneCodes.length > 0 ? (
-                    phoneCodes.map((c, i) => {
-                      const code = c?.code ?? c?.dial_code ?? c?.phone_code ?? c?.prefix ?? "";
-                      const name = c?.name ?? c?.country ?? c?.country_name ?? c?.iso2 ?? "";
-                      if (!code) return null;
-                      return (
-                        <option key={`${code}-${name || i}`} value={code}>
-                          {code}{name ? ` — ${name}` : ""}
-                        </option>
-                      );
-                    })
-                  ) : (
-                    <>
-                      <option value="+91">+91 — India</option>
-                      <option value="+971">+971 — UAE</option>
-                    </>
-                  )}
-                </select>
+    <select
+  className="w-28 rounded-lg border border-gray-300 px-2 py-2 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200"
+  value={phoneCodeId}
+  onChange={(e) => {
+    const id = e.target.value;
+    setPhoneCodeId(id);
+    const obj = phoneCodes.find(c => String(getId(c)) === String(id));
+    setPhoneCode(extractDial(obj) || "+"); // keeps "+91" in state if you display it elsewhere
+  }}
+  required
+>
+  {Array.isArray(phoneCodes) && phoneCodes.length ? (
+    phoneCodes.map((c, i) => {
+      const dial = extractDial(c); // "+91"
+      const name = c?.name ?? c?.country ?? c?.country_name ?? c?.iso2 ?? "";
+      return (
+        <option key={String(getId(c) ?? i)} value={String(getId(c))}>
+          {dial}{name ? ` — ${name}` : ""}
+        </option>
+      );
+    })
+  ) : (
+    <option value="">Load country codes…</option>
+  )}
+</select>
+
+
 
                 <input
                   type="text"

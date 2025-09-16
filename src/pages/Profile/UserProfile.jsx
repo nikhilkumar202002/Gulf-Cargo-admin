@@ -19,7 +19,7 @@ function UserProfile() {
 
       try {
         const response = await axios.get(
-          "https://gulfcargoapi.domaindude.in/public/api/profile",
+          "https://api.gulfcargoksa.com/public/api/profile",
           {
             headers: {
               Authorization: `Bearer ${token}`,
