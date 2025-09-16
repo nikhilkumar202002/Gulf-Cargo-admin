@@ -122,6 +122,7 @@ export const rolesMenu = {
         { name: "Shipment Methods", path: "/shipmentmethod/view" },
         { name: "Ports", path: "/port/view" },
         { name: "Shipment Status", path: "/shipmentstatus/view" },
+        { name: "Licence type", path: "/licence/view" },
       ]
     }
   ],

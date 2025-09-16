@@ -267,56 +267,7 @@ const SuperAdminPanel = () => {
           {topInfoCards.map((c, i) => <Card key={i} {...c} />)}
         </div>
 
-        {/* Exceptions / Finance / Compliance */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-2">
-          {/* Exceptions */}
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-semibold flex items-center gap-2"><FaShieldAlt /> Exceptions Queue</h2>
-            </div>
-            {Object.entries(exceptionsList).map(([k, arr]) => (
-              <div key={k} className="border-b last:border-none py-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">{k}</span>
-                  <span className="text-sm font-semibold">{arr.length}</span>
-                </div>
-                {arr.slice(0, 3).map(s => (
-                  <div key={s.shipmentId} className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>{s.shipmentId}</span>
-                    <span>{s.destination}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* Finance */}
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2"><FaDollarSign /> Finance Snapshot</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-emerald-50">
-                <div className="text-xs text-emerald-700">Revenue (Filtered)</div>
-                <div className="text-lg font-semibold">{fmtCurrency(kpis.revenue)}</div>
-              </div>
-              <div className="p-3 rounded-xl bg-blue-50">
-                <div className="text-xs text-blue-700">Gross Margin</div>
-                <div className="text-lg font-semibold">{kpis.marginPct}%</div>
-              </div>
-              <div className="p-3 rounded-xl bg-yellow-50">
-                <div className="text-xs text-yellow-700">Invoices Pending</div>
-                <div className="text-lg font-semibold">12</div>
-              </div>
-              <div className="p-3 rounded-xl bg-purple-50">
-                <div className="text-xs text-purple-700">Avg DSO</div>
-                <div className="text-lg font-semibold">23 days</div>
-              </div>
-            </div>
-          </div>
-
-  
-        </div>
+     
 
         {/* Operations Overview */}
         <div className="dashboard-row mt-8">

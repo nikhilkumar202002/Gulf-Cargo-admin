@@ -57,6 +57,9 @@ import PortCreate from "./pages/Ports/portCreate";
 import PortView from "./pages/Ports/portView";
 import ShipmentStatusView from "./pages/Shipment Status/ShipmentStatusView";
 
+import LicenceCreate from "./pages/Licence type/LicenceCreate";
+import LicenceView from "./pages/Licence type/LicenceView";
+
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return <div className="loader">Checking authentication...</div>;
@@ -139,6 +142,9 @@ function App() {
           <Route path="port/view" element={<PrivateRoute><PortView /></PrivateRoute>} />
           <Route path="port/create" element={<PrivateRoute><PortCreate /></PrivateRoute>} />
           <Route path="shipmentstatus/view" element={<PrivateRoute><ShipmentStatusView /></PrivateRoute>} />
+
+          <Route path="licence/create" element={<PrivateRoute><LicenceCreate /></PrivateRoute>} />
+          <Route path="licence/view" element={<PrivateRoute><LicenceView /></PrivateRoute>} />
 
           {/* Super Admin only examples */}
           <Route
