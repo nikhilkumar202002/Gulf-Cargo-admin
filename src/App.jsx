@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "./auth/AuthContext";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchProfile, clearAuth } from "./store/slices/authSlice";
 
 import ResetPassword from "./pages/Login/ResetPassword";
 import ForgotPassword from "./pages/Login/ForgotPassword";
@@ -21,6 +22,8 @@ import ViewAllDriver from "./pages/Drivers/ViewAllDriver";
 import CreateCargo from "./pages/CargoShipment/CreateCargo";
 import ShippingReport from "./pages/CargoShipment/ShipmentReport";
 import ShipmentList from "./pages/CargoShipment/ShipmentList";
+import CreateShipment from "./pages/CargoShipment/CreateShipment";
+import CargoList from "./pages/CargoShipment/CargoList";
 
 import UserProfile from "./pages/Profile/UserProfile";
 import EditBranch from "./pages/Branches/EditBranch";
@@ -60,32 +63,55 @@ import ShipmentStatusView from "./pages/Shipment Status/ShipmentStatusView";
 import LicenceCreate from "./pages/Licence type/LicenceCreate";
 import LicenceView from "./pages/Licence type/LicenceView";
 
-const PrivateRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-  if (loading) return <div className="loader">Checking authentication...</div>;
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
-};
+import PaymentTypeList from "./pages/Payment Types/PaymentTypeList";
 
+const PrivateRoute = ({ children }) => {
+  const { token, status } = useSelector((s) => s.auth || {});
+  if (status === "loading") return <div className="loader">Checking authentication...</div>;
+  return token ? children : <Navigate to="/login" replace />;
+};
 
 const RoleRoute = ({ allow, children }) => {
-  const { roleId } = useAuth();
-  console.log("roleId from context:", roleId);
+  const { user } = useSelector((s) => s.auth || {});
+  const roleId =
+    user?.role_id ?? user?.roleId ?? user?.role?.id ?? (typeof user?.role === "number" ? user.role : null);
   return allow.includes(roleId) ? children : <Navigate to="/dashboard" replace />;
-  
-  
 };
 
-function App() {
-  const { isAuthenticated, loading, roleId } = useAuth();
+export default function App() {
+  const dispatch = useDispatch();
+  const { token, status, user } = useSelector((s) => s.auth || {});
   const [ready, setReady] = useState(false);
 
-  if (!ready || loading) {
-    return <Preloader onDone={() => setReady(true)} duration={1200} />;
+  // 🔑 Bootstrap on app load: if we have a token but no user yet, fetch profile.
+  useEffect(() => {
+    if (!token) return;
+    if (status === "idle" && !user) {
+      dispatch(fetchProfile())
+        .unwrap()
+        .catch(() => dispatch(clearAuth()));
+    }
+  }, [dispatch, token, status, user]);
+
+  // Preloader + while redux is fetching profile
+  if (!ready || status === "loading") {
+    return <Preloader onDone={() => setReady(true)} duration={800} />;
   }
+
+  
+
+  // Resolve roleId for Layout/Sidebar (supports several shapes)
+  const roleId =
+    user?.role_id ?? user?.roleId ?? user?.role?.id ?? (typeof user?.role === "number" ? user.role : null);
+
+  const isAuthenticated = Boolean(token);
 
   return (
     <BrowserRouter>
       <Routes>
+        {/* default redirect */}
+        <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
+
         <Route
           path="/login"
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
@@ -118,6 +144,7 @@ function App() {
           <Route path="drivers/addnewdriver" element={<PrivateRoute><AddDriver /></PrivateRoute>} />
 
           <Route path="cargoshipment/createcargo" element={<PrivateRoute><CreateCargo /></PrivateRoute>} />
+          <Route path="shipment/createshipment" element={<PrivateRoute><CreateShipment /></PrivateRoute>} />
           <Route path="shipment/shipmentreport" element={<PrivateRoute><ShippingReport /></PrivateRoute>} />
 
           <Route path="documents/documentlist" element={<PrivateRoute><DocumentList /></PrivateRoute>} />
@@ -142,11 +169,13 @@ function App() {
           <Route path="port/view" element={<PrivateRoute><PortView /></PrivateRoute>} />
           <Route path="port/create" element={<PrivateRoute><PortCreate /></PrivateRoute>} />
           <Route path="shipmentstatus/view" element={<PrivateRoute><ShipmentStatusView /></PrivateRoute>} />
+          <Route path="cargo/allcargolist" element={<PrivateRoute><CargoList /></PrivateRoute>} />
+          <Route path="paymenttype/view" element={<PrivateRoute><PaymentTypeList /></PrivateRoute>} />
 
           <Route path="licence/create" element={<PrivateRoute><LicenceCreate /></PrivateRoute>} />
           <Route path="licence/view" element={<PrivateRoute><LicenceView /></PrivateRoute>} />
 
-          {/* Super Admin only examples */}
+          {/* Super Admin only */}
           <Route
             path="roles/allroles"
             element={
@@ -173,7 +202,6 @@ function App() {
           <Route path="/senderreceiver/senderview/:id" element={<PrivateRoute><SenderShow /></PrivateRoute>} />
           <Route path="branches/edit/:id" element={<PrivateRoute><EditBranch /></PrivateRoute>} />
           <Route path="shipments/shipmentsview/:id" element={<PrivateRoute><ShipmentList /></PrivateRoute>} />
-
           <Route path="shipments/shipmentsview/:id/invoice" element={<PrivateRoute><InvoiceView /></PrivateRoute>} />
         </Route>
 
@@ -182,5 +210,3 @@ function App() {
     </BrowserRouter>
   );
 }
-
-export default App;

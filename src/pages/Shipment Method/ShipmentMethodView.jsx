@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useAuth } from "../../auth/AuthContext";
 import { getShipmentMethods } from "../../api/shipmentMethodApi";
 import { Link } from "react-router-dom";
 
+// Utility function to join class names
 function classNames(...cls) {
   return cls.filter(Boolean).join(" ");
 }
 
+// Spinner Component
 const Spinner = ({ className = "h-4 w-4 text-indigo-600" }) => (
   <svg
     className={classNames("animate-spin", className)}
@@ -24,6 +25,7 @@ const Spinner = ({ className = "h-4 w-4 text-indigo-600" }) => (
   </svg>
 );
 
+// Badge Component for Status
 const Badge = ({ ok }) => (
   <span
     className={classNames(
@@ -44,45 +46,44 @@ const Badge = ({ ok }) => (
 );
 
 export default function ShipmentMethodView() {
-  const { token } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState({ text: "", variant: "" });
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
- const fetchRows = async () => {
-   setLoading(true);
-  setMsg({ text: "", variant: "" });
-   try {
-     const params = {};
-     if (statusFilter === "1" || statusFilter === "0") {
-       params.status = Number(statusFilter); // -> ?status=1 or ?status=0
-     }
-     const list = await getShipmentMethods(params, token);
-     setRows(Array.isArray(list) ? list : []);
-   } catch (err) {
-     console.error("Failed to fetch shipment methods", err?.response || err);
-     setMsg({ text: err?.response?.data?.message || "Failed to load shipment methods.", variant: "error" });
-   } finally {
-     setLoading(false);
-   }
- };
-
-useEffect(() => {
-   fetchRows();
-   // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [token, statusFilter]); // refetch when the filter changes
-
- const filtered = useMemo(() => {
-   const q = query.trim().toLowerCase();
-   if (!q) return rows;
-   return rows.filter((r) => `${r?.name ?? ""}`.toLowerCase().includes(q));
- }, [rows, query]);
-
-  const handleEdit = (row) => {
-    alert(`Edit clicked for "${row?.name ?? "-"}" (id: ${row?.id ?? "-"}). Wire this to your edit flow.`);
+  // Fetch shipment methods
+  const fetchRows = async () => {
+    setLoading(true);
+    setMsg({ text: "", variant: "" });
+    try {
+      const params = {};
+      if (statusFilter === "1" || statusFilter === "0") {
+        params.status = Number(statusFilter); // -> ?status=1 or ?status=0
+      }
+      const list = await getShipmentMethods(params); // No token check needed
+      setRows(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error("Failed to fetch shipment methods", err?.response || err);
+      setMsg({
+        text: err?.response?.data?.message || "Failed to load shipment methods.",
+        variant: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchRows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]); // Refetch when the filter changes
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => `${r?.name ?? ""}`.toLowerCase().includes(q));
+  }, [rows, query]);
 
   const skeletonRows = Array.from({ length: 6 });
 
@@ -139,38 +140,33 @@ useEffect(() => {
               </svg>
             </label>
 
-           <div className="flex flex-1 flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
-  {/* search input … */}
-  {/* status select … */}
+            <div className="flex flex-1 flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={fetchRows}
+                disabled={loading}
+                className={classNames(
+                  "inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition",
+                  "hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20",
+                  loading && "opacity-60"
+                )}
+              >
+                {loading ? (<><Spinner className="h-4 w-4 text-white" /> Refreshing…</>) : (<>
+                  {/* refresh icon */} Refresh
+                </>)}
+              </button>
 
-  <button
-    type="button"
-    onClick={fetchRows}
-    disabled={loading}
-    className={classNames(
-      "inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition",
-      "hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20",
-      loading && "opacity-60"
-    )}
-  >
-    {loading ? (<><Spinner className="h-4 w-4 text-white" /> Refreshing…</>) : (<>
-      {/* refresh icon */} Refresh
-    </>)}
-  </button>
-
-  <Link
-    to="/shipmentmethod/create"
-    className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20"
-  >
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-         fill="currentColor" className="h-4 w-4" aria-hidden="true">
-      <path d="M12 4.5a.75.75 0 01.75.75v6h6a.75.75 0 010 1.5h-6v6a.75.75 0 01-1.5 0v-6h-6a.75.75 0 010-1.5h6v-6A.75.75 0 0112 4.5z"/>
-    </svg>
-    Add New
-  </Link>
-</div>
-
-
+              <Link
+                to="/shipmentmethod/create"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                     fill="currentColor" className="h-4 w-4" aria-hidden="true">
+                  <path d="M12 4.5a.75.75 0 01.75.75v6h6a.75.75 0 010 1.5h-6v6a.75.75 0 01-1.5 0v-6h-6a.75.75 0 010-1.5h6v-6A.75.75 0 0112 4.5z"/>
+                </svg>
+                Add New
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -258,16 +254,6 @@ useEffect(() => {
                                 </svg>
                                 Edit
                               </button>
-                              {/*
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(r)}
-                                className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-rose-700 focus:outline-none focus:ring-4 focus:ring-rose-600/20"
-                              >
-                                {deletingId === r.id ? <Spinner className="h-4 w-4 text-white" /> : null}
-                                {deletingId === r.id ? "Deleting…" : "Delete"}
-                              </button>
-                              */}
                             </div>
                           </td>
                         </tr>

@@ -39,8 +39,10 @@ export const rolesMenu = {
       icon: <FaBox />,
       label: "Shipments",
       submenus: [
-        { name: "Create Shipment", path: "/cargoshipment/createcargo" },
         { name: "Shipment Report", path: "/shipment/shipmentreport" },
+        { name: "All Cargos", path: "/cargo/allcargolist" },
+        { name: "Create Cargo", path: "/cargoshipment/createcargo" },
+        { name: "Create Shipment", path: "/shipment/createshipment" },
       ]
     },
     {
@@ -123,6 +125,7 @@ export const rolesMenu = {
         { name: "Ports", path: "/port/view" },
         { name: "Shipment Status", path: "/shipmentstatus/view" },
         { name: "Licence type", path: "/licence/view" },
+        { name: "Payment type", path: "/paymenttype/view" },
       ]
     }
   ],

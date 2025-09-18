@@ -1,8 +1,9 @@
+// src/pages/InvoiceView.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { getShipment } from "../api/shipmentsApi";
 import { getPartyById, getParties } from "../api/partiesApi";
-import InvoiceLogo from "../../public/Logo.png";
+import InvoiceLogo from "../assets/Logo.png";
 import "./invoice.css";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
@@ -33,7 +34,7 @@ const pick = (obj, keys, fallback = "—") => {
   return fallback;
 };
 
-/* ---------- Company header content (from your screenshot) ---------- */
+/* ---------- Company header content ---------- */
 const COMPANY = {
   arHeadingLine1: "شركة سواحل الخليج للنقل",
   arHeadingLine2: "البحري",
@@ -43,7 +44,7 @@ const COMPANY = {
   email: "gulfcargoksahail@gmail.com",
   vatNo: "310434479300003",
   branchLabel: "GULF CARGO KSA HAIL",
-  slCode: "HL401667", // shows as: SL: HL401667
+  slCode: "HL401667",
   defaultShipmentType: "IND AIR",
 };
 
@@ -82,26 +83,31 @@ const matchByName = (name, list) => {
   return list.find((x) => getName(x) === low) || list.find((x) => getName(x).includes(low)) || null;
 };
 
-/* QR helper — uses a no-deps image endpoint */
+/* QR helper */
 const buildQrUrl = (data, size = 160) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(data)}`;
 
-export default function InvoiceView() {
+export default function InvoiceView({ shipment: injectedShipment = null, modal = false }) {
   const { id } = useParams();
   const location = useLocation();
   const hydrated = location.state?.shipment || null;
 
-  const [shipment, setShipment] = useState(hydrated || null);
-  const [loading, setLoading] = useState(!hydrated);
+  const [shipment, setShipment] = useState(injectedShipment || hydrated || null);
+  const [loading, setLoading] = useState(!injectedShipment && !hydrated && !!id);
   const [err, setErr] = useState("");
 
   const [senderParty, setSenderParty] = useState(null);
   const [receiverParty, setReceiverParty] = useState(null);
   const [partyLoading, setPartyLoading] = useState(false);
 
-  // load shipment if needed
+  // allow hot-prop updates (modal path)
   useEffect(() => {
-    if (!id || hydrated) return;
+    if (injectedShipment) setShipment(injectedShipment);
+  }, [injectedShipment]);
+
+  // load shipment if only URL param is present
+  useEffect(() => {
+    if (!id || injectedShipment || hydrated) return;
     (async () => {
       setLoading(true);
       setErr("");
@@ -115,7 +121,7 @@ export default function InvoiceView() {
         setLoading(false);
       }
     })();
-  }, [id, hydrated]);
+  }, [id, hydrated, injectedShipment]);
 
   // load parties once shipment is ready (ID first; then name fallback)
   useEffect(() => {
@@ -127,8 +133,8 @@ export default function InvoiceView() {
         ? [shipment.sender_id, shipment.shipper_id, shipment.sender_party_id]
         : [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id];
 
-      const name = isSender ? shipment.sender || shipment.shipper_name
-                            : shipment.receiver || shipment.consignee_name;
+      const name = isSender ? (shipment.sender?.name || shipment.sender || shipment.shipper_name)
+                            : (shipment.receiver?.name || shipment.receiver || shipment.consignee_name);
 
       // by ID
       for (const pid of idCandidates) {
@@ -206,7 +212,6 @@ export default function InvoiceView() {
   const tax = shipment?.tax ?? shipment?.tax_amount ?? 0;
   const total = shipment?.total_amount ?? shipment?.grand_total ?? (Number(subtotal) + Number(tax));
 
-  /* Compose QR text (you can change to your ZATCA payload later) */
   const qrText = `INV|${shipment?.track_code || ""}|AWB:${shipment?.awb_number || ""}|TOTAL:${total}`;
 
   return (
@@ -222,32 +227,33 @@ export default function InvoiceView() {
       `}</style>
 
       {/* Top bar (won't print) */}
-      <div className="sticky top-0 z-10 border-b bg-white print:hidden">
-        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-2">
-          <button onClick={() => window.history.back()} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
-            ← Back
-          </button>
-          <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => window.print()} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700">
-              Print / Save PDF
+      {!modal && (
+        <div className="sticky top-0 z-10 border-b bg-white print:hidden">
+          <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-2">
+            <button onClick={() => window.history.back()} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+              ← Back
             </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={() => window.print()} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700">
+                Print / Save PDF
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Invoice card */}
       <main className="mx-auto max-w-5xl p-4">
         <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-
-          {/* ======= COMPANY HEADER (from screenshot) ======= */}
+          {/* ======= COMPANY HEADER ======= */}
           <div className="px-6 pt-6">
             <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-3">
-              {/* Left: Logo */}
+              {/* Logo */}
               <div className="flex items-center sm:justify-start justify-center">
                 <img src={InvoiceLogo} alt="Gulf Cargo" className="h-16 object-contain" />
               </div>
 
-              {/* Center: QR */}
+              {/* QR */}
               <div className="flex items-center justify-center">
                 <img
                   src={buildQrUrl(qrText, 160)}
@@ -256,6 +262,7 @@ export default function InvoiceView() {
                 />
               </div>
 
+              {/* Company text */}
               <div className="text-center sm:text-right">
                 <div className="text-[18px] font-semibold leading-tight text-indigo-900">
                   <div>{COMPANY.arHeadingLine1}</div>
@@ -286,18 +293,6 @@ export default function InvoiceView() {
           </div>
           {/* ======= END COMPANY HEADER ======= */}
 
-          {/* Top-right Invoice meta (number/date)
-          <div className="flex flex-wrap items-start gap-6 border-b border-slate-200 px-6 py-4">
-            <div className="ml-auto text-right">
-              <div className="text-xs text-slate-500">Invoice #</div>
-              <div className="text-sm font-semibold text-slate-900">{shipment?.invoice_no ?? `SHIP-${id}`}</div>
-              <div className="mt-2 text-xs text-slate-500">Invoice Date</div>
-              <div className="text-sm font-semibold text-slate-900">
-                {fmtDate(shipment?.invoice_date ?? shipment?.created_at ?? shipment?.booking_date)}
-              </div>
-            </div>
-          </div> */}
-
           {/* Meta strip */}
           <div className="grid grid-cols-1 gap-4 border-b border-slate-200 px-6 py-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -312,11 +307,13 @@ export default function InvoiceView() {
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Route</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">{`${shipment?.origin_port ?? "—"} → ${shipment?.destination_port ?? "—"}`}</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {(shipment?.origin_port?.name ?? shipment?.origin_port ?? "—")} → {(shipment?.destination_port?.name ?? shipment?.destination_port ?? "—")}
+              </div>
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Status</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.status ?? "—"}</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.status?.name ?? shipment?.status ?? "—"}</div>
             </div>
           </div>
 
@@ -325,29 +322,39 @@ export default function InvoiceView() {
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Shipper</div>
               <div className="mt-1 text-sm font-semibold text-slate-900">
-                {senderParty?.name || shipment?.sender || shipment?.shipper_name || "—"}
+                {senderParty?.name || shipment?.sender?.name || shipment?.sender || shipment?.shipper_name || "—"}
               </div>
               <div className="whitespace-pre-wrap text-sm text-slate-700">
-                {senderParty?.address || pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")}
+                {senderParty?.address ||
+                  pick(shipment?.sender, ["address"], "") ||
+                  pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")}
               </div>
               <div className="text-sm text-slate-700">
-                {senderParty?.phones || pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")}
+                {senderParty?.phones || pick(shipment?.sender, ["contact_number", "whatsapp_number"], "") ||
+                  pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")}
               </div>
-              <div className="text-sm text-slate-700">{senderParty?.email || pick(shipment, ["sender_email", "shipper_email"], "")}</div>
+              <div className="text-sm text-slate-700">
+                {senderParty?.email || pick(shipment?.sender, ["email"], "") || pick(shipment, ["sender_email", "shipper_email"], "")}
+              </div>
             </div>
 
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Consignee</div>
               <div className="mt-1 text-sm font-semibold text-slate-900">
-                {receiverParty?.name || shipment?.receiver || shipment?.consignee_name || "—"}
+                {receiverParty?.name || shipment?.receiver?.name || shipment?.receiver || shipment?.consignee_name || "—"}
               </div>
               <div className="whitespace-pre-wrap text-sm text-slate-700">
-                {receiverParty?.address || pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "")}
+                {receiverParty?.address ||
+                  pick(shipment?.receiver, ["address"], "") ||
+                  pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "")}
               </div>
               <div className="text-sm text-slate-700">
-                {receiverParty?.phones || pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "")}
+                {receiverParty?.phones || pick(shipment?.receiver, ["contact_number", "whatsapp_number"], "") ||
+                  pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "")}
               </div>
-              <div className="text-sm text-slate-700">{receiverParty?.email || pick(shipment, ["receiver_email", "consignee_email"], "")}</div>
+              <div className="text-sm text-slate-700">
+                {receiverParty?.email || pick(shipment?.receiver, ["email"], "") || pick(shipment, ["receiver_email", "consignee_email"], "")}
+              </div>
             </div>
           </div>
 

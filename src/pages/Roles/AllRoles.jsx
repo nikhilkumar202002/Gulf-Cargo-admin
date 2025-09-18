@@ -1,41 +1,24 @@
 import React, { useEffect, useState } from "react";
-import { useAuth } from "../../auth/AuthContext";
-import { getAllRoles } from "../../api/rolesApi";
+import { getAllRoles } from "../../api/rolesApi";  // Fetch roles from API
 
 function AllRoles() {
-
-  const { token, logout } = useAuth();
- const [roles, setRoles] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   // Fetch roles from API
   const fetchRoles = async () => {
-    // Guard: not logged in
-    if (!token) {
-      setError("Unauthorized: Please log in first.");
-      setLoading(false);
-      return;
-    }
-
     try {
-      const items = await getAllRoles(); // returns a normalized array
+      const items = await getAllRoles();  // returns a normalized array
       setRoles(Array.isArray(items) ? items : []);
-      setError("");
+      setError("");  // Reset error on success
     } catch (err) {
-      // Axios-style error handling
-      if (err?.response?.status === 401) {
-        setError("Session expired. Logging out...");
-        setTimeout(() => logout(), 1500);
-        return;
-      }
       console.error("Error fetching roles:", err);
       setError("Something went wrong. Please try again later.");
     } finally {
       setLoading(false);
     }
   };
-
 
   useEffect(() => {
     let cancelled = false;
@@ -48,18 +31,16 @@ function AllRoles() {
     };
 
     run();
-    const interval = setInterval(run, 5000);
+    const interval = setInterval(run, 5000);  // Re-fetch every 5 seconds
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearInterval(interval);  // Cleanup interval on component unmount
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
+  }, []);  // No dependency on `token` anymore
 
   return (
     <>
-        <section className="all-roles p-6">
+      <section className="all-roles p-6">
         <div className="all-roles-container max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold mb-4">All Roles</h2>
 
@@ -95,7 +76,7 @@ function AllRoles() {
         </div>
       </section>
     </>
-  )
+  );
 }
 
-export default AllRoles
+export default AllRoles;

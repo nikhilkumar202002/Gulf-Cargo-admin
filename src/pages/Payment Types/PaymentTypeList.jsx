@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getPorts } from "../../api/portApi"; // Keep the data fetching function
+import { getAllPaymentMethods } from "../../api/paymentMethod"; // Replace with actual API function
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 function classNames(...cls) {
@@ -13,7 +13,6 @@ const Spinner = ({ className = "h-4 w-4 text-indigo-600" }) => (
   </svg>
 );
 
-// Define the StatusBadge component
 const StatusBadge = ({ active }) => (
   <span
     className={classNames(
@@ -27,39 +26,8 @@ const StatusBadge = ({ active }) => (
   </span>
 );
 
-// Define resolveRowActive function
-const resolveRowActive = (row) => {
-  const status = row?.status ?? row?.is_active;
-  if (status === true) return true;
-  if (status === false) return false;
-  const s = String(status ?? "").trim().toLowerCase();
-  if (s === "1" || s === "active") return true;
-  if (s === "0" || s === "inactive") return false;
-  const n = Number(s);
-  if (!Number.isNaN(n)) return !!n;
-  return false; // default to false if it can't resolve
-};
 
-// fetchRows function now accepts state setters as arguments
-const fetchRows = async (setLoading, setRows, setMsg) => {
-  setLoading(true);
-  setMsg({ text: "", variant: "" });
-  try {
-    const list = await getPorts(); // Make sure this is a valid API request
-    console.log("API Response: ", list); // Log the API response for debugging
-    setRows(Array.isArray(list) ? list : []);
-  } catch (err) {
-    console.error("Failed to fetch ports", err?.response || err);
-    setMsg({
-      text: err?.response?.data?.message || "Failed to load ports.",
-      variant: "error",
-    });
-  } finally {
-    setLoading(false);
-  }
-};
-
-export default function PortView() {
+export default function PaymentTypeList() {
   const [rows, setRows] = useState([]); // Ensure initial state is an empty array
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState({ text: "", variant: "" });
@@ -69,8 +37,30 @@ export default function PortView() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const fetchRows = async (setLoading, setRows, setMsg) => {
+  setLoading(true);
+  setMsg({ text: "", variant: "" });
+  try {
+    const response = await getAllPaymentMethods(); // Fetch payment types
+    console.log("Fetched Payment Methods:", response); // Debugging line
+
+    // Extract the `data` array safely
+    const rows = response?.data ?? [];
+    setRows(Array.isArray(rows) ? rows : []);
+  } catch (err) {
+    console.error("Failed to fetch payment types", err?.response || err);
+    setMsg({
+      text: err?.response?.data?.message || "Failed to load payment types.",
+      variant: "error",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
+
   useEffect(() => {
-    fetchRows(setLoading, setRows, setMsg); // Pass state setters to the fetch function
+    fetchRows(setLoading, setRows, setMsg); // Fetch payment types
   }, []);
 
   useEffect(() => {
@@ -86,7 +76,6 @@ export default function PortView() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const skeletonRows = Array.from({ length: 6 });
 
   return (
     <section className="mx-auto max-w-6xl p-4">
@@ -128,7 +117,7 @@ export default function PortView() {
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         {/* Toolbar */}
         <div className="flex flex-col gap-3 border-b border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-lg font-semibold tracking-tight text-gray-900">Ports</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-gray-900">Payment Types</h1>
 
           <div className="flex flex-1 flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
             {/* Search */}
@@ -191,7 +180,7 @@ export default function PortView() {
 
             {/* Add New */}
             <Link
-              to="/port/create"
+              to="/paymenttype/create"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden="true">
@@ -213,55 +202,57 @@ export default function PortView() {
                 <th className="w-44 px-4 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading
-                ? skeletonRows.map((_, i) => (
-                    <tr key={`sk-${i}`} className="animate-pulse">
-                      <td className="px-4 py-4"><div className="h-4 w-6 rounded bg-gray-200" /></td>
-                      <td className="px-4 py-4"><div className="h-4 w-56 rounded bg-gray-200" /></td>
-                      <td className="px-4 py-4"><div className="h-5 w-24 rounded-full bg-gray-200" /></td>
-                      <td className="px-4 py-4"><div className="h-8 w-24 rounded bg-gray-200" /></td>
-                    </tr>
-                  ))
-                : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-gray-500">
-                      No ports found.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r, idx) => {
-                    const active = resolveRowActive(r);
-                    return (
-                      <tr
-                        key={r?.id ?? idx}
-                        className="odd:bg-white even:bg-gray-50 hover:bg-indigo-50/40 transition-colors"
-                      >
-                        <td className="px-4 py-4 text-gray-700">{idx + 1}</td>
-                        <td className="px-4 py-4 text-gray-900">{r?.name ?? "-"}</td>
-                        <td className="px-4 py-4">
-                          <StatusBadge active={active} />
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => alert(`Edit "${r?.name}" (id: ${r?.id})`)}
-                              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-900 shadow-sm transition hover:border-indigo-300 hover:text-indigo-700 hover:shadow focus:outline-none focus:ring-4 focus:ring-indigo-500/20"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4" aria-hidden="true">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.65-1.65a1.875 1.875 0 112.652 2.652l-11 11a4.5 4.5 0 01-1.897 1.13l-3.288.94a.375.375 0 01-.46-.46l.94-3.288a4.5 4.5 0 011.13-1.897l10.273-10.273z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125L16.875 4.5" />
-                              </svg>
-                              Edit
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-            </tbody>
+            
+           <tbody className="divide-y divide-gray-100">
+  {loading ? (
+    <tr>
+      <td colSpan={4} className="px-4 py-10 text-center text-gray-500">
+        Loading payment types...
+      </td>
+    </tr>
+  ) : rows.length === 0 ? (
+    <tr>
+      <td colSpan={4} className="px-4 py-10 text-center text-gray-500">
+        No payment types found.
+      </td>
+    </tr>
+  ) : (
+    rows.map((r, idx) => {
+      console.log("Row data:", r);  // Debugging row data
+      const active = String(r.status).toLowerCase() === "active" || r.status === 1;
+      return (
+        <tr
+          key={r?.id ?? idx}
+          className="odd:bg-white even:bg-gray-50 hover:bg-indigo-50/40 transition-colors"
+        >
+          <td className="px-4 py-4 text-gray-700">{idx + 1}</td>
+          <td className="px-4 py-4 text-gray-900">{r?.name ?? "-"}</td>
+          <td className="px-4 py-4">
+            <StatusBadge active={active} />
+          </td>
+          <td className="px-4 py-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => alert(`Edit "${r?.name}" (id: ${r?.id})`)}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-900 shadow-sm transition hover:border-indigo-300 hover:text-indigo-700 hover:shadow focus:outline-none focus:ring-4 focus:ring-indigo-500/20"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-4 w-4" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.65-1.65a1.875 1.875 0 112.652 2.652l-11 11a4.5 4.5 0 01-1.897 1.13l-3.288.94a.375.375 0 01-.46-.46l.94-3.288a4.5 4.5 0 011.13-1.897l10.273-10.273z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125L16.875 4.5" />
+                </svg>
+                Edit
+              </button>
+            </div>
+          </td>
+        </tr>
+      );
+    })
+  )}
+</tbody>
+
+
+
           </table>
         </div>
       </div>

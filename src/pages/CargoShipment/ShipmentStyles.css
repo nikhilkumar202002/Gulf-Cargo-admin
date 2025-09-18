@@ -1,0 +1,16 @@
+:root{
+    --primary-color: #262262;
+    --secondary-color: #ED2624;
+    --text-color: #1e1e1e;
+}
+.create-shipment-header{
+    border-bottom: .5px solid rgb(224, 224, 224);
+    padding-bottom: 15px;
+}
+.all-cargo-list-icon{
+    color: var(--secondary-color);
+    font-size: 25px;
+}
+.party-details-icon{
+    color: var(--secondary-color);
+}

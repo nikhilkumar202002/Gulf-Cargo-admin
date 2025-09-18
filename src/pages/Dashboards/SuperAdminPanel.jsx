@@ -79,7 +79,7 @@ export default function SuperAdminPanel() {
       try {
         setLoading(true);
         setErr("");
-        const res = await getCounters({ totalStaff: true, sender: true, receiver: true });
+        const res = await getCounters({ totalStaff: false, sender: true, receiver: true });
         setLive({
           totalStaff: num(res?.totalStaff),
           sender: num(res?.customerType1),
@@ -139,9 +139,7 @@ export default function SuperAdminPanel() {
           </Card>
         </div>
 
-        <div className="mt-6 text-xs text-gray-500">
-          * Live: Total Staffs, Senders, Receiver. Others are placeholders until endpoints are ready.
-        </div>
+     
       </div>
     </section>
   );

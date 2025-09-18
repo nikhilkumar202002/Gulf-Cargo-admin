@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { listShipments, updateShipmentStatus } from "../../api/shipmentsApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi"; // optional; falls back if missing
+import { FaRegEye } from "react-icons/fa6";
+import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
+import { FaRegEdit } from "react-icons/fa";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
@@ -226,15 +229,18 @@ const onApply = async (e) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
-        <div className="mx-auto w-full px-4 py-6 sm:px-6 lg:px-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Shipment Report</h1>
-          <p className="mt-1 text-sm text-slate-600">View, filter, and update status for filtered shipments.</p>
-        </div>
-      </header>
+    <div className="min-h-screen">
+      <div>
+        <header>
+          <div className="mx-auto max-w-6xl">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Shipment Report</h1>
+            <p className="mt-1 text-sm text-slate-600">View, filter, and update status for filtered shipments.</p>
+          </div>
+        </header>
+      </div>
+    
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-6xl  py-6 ">
         {/* Filters */}
         <form
           onSubmit={onApply}
@@ -429,25 +435,30 @@ const onApply = async (e) => {
                           <Link
                             to={`/shipments/shipmentsview/${r.id}`}
                             state={{ shipment: r }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
                           >
-                            View
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-                              <path d="M9 18l6-6-6-6" />
-                            </svg>
+                            
+                            <FaRegEye/>
                           </Link>
 
                           <Link
                             to={`/shipments/shipmentsview/${r.id}/invoice`}
                             state={{ shipment: r }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-3 py-1.5 font-medium text-indigo-700 hover:bg-indigo-50"
-                          >
-                            Invoice
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-2 py-1.5 font-medium text-indigo-700 hover:bg-indigo-50"
+                          >                            
+                            <LiaFileInvoiceDollarSolid/>
+                          </Link>
+
+                            <Link
+                            to={`/shipments/shipmentsview/${r.id}/invoice`}
+                            state={{ shipment: r }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-2 py-1.5 font-medium text-indigo-700 hover:bg-indigo-50"
+                          >                            
+                            <FaRegEdit/>
                           </Link>
                         </div>
                       </td>
-
+  
                       </tr>
                     );
                   })}

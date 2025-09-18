@@ -1,7 +1,5 @@
-// src/pages/ShipmentStatus/ShipmentStatusView.jsx
 import React, { useEffect, useState } from "react";
-import { useAuth } from "../../auth/AuthContext";
-import { getShipmentStatuses } from "../../api/shipmentStatusApi";
+import { getShipmentStatuses } from "../../api/shipmentStatusApi"; // Keep the data fetching function
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 function classNames(...cls) {
@@ -9,13 +7,7 @@ function classNames(...cls) {
 }
 
 const Spinner = ({ className = "h-4 w-4 text-indigo-600" }) => (
-  <svg
-    className={classNames("animate-spin", className)}
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-  >
+  <svg className={classNames("animate-spin", className)} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
   </svg>
@@ -35,7 +27,7 @@ const StatusBadge = ({ active }) => (
   </span>
 );
 
-// normalize status field to boolean
+// Define isActiveFrom function here
 const isActiveFrom = (val) => {
   if (val === true) return true;
   if (val === false) return false;
@@ -47,41 +39,37 @@ const isActiveFrom = (val) => {
   return false; // default
 };
 
+// fetchRows function now accepts state setters as arguments
+const fetchRows = async (setLoading, setRows, setMsg) => {
+  setLoading(true);
+  setMsg({ text: "", variant: "" });
+  try {
+    const list = await getShipmentStatuses(); // Make sure this is a valid API request
+    console.log("API Response: ", list); // Log the API response for debugging
+    setRows(Array.isArray(list) ? list : []);
+  } catch (err) {
+    console.error("Failed to fetch shipment statuses", err?.response || err);
+    setMsg({
+      text: err?.response?.data?.message || "Failed to load shipment statuses.",
+      variant: "error",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
 export default function ShipmentStatusView() {
-  const { token } = useAuth();
-  const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState([]); // Ensure initial state is an empty array
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState({ text: "", variant: "" });
-
-  // optional toast when redirected from create page
   const [toast, setToast] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const fetchRows = async () => {
-    setLoading(true);
-    setMsg({ text: "", variant: "" });
-    try {
-      // No filter: fetch all
-      const list = await getShipmentStatuses({}, token);
-      setRows(Array.isArray(list) ? list : []);
-    } catch (err) {
-      console.error("Failed to fetch shipment statuses", err?.response || err);
-      setMsg({
-        text: err?.response?.data?.message || "Failed to load shipment statuses.",
-        variant: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchRows();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+    fetchRows(setLoading, setRows, setMsg); // Pass state setters to the fetch function
+  }, []);
 
-  // pick up toast from create page
   useEffect(() => {
     if (location.state?.toast) {
       setToast(location.state.toast);
@@ -89,7 +77,6 @@ export default function ShipmentStatusView() {
     }
   }, [location, navigate]);
 
-  // auto hide toast
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 4000);
@@ -148,7 +135,7 @@ export default function ShipmentStatusView() {
             {/* Refresh */}
             <button
               type="button"
-              onClick={fetchRows}
+              onClick={() => fetchRows(setLoading, setRows, setMsg)} // Use the function with state setters
               disabled={loading}
               className={classNames(
                 "inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition",
@@ -162,8 +149,7 @@ export default function ShipmentStatusView() {
                 </>
               ) : (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                       fill="currentColor" className="h-4 w-4" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden="true">
                     <path d="M12 4a8 8 0 017.446 5.032.75.75 0 01-1.392.536A6.5 6.5 0 105.5 12h1.75a.75.75 0 010 1.5H4.25A.75.75 0 013.5 12v-3a.75.75 0 011.5 0v1.26A8 8 0 0112 4zm6.75 6.5a.75.75 0 01.75.75v3a.75.75 0 01-.75.75H15a.75.75 0 010-1.5h1.76A6.5 6.5 0 1112 5.5a.75.75 0 010 1.5 5 5 0 105 5h1.75z" />
                   </svg>
                   Refresh
@@ -176,29 +162,13 @@ export default function ShipmentStatusView() {
               to="/shipmentstatus/create"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                   fill="currentColor" className="h-4 w-4" aria-hidden="true">
-                <path d="M12 4.5a.75.75 0 01.75.75v6h6a.75.75 0 010 1.5h-6v6a.75.75 0 01-1.5 0v-6h-6a.75.75 0 010-1.5h6v-6A.75.75 0 0112 4.5z"/>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+                <path d="M12 4.5a.75.75 0 01.75.75v6h6a.75.75 0 010 1.5h-6v6a.75.75 0 01-1.5 0v-6h-6a.75.75 0 010-1.5h6v-6A.75.75 0 0112 4.5z" />
               </svg>
               Add New
             </Link>
           </div>
         </div>
-
-        {/* Messages */}
-        {msg.text ? (
-          <div
-            role="status"
-            className={classNames(
-              "m-4 rounded-xl border px-3 py-2 text-sm",
-              msg.variant === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-rose-200 bg-rose-50 text-rose-800"
-            )}
-          >
-            {msg.text}
-          </div>
-        ) : null}
 
         {/* Table */}
         <div className="overflow-x-auto">

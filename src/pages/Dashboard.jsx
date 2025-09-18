@@ -1,25 +1,35 @@
-import React from "react";
-import { useAuth } from "../auth/AuthContext";
+
+import { useSelector } from "react-redux";
 import SuperAdminPanel from "./Dashboards/SuperAdminPanel";
 import StaffDashboard from "./Dashboards/StaffDashboard";
 import AgencyDashboard from "./Dashboards/AgencyDashboard";
 
 const dashboardMap = {
-  1: SuperAdminPanel,
-  2: StaffDashboard,
-  3: AgencyDashboard,
+  1: SuperAdminPanel, // Super Admin
+  2: StaffDashboard,  // Staff
+  3: AgencyDashboard, // Agency
 };
 
 export default function Dashboard() {
-  const { roleId, loading, isAuthenticated } = useAuth();
+  // read from Redux, not AuthContext
+  const { token, status, user } = useSelector((s) => s.auth || {});
+  const isAuthenticated = Boolean(token);
 
-  if (loading) {
+  // while profile is loading (or not yet fetched), wait
+  if (!isAuthenticated) {
+    return (
+      <p className="text-center text-red-500 text-lg mt-10">
+        Please log in first.
+      </p>
+    );
+  }
+  if (status === "loading" || !user) {
     return <p className="text-center mt-10">Loading Dashboard...</p>;
   }
 
-  if (!isAuthenticated) {
-    return <p className="text-center text-red-500 text-lg mt-10">Please log in first.</p>;
-  }
+  // support multiple possible shapes for role
+  const roleId =
+    user?.role_id ?? user?.roleId ?? user?.role?.id ?? user?.role ?? null;
 
   const DashboardComponent = dashboardMap[roleId];
 

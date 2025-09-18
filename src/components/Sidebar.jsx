@@ -3,7 +3,7 @@ import "./layout.css";
 import { IoIosArrowDown, IoIosArrowUp } from "react-icons/io";
 import { NavLink } from "react-router-dom";
 import { rolesMenu } from "../rolemenu/rolesMenu"; 
-import { IoClose } from "react-icons/io5";
+import Logo from "../../src/assets/Logo.png"
 
 export default function Sidebar({ userRole }) {
   
@@ -38,7 +38,7 @@ export default function Sidebar({ userRole }) {
   return (
     <aside className="sidebar">
       <div className="logo-section" style={{ display: "flex", alignItems: "center", padding: 16 }}>
-        <img src="/Logo.png" alt="Logo" style={{ height: 40, marginRight: 10 }} />
+        <img src={Logo} alt="Logo" style={{ height: 40, marginRight: 10 }} />
       </div>
 
       <ul className="menu-list" style={{ padding: 0, margin: 0 }}>

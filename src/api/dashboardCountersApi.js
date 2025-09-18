@@ -1,7 +1,7 @@
-
+// src/api/dashboardCountersApi.js
 import api from "./axiosInstance";
 
-/** Try to pull a numeric count out of various API shapes */
+/** pull a numeric count from various response shapes */
 const toCount = (res) => {
   const d = res?.data ?? {};
   if (typeof d === "number") return d;
@@ -16,20 +16,37 @@ const getCount = async (path, config = {}) => {
   return toCount(res);
 };
 
-// ---- SAFE GET (return null on 404 so UI won’t crash) ----
 const safeGet = async (path, config) => {
   try {
     return await getCount(path, config);
   } catch (err) {
-    if (err?.response?.status === 404) return null;
+    if (err?.response?.status === 404) return null; // ignore missing route
     throw err;
   }
 };
 
+// ----- NEW: derive totalStaff if /count-staff is missing -----
+async function fetchTotalStaff(config) {
+  // 1) try a direct total
+  const direct = await safeGet("/count-staff", config);
+  if (typeof direct === "number") return direct;
+
+  // 2) fallback: sum active + inactive (if backend exposes them)
+  const [active, inactive] = await Promise.all([
+    safeGet("/count-active-staff", config),
+    safeGet("/count-inactive-staff", config),
+  ]);
+  const a = Number(active) || 0;
+  const b = Number(inactive) || 0;
+  if (a || b) return a + b;
+
+  // 3) nothing available
+  return 0;
+}
+
 /**
  * getCounters({ totalStaff, sender, receiver })
- * - Only hits endpoints you enable
- * - Silently returns 0 when an endpoint is missing (404)
+ * Only hits what you request. Missing routes resolve to 0.
  */
 export const getCounters = async (
   { totalStaff = true, sender = true, receiver = true } = {},
@@ -38,10 +55,7 @@ export const getCounters = async (
   const tasks = [];
 
   if (totalStaff) {
-    // If your backend has a different route, change here (e.g. "/staff/count")
-    tasks.push(
-      safeGet("/count-staff", config).then((v) => ["totalStaff", Number(v) || 0])
-    );
+    tasks.push(fetchTotalStaff(config).then((v) => ["totalStaff", v]));
   }
   if (sender) {
     tasks.push(

@@ -86,9 +86,10 @@
 }
 .login-form-row label{
     font-size: 13px;
-    font-family: "Roboto";
+    font-family: "Inter";
     font-weight: 400;
     padding-bottom: 4px;
+    color: #747474;
 }
 .login-register-link{
     padding: 10px 0px 0px;
@@ -168,7 +169,20 @@
   margin-top: 10px;
   color: #f00;
 }
+.forgot-password-link{
+  width: 100%;
+  display: flex;
+  justify-content: end;
 
+}
+.forgot-password-link a{
+  font-size: 13px;
+  font-family: "Inter";
+  margin-top: 10px !important;
+}
+.eye-color{
+  color: var(--primary-color);
+}
 /* reset password */
 
 .reset-password{

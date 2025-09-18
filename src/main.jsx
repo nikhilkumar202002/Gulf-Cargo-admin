@@ -1,12 +1,17 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
-import { AuthProvider } from "./auth/AuthContext.jsx";
+import { Provider } from 'react-redux'
+import { store } from './store'
+
+import "@fontsource/inter"; 
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/400-italic.css";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <AuthProvider>
+    <Provider  store={store}>
       <App />
-    </AuthProvider>
+    </Provider >
   </React.StrictMode>
 );

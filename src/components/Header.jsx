@@ -1,55 +1,107 @@
-import React, { useState, useEffect, useRef } from "react";
+// src/layout/Header.jsx
+import { useEffect, useState, useRef } from "react";
 import { IoIosArrowDown, IoIosSettings, IoIosLogOut } from "react-icons/io";
 import { IoNotifications } from "react-icons/io5";
 import { Link, useNavigate } from "react-router-dom";
 import { FiMenu } from "react-icons/fi";
 import "./layout.css";
-import { useAuth } from "../auth/AuthContext";
-import { getProfile, logout } from "../api/accountApi";
+import { useDispatch } from "react-redux";
+import { clearAuth } from "../store/slices/authSlice";
+import { logout as apiLogout, getProfile } from "../api/accountApi";
+import axiosInstance from "../api/axiosInstance";
+
+/* helpers */
+const pickFirst = (obj, paths) => {
+  for (const p of paths) {
+    const chain = p.split(".");
+    let cur = obj;
+    for (const key of chain) {
+      if (cur == null) break;
+      cur = cur[key];
+    }
+    if (cur != null && String(cur).trim() !== "") return cur;
+  }
+  return null;
+};
+const resolveAssetUrl = (u) => {
+  if (!u) return null;
+  if (/^(https?:)?\/\//i.test(u) || u.startsWith("data:") || u.startsWith("blob:")) return u;
+  const base = (axiosInstance?.defaults?.baseURL || "").replace(/\/+$/, "");
+  return `${base}/${String(u).replace(/^\/+/, "")}`;
+};
 
 export default function Header() {
   const [showSettings, setShowSettings] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [userName, setUserName] = useState("User");
   const [notifications, setNotifications] = useState([]);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [user, setUser] = useState(null); // fetched from DB
+
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { logout: contextLogout } = useAuth();
 
-  // Fetch profile
+  const handleLogout = async () => {
+    try { await apiLogout(); } catch {}
+    try { localStorage.removeItem("token"); } catch {}
+    dispatch(clearAuth());
+    navigate("/login", { replace: true });
+  };
+
+  // Redirect to /login if axios interceptor emits 'auth:unauthorized'
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const data = await getProfile();
-        const name = data?.user?.name || "User";
-        setUserName(name);
-        localStorage.setItem("userName", name);
-      } catch (err) {
-        console.error("Failed to fetch profile:", err);
-        navigate("/login");
-      }
-    };
-
-    fetchProfile();
-  }, [navigate]);
-
-  // Set dummy notifications
-  useEffect(() => {
-    const dummyNotifications = [
-      { id: 1, message: "Your shipment has been dispatched 🚚" },
-      { id: 2, message: "Invoice #452 generated successfully 📄" },
-      { id: 3, message: "New update available, please refresh 🔄" },
-      { id: 4, message: "Your profile was viewed 5 times today 👀" },
-    ];
-
-    // Simulate API delay
-    setTimeout(() => {
-      setNotifications(dummyNotifications);
-    }, 800);
+    const onUnauthorized = () => handleLogout();
+    window.addEventListener("auth:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Close dropdowns when clicking outside
+  // Fetch profile (DB)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingProfile(true);
+      try {
+        const payload = await getProfile();
+        const profile = payload?.data?.user || payload?.user || payload?.data || payload;
+
+        const name =
+          pickFirst(profile, ["name", "user.name", "profile.name"]) || "User";
+
+        // Your API gives absolute URL at 'profile_pic'
+        const rawPic = pickFirst(profile, [
+          "profile_pic",
+          "user.profile_pic",
+          "avatar",
+          "profile_image",
+          "photo",
+        ]);
+        const photo = resolveAssetUrl(rawPic) || "/avatar.png";
+
+        if (!cancelled) setUser({ ...profile, name, profile_pic: photo });
+      } catch (e) {
+        // 401 handled by interceptor → will trigger handleLogout via event
+        console.error("getProfile failed:", e?.response?.data || e?.message);
+      } finally {
+        if (!cancelled) setLoadingProfile(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Dummy notifications (replace with API later)
+  useEffect(() => {
+    const dummy = [
+      { id: 1, message: "Your shipment has been dispatched 🚚" },
+      { id: 2, message: "Invoice generated successfully 📄" },
+      { id: 3, message: "New update available, please refresh 🔄" },
+    ];
+    const t = setTimeout(() => setNotifications(dummy), 800);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -67,33 +119,20 @@ export default function Header() {
         setShowNotifications(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Logout function
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (err) {
-      console.error("Logout failed:", err);
-    } finally {
-      localStorage.removeItem("token");
-      localStorage.removeItem("userName");
-      contextLogout();
-      navigate("/login", { replace: true });
-    }
-  };
-
-    const openSidebar = () => {
+  const openSidebar = () => {
     window.dispatchEvent(new CustomEvent("toggle-sidebar"));
   };
 
+  const userName = user?.name || "User";
+  const avatarUrl = user?.profile_pic || "/avatar.png";
+
   return (
     <header className="header flex justify-between items-center">
-      
-       <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3">
         <button
           type="button"
           className="icon-btn lg:hidden"
@@ -104,7 +143,8 @@ export default function Header() {
         </button>
 
         <span className="flex gap-2">
-          Welcome Back <h1 className="header-username">{userName}!</h1>
+          Welcome Back{" "}
+          <h1 className="header-username">{loadingProfile ? "…" : `${userName}!`}</h1>
         </span>
       </div>
 
@@ -150,7 +190,16 @@ export default function Header() {
             className="acount-avatar flex items-center gap-2 cursor-pointer"
             onClick={() => setShowSettings((s) => !s)}
           >
-            <img src="/avatar.png" alt="User" className="w-8 h-8 rounded-full" />
+            <img
+              src={avatarUrl}
+              alt="User"
+              className="w-8 h-8 rounded-full object-cover"
+              onError={(e) => {
+                if (!e.currentTarget.src.includes("/avatar.png")) {
+                  e.currentTarget.src = "/avatar.png";
+                }
+              }}
+            />
             <span className="user flex gap-1 items-center font-medium select-none">
               {userName}
               <IoIosArrowDown

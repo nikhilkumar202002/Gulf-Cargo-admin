@@ -47,21 +47,36 @@ export const resetPassword = async (email, otp, password) => {
   return unwrap(res);
 };
 
-export const staffRegister = async (data, token, axiosOpts) => {
-  try {
-    const response = await axiosInstance.post("/register", data, {
-      headers: {
-        "Authorization": `Bearer ${token}`,
-      },
-      ...axiosOpts, 
+export const staffRegister = async (payload, token, axiosOpts = {}) => {
+  // Normalize payload to FormData
+  const formData = payload instanceof FormData ? payload : (() => {
+    const fd = new FormData();
+    Object.entries(payload || {}).forEach(([k, v]) => {
+      if (v == null) return;
+      if (Array.isArray(v)) {
+        const key = k.endsWith("[]") ? k : `${k}[]`;
+        v.forEach((val) => fd.append(key, val));
+      } else {
+        fd.append(k, v);
+      }
     });
-    return response.data;
-  } catch (error) {
-    console.error("Error registering staff:", error);
-    throw error; // Handle this in the component
-  }
-};
+    return fd;
+  })();
 
+  // Use proper staff endpoint (configurable)
+  const path = import.meta.env.VITE_STAFF_REGISTER_PATH || "/register";
+
+  const res = await axiosInstance.post(path, formData, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Accept: "application/json",
+      // no 'Content-Type' here—axios will set multipart boundary automatically
+    },
+    ...axiosOpts,
+  });
+
+  return unwrap(res);
+};
 
 
 export const listStaffs = async (params = {}) => {
