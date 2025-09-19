@@ -1,10 +1,8 @@
+// src/pages/CreateCargo.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 
-// ✅ adjust the relative path if your project structure differs
-import { createCargo, normalizeCargoToInvoice } from "../../api/createCargoApi";
-import InvoiceModal from "../../components/InvoiceModal";
-
+import { createCargo, normalizeCargoToInvoice } from "../../api/createCargoApi"; // ← adjust path
 import { getActiveShipmentMethods } from "../../api/shipmentMethodApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 import { getActiveBranches, getBranchUsers } from "../../api/branchApi";
@@ -13,41 +11,36 @@ import { getAllPaymentMethods } from "../../api/paymentMethod";
 import { getActiveDeliveryTypes } from "../../api/deliveryType";
 import { getActiveDrivers } from "../../api/driverApi";
 import { getProfile } from "../../api/accountApi";
+import { getActiveCollected } from "../../api/collectedByApi"; // loads Driver/Office roles
 
+import InvoiceModal from "../../components/InvoiceModal"; // if you don't have this, you can remove modal usage
 import { IoLocationSharp } from "react-icons/io5";
 import { MdAddIcCall } from "react-icons/md";
 import { BsFillBoxSeamFill } from "react-icons/bs";
+
 import "./ShipmentStyles.css";
 
-/* ---------- Helpers ---------- */
-const idOf = (o) =>
-  o?.id ?? o?.party_id ?? o?._id ?? o?.value ?? String(o?.name ?? o?.title ?? "");
+// -------- helpers --------
+const unwrapArray = (o) => {
+  if (!o) return [];
+  if (Array.isArray(o)) return o;
+  if (Array.isArray(o?.data?.data)) return o.data.data;
+  if (Array.isArray(o?.data)) return o.data;
+  if (Array.isArray(o?.items)) return o.items;
+  if (Array.isArray(o?.results)) return o.results;
+  return [];
+};
+const idOf = (o) => o?.id ?? o?.value ?? o?._id ?? null;
 const labelOf = (o) =>
   o?.name ?? o?.title ?? o?.label ?? o?.company_name ?? o?.branch_name ?? "-";
-const toList = (res) =>
-  Array.isArray(res) ? res :
-    Array.isArray(res?.data?.data) ? res.data.data :
-      Array.isArray(res?.data) ? res.data :
-        Array.isArray(res?.items) ? res.items :
-          Array.isArray(res?.results) ? res.results : [];
-
 const today = () => new Date().toISOString().split("T")[0];
-
-// tiny pickers for current user auto-selects
-const pickUserId = (u) => u?.id ?? u?.user_id ?? u?.driver_id ?? null;
-const pickUserName = (u) => u?.name ?? u?.username ?? u?.full_name ?? "";
 const pickBranchId = (u) => u?.branch_id ?? u?.branchId ?? null;
-
-const getDriverId = (d) => d?.id ?? d?.driver_id ?? null;        // from /drivers
-const getStaffId = (u) => u?.id ?? u?.user_id ?? u?.staff_id ?? null; // from /branch users
-const getPersonName = (p) =>
-  p?.name ?? p?.full_name ?? p?.username ?? p?.title ?? p?.email ?? "User";
-
+const pickUserId = (u) => u?.id ?? u?.user_id ?? null;
 
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
 
-  // Select options
+  // selects
   const [branches, setBranches] = useState([]);
   const [methods, setMethods] = useState([]);
   const [statuses, setStatuses] = useState([]);
@@ -55,9 +48,10 @@ export default function CreateCargo() {
   const [receivers, setReceivers] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [deliveryTypes, setDeliveryTypes] = useState([]);
-  const [collectedByOptions, setCollectedByOptions] = useState([]);
+  const [collectRoles, setCollectRoles] = useState([]);         // [{id:1,name:'Driver'},{id:2,name:'Office'}]
+  const [collectedByOptions, setCollectedByOptions] = useState([]); // drivers OR staff array
 
-  // User/profile/context
+  // user/profile
   const [userProfile, setUserProfile] = useState(null);
 
   // UI
@@ -66,11 +60,8 @@ export default function CreateCargo() {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceShipment, setInvoiceShipment] = useState(null);
 
-  const [collectedById, setCollectedById] = useState("");
-
-  // Form
+  // form
   const [form, setForm] = useState({
-    bookingNo: "",
     branchId: "",
     senderId: "",
     senderAddress: "",
@@ -78,65 +69,73 @@ export default function CreateCargo() {
     receiverId: "",
     receiverAddress: "",
     receiverPhone: "",
-    shippingMethodId: "",     // number (required)
-    paymentMethodId: "",      // number (required)
-    paymentMethod: "",        // optional label, we’ll auto-fill
-    statusId: "",             // number (required)
-    date: today(),            // required
-    userType: "",             // "driver" | "office" -> we map to role text below
-    collectedBy: "",          // person id (used for UI only)
-    staffName: "",
-    lrlTrackingCode: "",      // required
-    deliveryTypeId: "",       // number (required)
-    deliveryType: "",         // optional label, we’ll auto-fill
+
+    shippingMethodId: "",
+    paymentMethodId: "",
+    statusId: "",
+
+    date: today(),
     time: "09:36",
-    billCharges: 0,           // required
-    vatPercentage: 0,         // required
-    valueOfGoods: 0,          // derived from items subtotal
-    specialRemarks: "",       // required -> goes to special_remarks
+
+    collectedByRoleId: "",     // 1 | 2 from /collected
+    collectedByRoleName: "",   // 'Driver' | 'Office'
+    collectedByPersonId: "",   // numeric person id
+
+    lrlTrackingCode: "",
+    deliveryTypeId: "",
+    specialRemarks: "",
+
+    billCharges: 0,
+    vatPercentage: 0,
   });
 
-  // Items (ensure weight present)
+  // items
   const [items, setItems] = useState([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
-
-  // Derived totals
-  const rowTotal = (it) =>
-    Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2));
+  const rowTotal = (it) => Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2));
   const subtotal = items.reduce((s, it) => s + rowTotal(it), 0);
 
-  /* ---------- initial load ---------- */
+  // totals
+  const billCharges = Number(form.billCharges || 0);
+  const vatPercentage = Number(form.vatPercentage || 0);
+  const totalCost = Number(subtotal.toFixed(2));
+  const vatCost = Number(((totalCost * vatPercentage) / 100).toFixed(2));
+  const netTotal = Number((totalCost + billCharges + vatCost).toFixed(2));
+  const totalWeight = Number(
+    items.reduce((sum, it) => sum + Number(it.weight || 0) * Number(it.pieces || 0), 0).toFixed(3)
+  );
+
+  // ---------- initial load ----------
   useEffect(() => {
     (async () => {
       setLoading(true);
       setMsg({ text: "", variant: "" });
       try {
-        const [me, b, m, st, pm, dt] = await Promise.all([
+        const [me, b, m, st, pm, dt, roles] = await Promise.all([
           getProfile(),
           getActiveBranches(),
           getActiveShipmentMethods(),
           getActiveShipmentStatuses(),
           getAllPaymentMethods(),
           getActiveDeliveryTypes(),
+          getActiveCollected(), // loads { success, data: [ {id, name} ] }
         ]);
-
         setUserProfile(me?.data ?? me ?? null);
-        setBranches(toList(b));
-        setMethods(toList(m));
-        setStatuses(toList(st));
-        setPaymentMethods(toList(pm));
-        setDeliveryTypes(toList(dt));
+        setBranches(unwrapArray(b));
+        setMethods(unwrapArray(m));
+        setStatuses(unwrapArray(st));
+        setPaymentMethods(unwrapArray(pm));
+        setDeliveryTypes(unwrapArray(dt));
+        setCollectRoles(Array.isArray(roles?.data) ? roles.data : []);
 
-        // pre-load parties (coarse search)
         const [snd, rcv] = await Promise.all([
           getParties({ customer_type: "Sender" }),
           getParties({ customer_type: "Receiver" }),
         ]);
-        setSenders(toList(snd));
-        setReceivers(toList(rcv));
+        setSenders(unwrapArray(snd));
+        setReceivers(unwrapArray(rcv));
       } catch (e) {
-        console.error(e);
         setMsg({
-          text: e?.response?.data?.message || "Failed to load options.",
+          text: e?.details?.message || e?.message || "Failed to load options.",
           variant: "error",
         });
       } finally {
@@ -145,71 +144,55 @@ export default function CreateCargo() {
     })();
   }, [token]);
 
-  // auto-select current user's branch
+  // auto-select current user's branch if available
   useEffect(() => {
     if (!userProfile || !branches.length) return;
     const userBranchId = pickBranchId(userProfile);
     if (!userBranchId) return;
-    const matching = branches.find((br) => String(idOf(br)) === String(userBranchId));
-    if (matching) {
+    const match = branches.find((br) => String(idOf(br)) === String(userBranchId));
+    if (match) {
       setForm((f) =>
-        f.branchId && f.branchId === String(idOf(matching))
-          ? f
-          : { ...f, branchId: String(idOf(matching)) }
+        f.branchId && f.branchId === String(idOf(match)) ? f : { ...f, branchId: String(idOf(match)) }
       );
     }
   }, [userProfile, branches]);
 
-  // dependent collectedBy list (driver vs office)
-  useEffect(() => {
-    if (!form.userType) {
-      setCollectedByOptions([]);
-      setForm((f) => ({ ...f, collectedBy: "", staffName: "" })); // clear on role change
-      return;
-    }
-    (async () => {
-      setLoading(true);
-      try {
-        if (form.userType === "driver") {
-          const res = await getActiveDrivers();
-          const list = toList(res);
-          setCollectedByOptions(list);
-          // Do NOT auto-pick current user for drivers; usually not a driver
-          setForm((f) => ({ ...f, collectedBy: "", staffName: "" }));
-        } else if (form.userType === "office") {
-          const branchId = form.branchId || pickBranchId(userProfile);
-          if (!branchId) {
-            setMsg({ text: "Select a branch first to load office staff.", variant: "error" });
-            setCollectedByOptions([]);
-            return;
-          }
-          const res = await getBranchUsers(branchId);
-          const list = toList(res);
-          setCollectedByOptions(list);
+  // Role change -> populate collectedByOptions
+  const onRoleChange = async (e) => {
+    const roleId = e.target.value;
+    const role = collectRoles.find((r) => String(r.id) === String(roleId));
+    const roleName = role?.name || "";
 
-          // If the logged-in user is in this branch list, preselect them
-          const me = list.find((u) => String(getStaffId(u)) === String(pickUserId(userProfile)));
-          if (me) {
-            setForm((f) => ({
-              ...f,
-              collectedBy: String(getStaffId(me)),
-              staffName: getPersonName(me),
-            }));
-          } else {
-            setForm((f) => ({ ...f, collectedBy: "", staffName: "" }));
-          }
+    setForm((f) => ({
+      ...f,
+      collectedByRoleId: roleId,
+      collectedByRoleName: roleName,
+      collectedByPersonId: "",
+    }));
+
+    try {
+      if (roleName === "Driver") {
+        const res = await getActiveDrivers();
+        setCollectedByOptions(unwrapArray(res));
+      } else if (roleName === "Office") {
+        const branchId = form.branchId || pickBranchId(userProfile);
+        if (!branchId) {
+          setCollectedByOptions([]);
+          setMsg({ text: "Select a branch first to load office staff.", variant: "error" });
+          return;
         }
-      } catch (e) {
-        console.error(e);
+        const res = await getBranchUsers(branchId);
+        setCollectedByOptions(unwrapArray(res));
+      } else {
         setCollectedByOptions([]);
-        setMsg({ text: "Failed to load list for the selected type.", variant: "error" });
-      } finally {
-        setLoading(false);
       }
-    })();
-  }, [form.userType, form.branchId, userProfile]);
+    } catch (err) {
+      setCollectedByOptions([]);
+      setMsg({ text: "Failed to load list for the selected role.", variant: "error" });
+    }
+  };
 
-  // selected sender/receiver derived (for address/phone autofill)
+  // party autofill (address/phone)
   const selectedSender = useMemo(
     () => senders.find((s) => String(idOf(s)) === String(form.senderId)) || null,
     [senders, form.senderId]
@@ -218,7 +201,6 @@ export default function CreateCargo() {
     () => receivers.find((r) => String(idOf(r)) === String(form.receiverId)) || null,
     [receivers, form.receiverId]
   );
-
   useEffect(() => {
     setForm((f) => ({
       ...f,
@@ -226,7 +208,6 @@ export default function CreateCargo() {
       senderPhone: selectedSender?.contact_number ?? "",
     }));
   }, [selectedSender]);
-
   useEffect(() => {
     setForm((f) => ({
       ...f,
@@ -235,24 +216,7 @@ export default function CreateCargo() {
     }));
   }, [selectedReceiver]);
 
-  // keep "Value of Goods" synced with items subtotal
-  useEffect(() => {
-    setForm((f) => ({ ...f, valueOfGoods: Number(subtotal.toFixed(2)) }));
-  }, [subtotal]);
-
-  /* ---------- handlers ---------- */
-  const onForm = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => {
-      const next = { ...prev, [name]: value };
-      if (name === "userType") {
-        next.collectedBy = "";
-        next.staffName = "";
-      }
-      return next;
-    });
-  };
-
+  // item helpers
   const setItem = (idx, key, val) => {
     setItems((prev) => {
       const next = [...prev];
@@ -268,138 +232,140 @@ export default function CreateCargo() {
       return next;
     });
   };
-
-  const billCharges = Number(form.billCharges || 0);
-  const vatPercentage = Number(form.vatPercentage || 0);
-
-  const totalCost = Number(subtotal.toFixed(2)); // items sum
-  const vatCost = Number(((totalCost * vatPercentage) / 100).toFixed(2)); // VAT on totalCost
-  const netTotal = Number((totalCost + billCharges + vatCost).toFixed(2));
-
-  const totalWeight = Number(
-    items.reduce((sum, it) => sum + Number(it.weight || 0) * Number(it.pieces || 0), 0).toFixed(3)
-  );
-
   const addRow = () => setItems((p) => [...p, { name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
   const removeRow = (idx) => setItems((p) => p.filter((_, i) => i !== idx));
-  const clearRows = () => setItems([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
 
-  /* ---------- SUBMIT ---------- */
- const submit = async (e) => {
-  e.preventDefault();
+  // ------- validation -------
+  const validateBeforeSubmit = () => {
+    const missing = [];
+    if (!form.branchId) missing.push("Branch");
+    if (!form.senderId) missing.push("Sender");
+    if (!form.receiverId) missing.push("Receiver");
+    if (!form.shippingMethodId) missing.push("Shipping Method");
+    if (!form.paymentMethodId) missing.push("Payment Method");
+    if (!form.statusId) missing.push("Status");
+    if (!form.deliveryTypeId) missing.push("Delivery Type");
+    if (!form.date) missing.push("Date");
+    if (!form.collectedByRoleId || !form.collectedByRoleName) missing.push("Collected By (Role)");
+    if (!form.collectedByPersonId) missing.push("Collected By (Person)");
+    if (!form.lrlTrackingCode) missing.push("LRL Tracking Code");
+    if (!form.specialRemarks) missing.push("Special Remarks");
 
-  // sanity checks
-  const missing = [];
-  if (!form.branchId) missing.push("Branch");
-  if (!form.senderId) missing.push("Sender");
-  if (!form.receiverId) missing.push("Receiver");
-  if (!form.shippingMethodId) missing.push("Shipping Method");
-  if (!form.paymentMethodId) missing.push("Payment Method");
-  if (!form.statusId) missing.push("Status");
-  if (!form.deliveryTypeId) missing.push("Delivery Type");
-  if (!form.date) missing.push("Date");
-  if (!form.collectedBy) missing.push("Collected By (Person)");
-  if (!form.lrlTrackingCode) missing.push("LRL Tracking Code");
-  if (!form.specialRemarks) missing.push("Special Remarks");
-  if (Number.isNaN(billCharges)) missing.push("Bill Charges");
-  if (Number.isNaN(vatPercentage)) missing.push("VAT %");
-
-  if (!items.some(it => (it.name?.trim() || "") && Number(it.pieces || 0) > 0)) {
-    missing.push("At least one item (name + pieces)");
-  }
-  if (items.some(it => Number(it.weight || 0) <= 0)) {
-    missing.push("Each item needs weight > 0");
-  }
-  if (missing.length) {
-    setMsg({ text: `Missing/invalid: ${missing.join(", ")}`, variant: "error" });
-    return;
-  }
-
-  // ✅ define once here
-  const collectedByIdNum = Number(form.collectedBy || 0);
-let idExists = false;
-
-if (form.userType === "driver") {
-  const driverIdOf = (d) => d?.driver_id ?? d?.id ?? null;
-  idExists = collectedByOptions.some(d => Number(driverIdOf(d)) === collectedByIdNum);
-} else if (form.userType === "office") {
-  const staffIdOf = (u) => u?.staff_id ?? u?.user_id ?? u?.id ?? null;
-  idExists = collectedByOptions.some(u => Number(staffIdOf(u)) === collectedByIdNum);
-} else {
-  setMsg({ text: "Choose a role for ‘Collected By’ (Driver/Office).", variant: "error" });
-  return;
-}
-
-if (!idExists) {
-  setMsg({ text: `Selected person doesn’t belong to the ${form.userType} list. Re-select.`, variant: "error" });
-  return;
-}
-
-  // role text
-  const roleText = form.userType === "driver" ? "Driver" : "Office";
-
-  // ✅ payload
-  const payload = {
-    branch_id: Number(form.branchId),
-    sender_id: Number(form.senderId),
-    sender_address: form.senderAddress || "",
-    sender_phone: form.senderPhone || "",
-    receiver_id: Number(form.receiverId),
-    receiver_address: form.receiverAddress || "",
-    receiver_phone: form.receiverPhone || "",
-
-    shipping_method_id: Number(form.shippingMethodId),
-    payment_method_id: Number(form.paymentMethodId),
-    status_id: Number(form.statusId),
-    date: form.date,
-    time: form.time,
-
-   collected_by: form.userType === "driver" ? "Driver" : "Office",
-collected_by_id: collectedByIdNum,
-name_id: collectedByIdNum, // keep if your backend expects it
-
-    lrl_tracking_code: form.lrlTrackingCode,
-    delivery_type_id: Number(form.deliveryTypeId),
-    special_remarks: form.specialRemarks,
-
-    total_cost: totalCost,
-    bill_charges: billCharges,
-    vat_percentage: vatPercentage,
-    vat_cost: vatCost,
-    net_total: netTotal,
-    total_weight: totalWeight,
-
-    items: items.map((it, i) => ({
-      slno: i + 1,
-      name: it.name || "",
-      piece_no: Number(it.pieces || 0),
-      weight: Number(it.weight || 0),
-      unit_price: Number(it.unitPrice || 0),
-      total_price: Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)),
-    })),
+    if (!items.some((it) => (it.name?.trim() || "") && Number(it.pieces || 0) > 0)) {
+      missing.push("At least one item (name + pieces)");
+    }
+    if (items.some((it) => Number(it.weight || 0) <= 0)) {
+      missing.push("Each item needs weight > 0");
+    }
+    return missing;
   };
 
-  console.log("Payload before submit:", payload);
+  // ---------- submit ----------
+  const submit = async (e) => {
+    e.preventDefault();
 
-  try {
-    setLoading(true);
-    const created = await createCargo(payload);
-    const shipment = normalizeCargoToInvoice(created);
-    shipment.invoice_no = shipment.booking_no;
-    setInvoiceShipment(shipment);
-    setInvoiceOpen(true);
-    setMsg({ text: "Cargo created. Invoice ready.", variant: "success" });
-  } catch (e) {
-    console.error("Create cargo failed:", e);
-    setMsg({
-      text: e?.response?.data?.message || e?.message || "Failed to create cargo.",
-      variant: "error",
+    const missing = validateBeforeSubmit();
+    if (missing.length) {
+      setMsg({ text: `Missing/invalid: ${missing.join(", ")}`, variant: "error" });
+      return;
+    }
+
+    const roleId = Number(form.collectedByRoleId);         // 1 (Driver) | 2 (Office)
+    const personId = Number(form.collectedByPersonId);     // driver_id OR staff_id/user_id
+    if (!Number.isFinite(roleId) || roleId <= 0) {
+      setMsg({ text: "Choose a valid ‘Collected By’ role.", variant: "error" });
+      return;
+    }
+    if (!Number.isFinite(personId) || personId <= 0) {
+      setMsg({ text: "Choose a valid ‘Collected By’ person.", variant: "error" });
+      return;
+    }
+
+    // Build payload exactly as backend expects:
+    const payload = {
+      branch_id: Number(form.branchId),
+      sender_id: Number(form.senderId),
+      receiver_id: Number(form.receiverId),
+
+      shipping_method_id: Number(form.shippingMethodId),
+      payment_method_id: Number(form.paymentMethodId),
+      status_id: Number(form.statusId),
+
+      date: form.date,
+      time: form.time,
+
+      collected_by: form.collectedByRoleName,  // 'Driver' | 'Office'
+      collected_by_id: roleId,                 // ROLE id (1 or 2)
+      name_id: personId,                       // PERSON id
+
+      lrl_tracking_code: form.lrlTrackingCode,
+      delivery_type_id: Number(form.deliveryTypeId),
+      special_remarks: form.specialRemarks,
+
+      total_cost: totalCost,
+      bill_charges: billCharges,
+      vat_percentage: vatPercentage,
+      vat_cost: vatCost,
+      net_total: netTotal,
+      total_weight: totalWeight,
+
+      items: items.map((it, i) => ({
+        slno: String(i + 1), // your backend returns string
+        name: it.name || "",
+        piece_no: Number(it.pieces || 0),
+        unit_price: Number(it.unitPrice || 0),
+        total_price: Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)),
+        weight: Number(it.weight || 0),
+      })),
+    };
+
+    try {
+      setLoading(true);
+      const created = await createCargo(payload); // { data: cargo } normalized shape
+      const shipment = normalizeCargoToInvoice(created);
+      setInvoiceShipment(shipment);
+      setInvoiceOpen(true);
+      setMsg({ text: "Cargo created. Invoice ready.", variant: "success" });
+      // optional: console.log("Created cargo:", shipment);
+    } catch (e2) {
+      console.error("Create cargo failed:", e2);
+      console.error("Server said:", e2?.details || e2);
+      setMsg({
+        text: e2?.message || "Failed to create cargo.",
+        variant: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onResetClick = () => {
+    setForm({
+      branchId: "",
+      senderId: "",
+      senderAddress: "",
+      senderPhone: "",
+      receiverId: "",
+      receiverAddress: "",
+      receiverPhone: "",
+      shippingMethodId: "",
+      paymentMethodId: "",
+      statusId: "",
+      date: today(),
+      time: "09:36",
+      collectedByRoleId: "",
+      collectedByRoleName: "",
+      collectedByPersonId: "",
+      lrlTrackingCode: "",
+      deliveryTypeId: "",
+      specialRemarks: "",
+      billCharges: 0,
+      vatPercentage: 0,
     });
-  } finally {
-    setLoading(false);
-  }
-};
-
+    setItems([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
+    setCollectedByOptions([]);
+    setMsg({ text: "Form reset.", variant: "success" });
+  };
 
   return (
     <>
@@ -412,25 +378,25 @@ name_id: collectedByIdNum, // keep if your backend expects it
 
           {msg.text && (
             <div
-              className={`mb-4 rounded-xl border px-3 py-2 text-sm ${msg.variant === "error"
-                ? "border-rose-200 bg-rose-50 text-rose-800"
-                : "border-emerald-200 bg-emerald-50 text-emerald-800"
-                }`}
+              className={`mb-4 rounded-xl border px-3 py-2 text-sm ${
+                msg.variant === "error"
+                  ? "border-rose-200 bg-rose-50 text-rose-800"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-800"
+              }`}
             >
               {msg.text}
             </div>
           )}
 
           <form onSubmit={submit} className="space-y-6">
-            {/* Basic Info */}
+            {/* Branch + Collected By */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Branch</label>
                 <select
                   className="w-full border rounded-lg px-3 py-2"
-                  name="branchId"
                   value={form.branchId}
-                  onChange={onForm}
+                  onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}
                   disabled={loading}
                 >
                   <option value="">Select Branch</option>
@@ -442,78 +408,56 @@ name_id: collectedByIdNum, // keep if your backend expects it
                 </select>
               </div>
 
-            <div>
-                    <label className="block text-sm font-medium mb-1">Collected By (Role)</label>
-                    <select
-                      className="w-full border rounded-lg px-3 py-2"
-                      name="userType"
-                      value={form.userType}
-                      onChange={onForm}
-                    >
-                      <option value="">Select role</option>
-                      <option value="driver">Driver</option>
-                      <option value="office">Office</option>
-                    </select>
-                  </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Collected By (Role)</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={form.collectedByRoleId}
+                  onChange={onRoleChange}
+                >
+                  <option value="">Select role</option>
+                  {collectRoles.map((r) => (
+                    <option key={r.id} value={String(r.id)}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
 
-           <div>
-  <label className="block text-sm font-medium mb-1">Collected By (Person)</label>
-  <select
-    className="w-full border rounded-lg px-3 py-2"
-    name="collectedBy"
-    value={form.collectedBy}
-    onChange={(e) => {
-      const idStr = e.target.value;
-      const idNum = Number(idStr || 0);
-
-      let person = null;
-      if (form.userType === "driver") {
-        person = collectedByOptions.find(d => Number((d?.driver_id ?? d?.id)) === idNum);
-      } else if (form.userType === "office") {
-        const staffIdOf = (u) => u?.staff_id ?? u?.user_id ?? u?.id ?? null;
-        person = collectedByOptions.find(u => Number(staffIdOf(u)) === idNum);
-      }
-
-      setForm(f => ({
-        ...f,
-        collectedBy: idStr,
-        staffName: person ? (person.name ?? person.full_name ?? person.username ?? "") : ""
-      }));
-    }}
-  >
-    <option value="">Select person</option>
-    {collectedByOptions.map((opt, i) => {
-      const valueId =
-        form.userType === "driver"
-          ? (opt?.driver_id ?? opt?.id ?? null)
-          : (opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null);
-
-      if (!valueId) return null; // skip entries without a valid id for this role
-      const label = opt?.name ?? opt?.full_name ?? opt?.username ?? opt?.email ?? `User ${i + 1}`;
-      return (
-        <option key={`${form.userType}-${valueId}-${i}`} value={String(valueId)}>
-          {label}
-        </option>
-      );
-    })}
-  </select>
-</div>
-
-
+              <div>
+                <label className="block text-sm font-medium mb-1">Collected By (Person)</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={form.collectedByPersonId}
+                  onChange={(e) => setForm((f) => ({ ...f, collectedByPersonId: e.target.value }))}
+                  disabled={!form.collectedByRoleName}
+                >
+                  <option value="">Select person</option>
+                  {collectedByOptions.map((opt, i) => {
+                    const valueId =
+                      form.collectedByRoleName === "Driver"
+                        ? (opt?.driver_id ?? opt?.id ?? null)
+                        : (opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null);
+                    if (!valueId) return null;
+                    const label = opt?.name ?? opt?.full_name ?? opt?.username ?? opt?.email ?? `User ${i + 1}`;
+                    return (
+                      <option key={`${valueId}-${i}`} value={String(valueId)}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
             </div>
 
             {/* Parties */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Sender */}
               <div className="space-y-3">
                 <h3 className="font-semibold">Sender Info</h3>
                 <div>
                   <label className="block text-sm mb-1">Sender/Customer</label>
                   <select
                     className="w-full border rounded-lg px-3 py-2"
-                    name="senderId"
                     value={form.senderId}
-                    onChange={onForm}
+                    onChange={(e) => setForm((f) => ({ ...f, senderId: e.target.value }))}
                     disabled={loading}
                   >
                     <option value="">Select a sender</option>
@@ -524,7 +468,6 @@ name_id: collectedByIdNum, // keep if your backend expects it
                     ))}
                   </select>
                 </div>
-
                 <div className="party-details w-full rounded-lg py-2">
                   <p className="w-full px-3 flex items-center gap-1">
                     <span className="party-details-icon"><IoLocationSharp /></span>
@@ -537,16 +480,14 @@ name_id: collectedByIdNum, // keep if your backend expects it
                 </div>
               </div>
 
-              {/* Receiver */}
               <div className="space-y-3">
                 <h3 className="font-semibold">Receiver Info</h3>
                 <div>
                   <label className="block text-sm mb-1">Receiver/Customer</label>
                   <select
                     className="w-full border rounded-lg px-3 py-2"
-                    name="receiverId"
                     value={form.receiverId}
-                    onChange={onForm}
+                    onChange={(e) => setForm((f) => ({ ...f, receiverId: e.target.value }))}
                     disabled={loading}
                   >
                     <option value="">Select a receiver</option>
@@ -557,7 +498,6 @@ name_id: collectedByIdNum, // keep if your backend expects it
                     ))}
                   </select>
                 </div>
-
                 <div className="party-details w-full rounded-lg py-2">
                   <p className="w-full px-3 flex items-center gap-1">
                     <span className="party-details-icon"><IoLocationSharp /></span>
@@ -577,9 +517,8 @@ name_id: collectedByIdNum, // keep if your backend expects it
                 <label className="block text-sm mb-1">Shipping Method</label>
                 <select
                   className="w-full border rounded-lg px-3 py-2"
-                  name="shippingMethodId"
                   value={form.shippingMethodId}
-                  onChange={onForm}
+                  onChange={(e) => setForm((f) => ({ ...f, shippingMethodId: e.target.value }))}
                   disabled={loading}
                 >
                   <option value="">Select</option>
@@ -595,29 +534,22 @@ name_id: collectedByIdNum, // keep if your backend expects it
                 <label className="block text-sm mb-1">Payment Method</label>
                 <select
                   className="w-full border rounded-lg px-3 py-2"
-                  name="paymentMethodId"
                   value={form.paymentMethodId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const obj = paymentMethods.find(pm => String(pm.id) === String(id));
-                    setForm(f => ({ ...f, paymentMethodId: id, paymentMethod: obj?.name || "" }));
-                  }}
+                  onChange={(e) => setForm((f) => ({ ...f, paymentMethodId: e.target.value }))}
                 >
                   <option value="">Select Payment Method</option>
-                  {paymentMethods.map(pm => (
+                  {paymentMethods.map((pm) => (
                     <option key={String(pm.id)} value={String(pm.id)}>{pm.name}</option>
                   ))}
                 </select>
-
               </div>
 
               <div>
                 <label className="block text-sm mb-1">Status</label>
                 <select
                   className="w-full border rounded-lg px-3 py-2"
-                  name="statusId"
                   value={form.statusId}
-                  onChange={onForm}
+                  onChange={(e) => setForm((f) => ({ ...f, statusId: e.target.value }))}
                   disabled={loading}
                 >
                   <option value="">Select</option>
@@ -630,51 +562,16 @@ name_id: collectedByIdNum, // keep if your backend expects it
               </div>
             </div>
 
-            {/* Row of misc fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Date / Tracking / Delivery / Remarks & Totals */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm mb-1">Date</label>
                 <input
                   type="date"
                   className="w-full border rounded-lg px-3 py-2"
-                  name="date"
                   value={form.date}
-                  onChange={onForm}
+                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm mb-1">LRL Tracking Code</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2"
-                  name="lrlTrackingCode"
-                  value={form.lrlTrackingCode}
-                  onChange={onForm}
-                  placeholder="LRL-XXXX"
-                />
-              </div>
-            </div>
-
-            {/* Delivery/time/value/remarks */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm mb-1">Delivery Type</label>
-                <select
-                  className="w-full border rounded-lg px-3 py-2"
-                  name="deliveryTypeId"
-                  value={form.deliveryTypeId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const obj = deliveryTypes.find(t => String(t.id) === String(id));
-                    setForm(f => ({ ...f, deliveryTypeId: id, deliveryType: obj?.name || "" }));
-                  }}
-                >
-                  <option value="">Select</option>
-                  {deliveryTypes.map(t => (
-                    <option key={String(t.id)} value={String(t.id)}>{t.name}</option>
-                  ))}
-                </select>
-
               </div>
 
               <div>
@@ -682,32 +579,52 @@ name_id: collectedByIdNum, // keep if your backend expects it
                 <input
                   type="time"
                   className="w-full border rounded-lg px-3 py-2"
-                  name="time"
                   value={form.time}
-                  onChange={onForm}
+                  onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
                 />
               </div>
 
               <div>
-                <label className="block text-sm mb-1">Value of Goods</label>
+                <label className="block text-sm mb-1">LRL Tracking Code</label>
                 <input
-                  type="number"
                   className="w-full border rounded-lg px-3 py-2"
-                  name="valueOfGoods"
-                  value={form.valueOfGoods}
-                  readOnly
+                  value={form.lrlTrackingCode}
+                  onChange={(e) => setForm((f) => ({ ...f, lrlTrackingCode: e.target.value }))}
+                  placeholder="LRL-XXXX"
                 />
               </div>
 
               <div>
+                <label className="block text-sm mb-1">Delivery Type</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={form.deliveryTypeId}
+                  onChange={(e) => setForm((f) => ({ ...f, deliveryTypeId: e.target.value }))}
+                >
+                  <option value="">Select</option>
+                  {deliveryTypes.map((t) => (
+                    <option key={String(t.id)} value={String(t.id)}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-3">
                 <label className="block text-sm mb-1">Special remarks</label>
                 <input
                   className="w-full border rounded-lg px-3 py-2"
-                  name="specialRemarks"
                   value={form.specialRemarks}
-                  onChange={onForm}
-                  placeholder="Special remarks"
+                  onChange={(e) => setForm((f) => ({ ...f, specialRemarks: e.target.value }))}
+                  placeholder="Handle with care, fragile goods."
                 />
+              </div>
+
+              <div className="flex flex-col justify-end text-sm">
+                <div className="flex justify-between"><span>Total Cost:</span><b>{totalCost.toFixed(2)}</b></div>
+                <div className="flex justify-between"><span>VAT:</span><b>{vatCost.toFixed(2)}</b></div>
+                <div className="flex justify-between"><span>Net Total:</span><b>{netTotal.toFixed(2)}</b></div>
+                <div className="flex justify-between"><span>Total Weight:</span><b>{totalWeight.toFixed(3)} kg</b></div>
               </div>
             </div>
 
@@ -718,9 +635,6 @@ name_id: collectedByIdNum, // keep if your backend expects it
                 <div className="flex gap-2">
                   <button type="button" onClick={addRow} className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700">
                     + Add Row
-                  </button>
-                  <button type="button" onClick={clearRows} className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200">
-                    Clear
                   </button>
                 </div>
               </div>
@@ -744,7 +658,7 @@ name_id: collectedByIdNum, // keep if your backend expects it
                         <td className="px-3 py-2 text-center text-gray-500">{i + 1}</td>
                         <td className="px-3 py-2">
                           <input
-                            className="w-full border rounded-lg px-3 py-2"
+                            className={`w-full border rounded-lg px-3 py-2 ${!it.name?.trim() ? "border-rose-300" : ""}`}
                             placeholder="Item name"
                             value={it.name}
                             onChange={(e) => setItem(i, "name", e.target.value)}
@@ -776,7 +690,7 @@ name_id: collectedByIdNum, // keep if your backend expects it
                             type="number"
                             min="0"
                             step="0.001"
-                            className="w-full border rounded-lg px-3 py-2 text-right"
+                            className={`w-full border rounded-lg px-3 py-2 text-right ${Number(it.weight || 0) <= 0 ? "border-rose-300" : ""}`}
                             placeholder="0.000"
                             value={it.weight}
                             onChange={(e) => setItem(i, "weight", e.target.value)}
@@ -798,19 +712,10 @@ name_id: collectedByIdNum, // keep if your backend expects it
                         </td>
                       </tr>
                     ))}
-
-                    {items.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-3 py-6 text-center text-gray-500">
-                          No items. Click <b>+ Add Row</b> to begin.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
 
                   <tfoot className="bg-gray-100">
                     <tr>
-                      {/* label spans first 5 columns, subtotal shown in column 6, empty column 7 */}
                       <td className="px-3 py-2 text-right text-gray-500" colSpan={5}>
                         Subtotal:
                       </td>
@@ -824,46 +729,23 @@ name_id: collectedByIdNum, // keep if your backend expects it
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm mb-1">Bill Charges</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="w-full border rounded-lg px-3 py-2"
-                  name="billCharges"
-                  value={form.billCharges}
-                  onChange={onForm}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm mb-1">VAT %</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="w-full border rounded-lg px-3 py-2"
-                  name="vatPercentage"
-                  value={form.vatPercentage}
-                  onChange={onForm}
-                />
-              </div>
-
-              <div className="flex flex-col justify-end text-sm">
-                <div className="flex justify-between"><span>Total Cost:</span><b>{totalCost.toFixed(2)}</b></div>
-                <div className="flex justify-between"><span>VAT:</span><b>{vatCost.toFixed(2)}</b></div>
-                <div className="flex justify-between"><span>Net Total:</span><b>{netTotal.toFixed(2)}</b></div>
-                <div className="flex justify-between"><span>Total Weight:</span><b>{totalWeight.toFixed(3)} kg</b></div>
-              </div>
+            {/* Controls */}
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onResetClick}
+                className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-900"
+              >
+                Reset
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className={`px-4 py-2 rounded-lg text-white ${loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"}`}
+              >
+                Save & Generate Invoice
+              </button>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-3 rounded-lg text-white ${loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"}`}
-            >
-              {loading ? "Saving..." : "Save & Generate Invoice"}
-            </button>
           </form>
         </div>
       </div>

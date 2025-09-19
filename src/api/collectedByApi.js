@@ -1,34 +1,38 @@
+// src/api/collectedByApi.js
+// Fetches "Collected By" roles (e.g., Driver, Office)
+// Adjust the endpoint if your backend uses a different path.
+
 import axiosInstance from "./axiosInstance";
 
-// Fetch all collected items or filtered by status
-export const getCollected = async (status = null) => {
-  try {
-    const url = status !== null ? `/collected?status=${status}` : '/collected';
-    const { data } = await axiosInstance.get(url);
-    return data;  // Assuming the API returns data in the `data` property
-  } catch (error) {
-    console.error('Error fetching collected items:', error);
-    throw error; // Propagate error for handling in component
+function parseAxiosError(err) {
+  const status = err?.response?.status;
+  const data = err?.response?.data;
+  const msg =
+    data?.message ||
+    data?.error ||
+    err?.message ||
+    `Request failed${status ? ` (${status})` : ""}`;
+  const errors = data?.errors && typeof data.errors === "object" ? data.errors : null;
+  let details = "";
+  if (errors) {
+    const flat = Object.entries(errors).map(
+      ([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`
+    );
+    details = ` — ${flat.join(" | ")}`;
   }
-};
+  const e = new Error(msg + details);
+  e.status = status;
+  e.details = data;
+  throw e;
+}
 
-// Fetch active collected items (status=1)
-export const getActiveCollected = async () => {
-  return getCollected(1);  // Using getCollected with status=1
-};
-
-// Fetch inactive collected items (status=0)
-export const getInactiveCollected = async () => {
-  return getCollected(0);  // Using getCollected with status=0
-};
-
-// Create a new collected item (POST)
-export const createCollected = async (collectedData) => {
+export async function getActiveCollected() {
   try {
-    const { data } = await axiosInstance.post('/collected', collectedData);
-    return data;  // Assuming the response contains data with the new collected item
-  } catch (error) {
-    console.error('Error creating collected item:', error);
-    throw error; // Propagate error for handling in component
+    // If your backend uses '/collected-by', change it below:
+    const { data } = await axiosInstance.get("/collected", { timeout: 15000 });
+    // Expected shape: { success: true, data: [ {id:1,name:'Driver'}, {id:2,name:'Office'} ] }
+    return data;
+  } catch (err) {
+    parseAxiosError(err);
   }
-};
+}
