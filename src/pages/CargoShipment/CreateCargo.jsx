@@ -1,26 +1,26 @@
 // src/pages/CreateCargo.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 
-import { createCargo, normalizeCargoToInvoice } from "../../api/createCargoApi"; // ← adjust path
+import { createCargo, normalizeCargoToInvoice } from "../../api/createCargoApi";
 import { getActiveShipmentMethods } from "../../api/shipmentMethodApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
-import { getActiveBranches, getBranchUsers } from "../../api/branchApi";
+import { getBranchUsers } from "../../api/branchApi";
 import { getParties } from "../../api/partiesApi";
 import { getAllPaymentMethods } from "../../api/paymentMethod";
 import { getActiveDeliveryTypes } from "../../api/deliveryType";
 import { getActiveDrivers } from "../../api/driverApi";
 import { getProfile } from "../../api/accountApi";
-import { getActiveCollected } from "../../api/collectedByApi"; // loads Driver/Office roles
+import { getActiveCollected } from "../../api/collectedByApi"; // Driver / Office
 
-import InvoiceModal from "../../components/InvoiceModal"; // if you don't have this, you can remove modal usage
+import InvoiceModal from "../../components/InvoiceModal";
 import { IoLocationSharp } from "react-icons/io5";
 import { MdAddIcCall } from "react-icons/md";
 import { BsFillBoxSeamFill } from "react-icons/bs";
 
 import "./ShipmentStyles.css";
 
-// -------- helpers --------
+/* ---------------- helpers ---------------- */
 const unwrapArray = (o) => {
   if (!o) return [];
   if (Array.isArray(o)) return o;
@@ -30,25 +30,85 @@ const unwrapArray = (o) => {
   if (Array.isArray(o?.results)) return o.results;
   return [];
 };
-const idOf = (o) => o?.id ?? o?.value ?? o?._id ?? null;
+
+const idOf = (o) =>
+  o?.id ??
+  o?.branch_id ??
+  o?.branchId ??
+  o?.value ??
+  o?._id ??
+  null;
+
 const labelOf = (o) =>
-  o?.name ?? o?.title ?? o?.label ?? o?.company_name ?? o?.branch_name ?? "-";
+  o?.name ??
+  o?.branch_name ??
+  o?.title ??
+  o?.label ??
+  o?.company_name ??
+  o?.full_name ??
+  o?.username ??
+  o?.email ??
+  "-";
+
 const today = () => new Date().toISOString().split("T")[0];
-const pickBranchId = (u) => u?.branch_id ?? u?.branchId ?? null;
-const pickUserId = (u) => u?.id ?? u?.user_id ?? null;
+
+/** Robust branch id picker across common API shapes */
+const pickBranchId = (profileLike) => {
+  const x = profileLike?.data ?? profileLike ?? null;
+  const user = x?.user ?? x ?? null;
+  return (
+    user?.branch_id ??
+    user?.branchId ??
+    user?.branch?.id ??
+    null
+  );
+};
+
+const safeDecodeJwt = (jwt) => {
+  if (!jwt || typeof jwt !== "string" || !jwt.includes(".")) return null;
+  try {
+    const payload = JSON.parse(atob(jwt.split(".")[1]));
+    return payload || null;
+  } catch {
+    return null;
+  }
+};
+
+/* Build initial form with an optional default branch id */
+const buildInitialForm = (branchId = "") => ({
+  branchId: branchId ? String(branchId) : "",
+  senderId: "",
+  senderAddress: "",
+  senderPhone: "",
+  receiverId: "",
+  receiverAddress: "",
+  receiverPhone: "",
+  shippingMethodId: "",
+  paymentMethodId: "",
+  statusId: "",
+  date: today(),
+  time: "09:36",
+  collectedByRoleId: "",     // 1 | 2 from /collected
+  collectedByRoleName: "",   // 'Driver' | 'Office'
+  collectedByPersonId: "",   // numeric person id
+  lrlTrackingCode: "",
+  deliveryTypeId: "",
+  specialRemarks: "",
+  billCharges: 0,
+  vatPercentage: 0,
+});
 
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
 
   // selects
-  const [branches, setBranches] = useState([]);
   const [methods, setMethods] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [senders, setSenders] = useState([]);
   const [receivers, setReceivers] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [deliveryTypes, setDeliveryTypes] = useState([]);
-  const [collectRoles, setCollectRoles] = useState([]);         // [{id:1,name:'Driver'},{id:2,name:'Office'}]
+  const [collectRoles, setCollectRoles] = useState([]); // [{id:1,name:'Driver'},{id:2,name:'Office'}]
   const [collectedByOptions, setCollectedByOptions] = useState([]); // drivers OR staff array
 
   // user/profile
@@ -56,42 +116,32 @@ export default function CreateCargo() {
 
   // UI
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState({ text: "", variant: "" });
+  const [msg, setMsg] = useState({ text: "", variant: "" }); // still used as the single source of truth
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceShipment, setInvoiceShipment] = useState(null);
 
+  // toast (top-right slide in)
+  const [toast, setToast] = useState({ visible: false, text: "", variant: "success" });
+  const toastTimer = useRef(null);
+  const showToast = (text, variant = "success", duration = 3500) => {
+    try { clearTimeout(toastTimer.current); } catch {}
+    setToast({ visible: true, text, variant });
+    toastTimer.current = setTimeout(() => {
+      setToast((t) => ({ ...t, visible: false }));
+    }, duration);
+  };
+  const hideToast = () => {
+    try { clearTimeout(toastTimer.current); } catch {}
+    setToast((t) => ({ ...t, visible: false }));
+  };
+
   // form
-  const [form, setForm] = useState({
-    branchId: "",
-    senderId: "",
-    senderAddress: "",
-    senderPhone: "",
-    receiverId: "",
-    receiverAddress: "",
-    receiverPhone: "",
-
-    shippingMethodId: "",
-    paymentMethodId: "",
-    statusId: "",
-
-    date: today(),
-    time: "09:36",
-
-    collectedByRoleId: "",     // 1 | 2 from /collected
-    collectedByRoleName: "",   // 'Driver' | 'Office'
-    collectedByPersonId: "",   // numeric person id
-
-    lrlTrackingCode: "",
-    deliveryTypeId: "",
-    specialRemarks: "",
-
-    billCharges: 0,
-    vatPercentage: 0,
-  });
+  const [form, setForm] = useState(buildInitialForm());
 
   // items
   const [items, setItems] = useState([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
-  const rowTotal = (it) => Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2));
+  const rowTotal = (it) =>
+    Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2));
   const subtotal = items.reduce((s, it) => s + rowTotal(it), 0);
 
   // totals
@@ -101,31 +151,48 @@ export default function CreateCargo() {
   const vatCost = Number(((totalCost * vatPercentage) / 100).toFixed(2));
   const netTotal = Number((totalCost + billCharges + vatCost).toFixed(2));
   const totalWeight = Number(
-    items.reduce((sum, it) => sum + Number(it.weight || 0) * Number(it.pieces || 0), 0).toFixed(3)
+    items
+      .reduce((sum, it) => sum + Number(it.weight || 0) * Number(it.pieces || 0), 0)
+      .toFixed(3)
   );
 
-  // ---------- initial load ----------
+  /* ---------- preferred branch from token (fallback) ---------- */
+  const tokenClaims = useMemo(() => safeDecodeJwt(token), [token]);
+  const tokenBranchId = tokenClaims?.branch_id ?? tokenClaims?.branchId ?? null;
+
+  /* Toast on any msg change */
+  useEffect(() => {
+    if (msg.text) showToast(msg.text, msg.variant || "success");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msg.text, msg.variant]);
+
+  /* ---------- initial load ---------- */
   useEffect(() => {
     (async () => {
       setLoading(true);
       setMsg({ text: "", variant: "" });
       try {
-        const [me, b, m, st, pm, dt, roles] = await Promise.all([
-          getProfile(),
-          getActiveBranches(),
+        const [me, m, st, pm, dt, roles] = await Promise.all([
+          getProfile(),                // must return user with branch info
           getActiveShipmentMethods(),
           getActiveShipmentStatuses(),
           getAllPaymentMethods(),
           getActiveDeliveryTypes(),
-          getActiveCollected(), // loads { success, data: [ {id, name} ] }
+          getActiveCollected(),        // { success, data: [ {id, name} ] }
         ]);
-        setUserProfile(me?.data ?? me ?? null);
-        setBranches(unwrapArray(b));
+
+        const profile = me?.data ?? me ?? null;
+        setUserProfile(profile);
+
         setMethods(unwrapArray(m));
         setStatuses(unwrapArray(st));
         setPaymentMethods(unwrapArray(pm));
         setDeliveryTypes(unwrapArray(dt));
         setCollectRoles(Array.isArray(roles?.data) ? roles.data : []);
+
+        // set branchId from profile (fallback to token)
+        const preferredBranchId = pickBranchId(profile) ?? tokenBranchId ?? "";
+        setForm((f) => buildInitialForm(preferredBranchId));
 
         const [snd, rcv] = await Promise.all([
           getParties({ customer_type: "Sender" }),
@@ -142,22 +209,41 @@ export default function CreateCargo() {
         setLoading(false);
       }
     })();
-  }, [token]);
+  }, [token, tokenBranchId]);
 
-  // auto-select current user's branch if available
+  /* ---------- keep form.branchId synced with profile/token ---------- */
   useEffect(() => {
-    if (!userProfile || !branches.length) return;
-    const userBranchId = pickBranchId(userProfile);
-    if (!userBranchId) return;
-    const match = branches.find((br) => String(idOf(br)) === String(userBranchId));
-    if (match) {
-      setForm((f) =>
-        f.branchId && f.branchId === String(idOf(match)) ? f : { ...f, branchId: String(idOf(match)) }
-      );
+    const bidRaw = pickBranchId(userProfile) ?? tokenBranchId ?? null;
+    const bid = bidRaw != null ? String(bidRaw) : "";
+    if (bid && String(form.branchId) !== bid) {
+      setForm((f) => ({ ...f, branchId: bid }));
     }
-  }, [userProfile, branches]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile, tokenBranchId]);
 
-  // Role change -> populate collectedByOptions
+  /* ---------- when Branch or Role is 'Office', keep people list in sync ---------- */
+  useEffect(() => {
+    const load = async () => {
+      if (form.collectedByRoleName !== "Office") return;
+      const branchId = form.branchId || pickBranchId(userProfile) || tokenBranchId;
+      if (!branchId) {
+        setCollectedByOptions([]);
+        setMsg({ text: "Your profile has no branch; cannot load office staff.", variant: "error" });
+        return;
+      }
+      try {
+        const res = await getBranchUsers(branchId);
+        setCollectedByOptions(unwrapArray(res));
+      } catch {
+        setCollectedByOptions([]);
+        setMsg({ text: "Failed to load office staff for the selected branch.", variant: "error" });
+      }
+    };
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.branchId, form.collectedByRoleName]);
+
+  /* ---------- role change -> populate collectedByOptions ---------- */
   const onRoleChange = async (e) => {
     const roleId = e.target.value;
     const role = collectRoles.find((r) => String(r.id) === String(roleId));
@@ -175,10 +261,10 @@ export default function CreateCargo() {
         const res = await getActiveDrivers();
         setCollectedByOptions(unwrapArray(res));
       } else if (roleName === "Office") {
-        const branchId = form.branchId || pickBranchId(userProfile);
+        const branchId = form.branchId || pickBranchId(userProfile) || tokenBranchId;
         if (!branchId) {
           setCollectedByOptions([]);
-          setMsg({ text: "Select a branch first to load office staff.", variant: "error" });
+          setMsg({ text: "Your profile has no branch; cannot load office staff.", variant: "error" });
           return;
         }
         const res = await getBranchUsers(branchId);
@@ -186,13 +272,13 @@ export default function CreateCargo() {
       } else {
         setCollectedByOptions([]);
       }
-    } catch (err) {
+    } catch {
       setCollectedByOptions([]);
       setMsg({ text: "Failed to load list for the selected role.", variant: "error" });
     }
   };
 
-  // party autofill (address/phone)
+  /* ---------- party autofill (address/phone) ---------- */
   const selectedSender = useMemo(
     () => senders.find((s) => String(idOf(s)) === String(form.senderId)) || null,
     [senders, form.senderId]
@@ -216,7 +302,7 @@ export default function CreateCargo() {
     }));
   }, [selectedReceiver]);
 
-  // item helpers
+  /* ---------- items helpers ---------- */
   const setItem = (idx, key, val) => {
     setItems((prev) => {
       const next = [...prev];
@@ -235,7 +321,7 @@ export default function CreateCargo() {
   const addRow = () => setItems((p) => [...p, { name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
   const removeRow = (idx) => setItems((p) => p.filter((_, i) => i !== idx));
 
-  // ------- validation -------
+  /* ---------- validation ---------- */
   const validateBeforeSubmit = () => {
     const missing = [];
     if (!form.branchId) missing.push("Branch");
@@ -260,7 +346,14 @@ export default function CreateCargo() {
     return missing;
   };
 
-  // ---------- submit ----------
+  /* ---------- submit ---------- */
+  const resetFormAfterSubmit = () => {
+    const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
+    setForm(buildInitialForm(nextBranchId));
+    setItems([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
+    setCollectedByOptions([]);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
 
@@ -270,8 +363,8 @@ export default function CreateCargo() {
       return;
     }
 
-    const roleId = Number(form.collectedByRoleId);         // 1 (Driver) | 2 (Office)
-    const personId = Number(form.collectedByPersonId);     // driver_id OR staff_id/user_id
+    const roleId = Number(form.collectedByRoleId);     // 1 (Driver) | 2 (Office)
+    const personId = Number(form.collectedByPersonId); // driver_id OR staff_id/user_id
     if (!Number.isFinite(roleId) || roleId <= 0) {
       setMsg({ text: "Choose a valid ‘Collected By’ role.", variant: "error" });
       return;
@@ -281,7 +374,6 @@ export default function CreateCargo() {
       return;
     }
 
-    // Build payload exactly as backend expects:
     const payload = {
       branch_id: Number(form.branchId),
       sender_id: Number(form.senderId),
@@ -294,9 +386,9 @@ export default function CreateCargo() {
       date: form.date,
       time: form.time,
 
-      collected_by: form.collectedByRoleName,  // 'Driver' | 'Office'
-      collected_by_id: roleId,                 // ROLE id (1 or 2)
-      name_id: personId,                       // PERSON id
+      collected_by: form.collectedByRoleName, // 'Driver' | 'Office'
+      collected_by_id: roleId,                // 1|2 (ROLE id)
+      name_id: personId,                      // PERSON id
 
       lrl_tracking_code: form.lrlTrackingCode,
       delivery_type_id: Number(form.deliveryTypeId),
@@ -310,7 +402,7 @@ export default function CreateCargo() {
       total_weight: totalWeight,
 
       items: items.map((it, i) => ({
-        slno: String(i + 1), // your backend returns string
+        slno: String(i + 1),
         name: it.name || "",
         piece_no: Number(it.pieces || 0),
         unit_price: Number(it.unitPrice || 0),
@@ -321,15 +413,16 @@ export default function CreateCargo() {
 
     try {
       setLoading(true);
-      const created = await createCargo(payload); // { data: cargo } normalized shape
+      const created = await createCargo(payload);
       const shipment = normalizeCargoToInvoice(created);
       setInvoiceShipment(shipment);
       setInvoiceOpen(true);
-      setMsg({ text: "Cargo created. Invoice ready.", variant: "success" });
-      // optional: console.log("Created cargo:", shipment);
+
+      // toast + reset form
+      showToast("Cargo created. Invoice ready.", "success");
+      resetFormAfterSubmit();
+      setMsg({ text: "", variant: "" }); // clear msg so it doesn't retrigger
     } catch (e2) {
-      console.error("Create cargo failed:", e2);
-      console.error("Server said:", e2?.details || e2);
       setMsg({
         text: e2?.message || "Failed to create cargo.",
         variant: "error",
@@ -340,35 +433,52 @@ export default function CreateCargo() {
   };
 
   const onResetClick = () => {
-    setForm({
-      branchId: "",
-      senderId: "",
-      senderAddress: "",
-      senderPhone: "",
-      receiverId: "",
-      receiverAddress: "",
-      receiverPhone: "",
-      shippingMethodId: "",
-      paymentMethodId: "",
-      statusId: "",
-      date: today(),
-      time: "09:36",
-      collectedByRoleId: "",
-      collectedByRoleName: "",
-      collectedByPersonId: "",
-      lrlTrackingCode: "",
-      deliveryTypeId: "",
-      specialRemarks: "",
-      billCharges: 0,
-      vatPercentage: 0,
-    });
+    const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
+    setForm(buildInitialForm(nextBranchId));
     setItems([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
     setCollectedByOptions([]);
-    setMsg({ text: "Form reset.", variant: "success" });
+    showToast("Form reset.", "success");
   };
+
+  /* ---------- UI ---------- */
+  const branchNameFromProfile =
+    userProfile?.user?.branch?.name ||
+    userProfile?.branch?.name ||
+    userProfile?.user?.branch_name ||
+    userProfile?.branch_name ||
+    "";
 
   return (
     <>
+      {/* Top-right Toast */}
+      <div
+        className="fixed top-4 right-4 z-50"
+        style={{
+          transform: toast.visible ? "translateX(0)" : "translateX(120%)",
+          transition: "transform 300ms ease",
+        }}
+      >
+        <div
+          className={`min-w-[260px] max-w-[360px] rounded-xl border px-4 py-3 shadow ${
+            toast.variant === "error"
+              ? "border-rose-200 bg-rose-50 text-rose-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-1 text-sm">{toast.text}</div>
+            <button
+              type="button"
+              onClick={hideToast}
+              className="ml-2 text-xs opacity-70 hover:opacity-100"
+              aria-label="Close notification"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="min-h-screen bg-gray-50 flex items-start justify-center p-6">
         <div className="w-full max-w-6xl bg-white rounded-2xl p-8">
           <h2 className="header-cargo-heading flex items-center gap-2">
@@ -376,36 +486,19 @@ export default function CreateCargo() {
             Create Cargo
           </h2>
 
-          {msg.text && (
-            <div
-              className={`mb-4 rounded-xl border px-3 py-2 text-sm ${
-                msg.variant === "error"
-                  ? "border-rose-200 bg-rose-50 text-rose-800"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-800"
-              }`}
-            >
-              {msg.text}
-            </div>
-          )}
+          {/* inline banner removed; we use the toast above */}
 
           <form onSubmit={submit} className="space-y-6">
-            {/* Branch + Collected By */}
+            {/* Branch (readonly NAME) + Collected By */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Branch</label>
-                <select
-                  className="w-full border rounded-lg px-3 py-2"
-                  value={form.branchId}
-                  onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}
-                  disabled={loading}
-                >
-                  <option value="">Select Branch</option>
-                  {branches.map((b) => (
-                    <option key={String(idOf(b))} value={String(idOf(b))}>
-                      {labelOf(b)}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 bg-gray-100 text-gray-700"
+                  value={branchNameFromProfile || ""}
+                  readOnly
+                  placeholder="No branch in profile"
+                />
               </div>
 
               <div>
@@ -417,7 +510,9 @@ export default function CreateCargo() {
                 >
                   <option value="">Select role</option>
                   {collectRoles.map((r) => (
-                    <option key={r.id} value={String(r.id)}>{r.name}</option>
+                    <option key={r.id} value={String(r.id)}>
+                      {r.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -427,17 +522,19 @@ export default function CreateCargo() {
                 <select
                   className="w-full border rounded-lg px-3 py-2"
                   value={form.collectedByPersonId}
-                  onChange={(e) => setForm((f) => ({ ...f, collectedByPersonId: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, collectedByPersonId: e.target.value }))
+                  }
                   disabled={!form.collectedByRoleName}
                 >
                   <option value="">Select person</option>
                   {collectedByOptions.map((opt, i) => {
                     const valueId =
                       form.collectedByRoleName === "Driver"
-                        ? (opt?.driver_id ?? opt?.id ?? null)
-                        : (opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null);
+                        ? opt?.driver_id ?? opt?.id ?? null
+                        : opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null;
                     if (!valueId) return null;
-                    const label = opt?.name ?? opt?.full_name ?? opt?.username ?? opt?.email ?? `User ${i + 1}`;
+                    const label = labelOf(opt);
                     return (
                       <option key={`${valueId}-${i}`} value={String(valueId)}>
                         {label}
@@ -539,7 +636,9 @@ export default function CreateCargo() {
                 >
                   <option value="">Select Payment Method</option>
                   {paymentMethods.map((pm) => (
-                    <option key={String(pm.id)} value={String(pm.id)}>{pm.name}</option>
+                    <option key={String(pm.id)} value={String(pm.id)}>
+                      {pm.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -603,7 +702,9 @@ export default function CreateCargo() {
                 >
                   <option value="">Select</option>
                   {deliveryTypes.map((t) => (
-                    <option key={String(t.id)} value={String(t.id)}>{t.name}</option>
+                    <option key={String(t.id)} value={String(t.id)}>
+                      {t.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -633,7 +734,11 @@ export default function CreateCargo() {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Items</h3>
                 <div className="flex gap-2">
-                  <button type="button" onClick={addRow} className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700">
+                  <button
+                    type="button"
+                    onClick={addRow}
+                    className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  >
                     + Add Row
                   </button>
                 </div>

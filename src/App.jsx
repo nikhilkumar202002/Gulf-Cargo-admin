@@ -24,6 +24,7 @@ import ShippingReport from "./pages/CargoShipment/ShipmentReport";
 import ShipmentList from "./pages/CargoShipment/ShipmentList";
 import CreateShipment from "./pages/CargoShipment/CreateShipment";
 import CargoList from "./pages/CargoShipment/CargoList";
+import EditCargo from "./pages/CargoShipment/EditCargo";
 
 import UserProfile from "./pages/Profile/UserProfile";
 import EditBranch from "./pages/Branches/EditBranch";
@@ -65,6 +66,26 @@ import LicenceView from "./pages/Licence type/LicenceView";
 
 import PaymentTypeList from "./pages/Payment Types/PaymentTypeList";
 
+
+const getRoleInfo = (user) => {
+  const roleVal = user?.role;
+  const roleId =
+    user?.role_id ??
+    user?.roleId ??
+    (roleVal && typeof roleVal === "object" ? roleVal.id : undefined) ??
+    (typeof roleVal === "number" ? roleVal : undefined) ??
+    null;
+
+  const roleName =
+    user?.role_name ??
+    user?.roleName ??
+    (roleVal && typeof roleVal === "object" ? roleVal.name : undefined) ??
+    (typeof roleVal === "string" ? roleVal : "") ??
+    "";
+
+  return { roleId: roleId != null ? Number(roleId) : null, roleName: String(roleName || "") };
+};
+
 const PrivateRoute = ({ children }) => {
   const { token, status } = useSelector((s) => s.auth || {});
   if (status === "loading") return <div className="loader">Checking authentication...</div>;
@@ -73,9 +94,10 @@ const PrivateRoute = ({ children }) => {
 
 const RoleRoute = ({ allow, children }) => {
   const { user } = useSelector((s) => s.auth || {});
-  const roleId =
-    user?.role_id ?? user?.roleId ?? user?.role?.id ?? (typeof user?.role === "number" ? user.role : null);
-  return allow.includes(roleId) ? children : <Navigate to="/dashboard" replace />;
+  const { roleId } = getRoleInfo(user);
+  return roleId != null && allow.includes(Number(roleId))
+    ? children
+    : <Navigate to="/dashboard" replace />;
 };
 
 export default function App() {
@@ -84,7 +106,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   // 🔑 Bootstrap on app load: if we have a token but no user yet, fetch profile.
-  useEffect(() => {
+   useEffect(() => {
     if (!token) return;
     if (status === "idle" && !user) {
       dispatch(fetchProfile())
@@ -92,6 +114,10 @@ export default function App() {
         .catch(() => dispatch(clearAuth()));
     }
   }, [dispatch, token, status, user]);
+
+  if (!ready || status === "loading") {
+    return <Preloader onDone={() => setReady(true)} duration={800} />;
+  }
 
   // Preloader + while redux is fetching profile
   if (!ready || status === "loading") {
@@ -101,25 +127,16 @@ export default function App() {
   
 
   // Resolve roleId for Layout/Sidebar (supports several shapes)
-  const roleId =
-    user?.role_id ?? user?.roleId ?? user?.role?.id ?? (typeof user?.role === "number" ? user.role : null);
-
   const isAuthenticated = Boolean(token);
+  const { roleId, roleName } = getRoleInfo(user); // ← normalized here
 
   return (
-    <BrowserRouter>
+     <BrowserRouter>
       <Routes>
-        {/* default redirect */}
         <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
 
-        <Route
-          path="/login"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
-        />
-        <Route
-          path="/register"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />}
-        />
+        <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+        <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
         <Route path="/resetpassword" element={<ResetPassword />} />
 
@@ -129,8 +146,8 @@ export default function App() {
           <Route path="branches" element={<PrivateRoute><AllBranches /></PrivateRoute>} />
           <Route path="branches/add" element={<PrivateRoute><AddBranch /></PrivateRoute>} />
 
-          <Route path="sender/create" element={<PrivateRoute><SenderCreate /></PrivateRoute>} />
-          <Route path="senders" element={<PrivateRoute><SenderView /></PrivateRoute>} />
+          <Route path="customers/create" element={<PrivateRoute><SenderCreate /></PrivateRoute>} />
+          <Route path="customers" element={<PrivateRoute><SenderView /></PrivateRoute>} />
 
           <Route path="visa/allvisa" element={<PrivateRoute><AllVisa /></PrivateRoute>} />
           <Route path="visaemployee" element={<PrivateRoute><VisaEmployees /></PrivateRoute>} />
@@ -202,6 +219,7 @@ export default function App() {
           <Route path="/senderreceiver/senderview/:id" element={<PrivateRoute><SenderShow /></PrivateRoute>} />
           <Route path="branches/edit/:id" element={<PrivateRoute><EditBranch /></PrivateRoute>} />
           <Route path="shipments/shipmentsview/:id" element={<PrivateRoute><ShipmentList /></PrivateRoute>} />
+          <Route path="cargo/:id" element={<PrivateRoute><EditCargo /></PrivateRoute>} />
           <Route path="shipments/shipmentsview/:id/invoice" element={<PrivateRoute><InvoiceView /></PrivateRoute>} />
         </Route>
 

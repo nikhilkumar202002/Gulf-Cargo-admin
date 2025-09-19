@@ -5,21 +5,17 @@ import axiosInstance from "./axiosInstance";
 function parseAxiosError(err) {
   const status = err?.response?.status;
   const data = err?.response?.data;
-  const msg =
-    data?.message ||
-    data?.error ||
-    err?.message ||
-    `Request failed${status ? ` (${status})` : ""}`;
+  const serverMsg = data?.message || data?.error;
+  const fieldErrors = data?.errors && typeof data.errors === "object" ? data.errors : null;
 
-  const errors = data?.errors && typeof data.errors === "object" ? data.errors : null;
-  let details = "";
-  if (errors) {
-    const flat = Object.entries(errors).map(
+  let msg = serverMsg || err?.message || `Request failed${status ? ` (${status})` : ""}`;
+  if (fieldErrors) {
+    const flat = Object.entries(fieldErrors).map(
       ([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`
     );
-    details = ` — ${flat.join(" | ")}`;
+    msg += ` — ${flat.join(" | ")}`;
   }
-  const e = new Error(msg + details);
+  const e = new Error(msg);
   e.status = status;
   e.details = data;
   throw e;
@@ -98,4 +94,52 @@ export function normalizeCargoToInvoice(raw) {
     shipment.created_at = `${shipment.date}T${t}`;
   }
   return shipment;
+}
+
+/* ---------- you probably already have this ---------- */
+export async function getCargoById(id) {
+  try {
+    const { data } = await axiosInstance.get(`/cargo/${id}`, { timeout: 15000 });
+    return data?.cargo ?? data?.data ?? data ?? {};
+  } catch (err) {
+    parseAxiosError(err);
+  }
+}
+
+/* ---------- PATCH /cargo/:id with smart fallback ---------- */
+export async function updateCargo(id, payload, { retryWithoutItems = true } = {}) {
+  // Drop only undefined (keep null/0/"")
+  const compact = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined));
+
+  // helpful logs when debugging 422
+  // eslint-disable-next-line no-console
+  console.debug("PATCH /cargo/%s payload:", id, compact);
+
+  try {
+    const { data } = await axiosInstance.patch(`/cargo/${id}`, compact, { timeout: 20000 });
+    return data?.cargo ?? data?.data ?? data ?? {};
+  } catch (err) {
+    const status = err?.response?.status;
+
+    // If the API rejects 'items' on this endpoint, try once without items.
+    if (
+      status === 422 &&
+      retryWithoutItems &&
+      "items" in compact &&
+      Array.isArray(compact.items)
+    ) {
+      // eslint-disable-next-line no-console
+      console.warn("422 on PATCH /cargo/%s — retrying without 'items'…", id, err?.response?.data);
+      const { items, ...rest } = compact;
+      try {
+        const { data } = await axiosInstance.patch(`/cargo/${id}`, rest, { timeout: 20000 });
+        return data?.cargo ?? data?.data ?? data ?? {};
+      } catch (err2) {
+        parseAxiosError(err2);
+      }
+    }
+
+    // surface server validation (field) errors
+    parseAxiosError(err);
+  }
 }
