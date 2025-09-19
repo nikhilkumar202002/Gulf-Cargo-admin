@@ -135,10 +135,10 @@ export const rolesMenu = {
     {
       key: "shipments",
       icon: <FaBox />,
-      label: "Shipments",
+      label: "Cargo",
       submenus: [
-        { name: "Create Shipment", path: "/cargoshipment/createcargo" },
-        { name: "Shipment Report", path: "/shipment/shipmentreport" },
+         { name: "All Cargos", path: "/cargo/allcargolist" },
+        { name: "Create Cargo", path: "/cargoshipment/createcargo" },
       ]
     },
     {

@@ -84,6 +84,11 @@
     font-weight: 600;
   }
 }
+.header-branch-name{
+  font-size: 17px;
+  color: var(--primary-color);
+  font-family: "Inter";
+}
 
 .footer {
   flex-shrink: 0;

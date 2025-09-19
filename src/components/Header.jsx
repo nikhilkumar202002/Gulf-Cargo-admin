@@ -1,4 +1,3 @@
-// src/layout/Header.jsx
 import { useEffect, useState, useRef } from "react";
 import { IoIosArrowDown, IoIosSettings, IoIosLogOut } from "react-icons/io";
 import { IoNotifications } from "react-icons/io5";
@@ -36,6 +35,7 @@ export default function Header() {
   const [notifications, setNotifications] = useState([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [user, setUser] = useState(null); // fetched from DB
+  const [branch, setBranch] = useState(""); // Store branch name here
 
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
@@ -54,7 +54,6 @@ export default function Header() {
     const onUnauthorized = () => handleLogout();
     window.addEventListener("auth:unauthorized", onUnauthorized);
     return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch profile (DB)
@@ -79,7 +78,12 @@ export default function Header() {
         ]);
         const photo = resolveAssetUrl(rawPic) || "/avatar.png";
 
-        if (!cancelled) setUser({ ...profile, name, profile_pic: photo });
+        // Fetch branch name
+        const userBranch = pickFirst(profile, ["branch.name", "user.branch.name", "branch"]) || "No Branch";
+        if (!cancelled) {
+          setUser({ ...profile, name, profile_pic: photo });
+          setBranch(userBranch); // Set branch name
+        }
       } catch (e) {
         // 401 handled by interceptor → will trigger handleLogout via event
         console.error("getProfile failed:", e?.response?.data || e?.message);
@@ -142,10 +146,15 @@ export default function Header() {
           <FiMenu size={22} />
         </button>
 
-        <span className="flex gap-2">
-          Welcome Back{" "}
-          <h1 className="header-username">{loadingProfile ? "…" : `${userName}!`}</h1>
+        <span>
+          
+          <h1>Welcome Back {""}<span className="header-username">{loadingProfile ? "…" : `${userName}!`}</span></h1>
+          {!loadingProfile && user?.branch && (
+          <h2 className="header-branch-name">{branch}</h2>
+        )}
         </span>
+        {/* Display the Branch Name under the user's name */}
+        
       </div>
 
       {/* Right Section */}
@@ -203,9 +212,7 @@ export default function Header() {
             <span className="user flex gap-1 items-center font-medium select-none">
               {userName}
               <IoIosArrowDown
-                className={`transition-transform duration-200 ${
-                  showSettings ? "rotate-180" : ""
-                }`}
+                className={`transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`}
                 size={18}
               />
             </span>

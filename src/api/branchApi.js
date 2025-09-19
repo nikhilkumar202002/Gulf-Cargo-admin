@@ -100,3 +100,26 @@ export const deleteBranch = async (id) => {
   const { data } = await api.delete(`/branch/${id}`);
   return data; // Return data without masking
 };
+
+
+/**
+ * Get users of a specific branch
+ * @param {number|string} branchId - The ID of the branch
+ * @returns {Array} - List of users in that branch
+ */
+export const getBranchUsers = async (branchId) => {
+  if (!branchId) return [];
+  try {
+    const { data } = await api.get(`/branches/${branchId}/users`);
+    // normalize common shapes
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.users)) return data.users;
+    // last-resort: first array found
+    const firstArr = Object.values(data || {}).find(Array.isArray);
+    return Array.isArray(firstArr) ? firstArr : [];
+  } catch (err) {
+    console.error("getBranchUsers failed:", err);
+    return [];
+  }
+};
