@@ -21,6 +21,12 @@ function parseAxiosError(err) {
   throw e;
 }
 
+const qs = (obj = {}) =>
+  new URLSearchParams(
+    Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && String(v) !== "")
+  ).toString();
+
+
 /** POST /cargo – create a cargo */
 export async function createCargo(payload) {
   try {
@@ -38,7 +44,19 @@ export async function createCargo(payload) {
 /** Optional: GET /cargos – list helper */
 export async function getCargos(params = {}) {
   try {
-    const { data } = await axiosInstance.get("/cargos", { params, timeout: 15000 });
+    const query = qs({
+      // support both snake_case and camelCase
+      from_date: params.from_date ?? params.fromDate,
+      to_date: params.to_date ?? params.toDate,
+      page: params.page,
+      per_page: params.per_page ?? params.perPage ?? params.limit,
+      status_id: params.status_id ?? params.statusId,
+      search: params.search,
+    });
+    const url = `/cargos${query ? `?${query}` : ""}`;
+
+    const { data } = await axiosInstance.get(url, { timeout: 20000 });
+    // API may return { data: [...], meta: {...} } or plain array
     return data?.data ?? data ?? [];
   } catch (err) {
     parseAxiosError(err);
@@ -140,6 +158,19 @@ export async function updateCargo(id, payload, { retryWithoutItems = true } = {}
     }
 
     // surface server validation (field) errors
+    parseAxiosError(err);
+  }
+}
+
+export async function bulkUpdateCargoStatus({ status_id, cargo_ids }) {
+  try {
+    const payload = {
+      status_id: Number(status_id),
+      cargo_ids: Array.isArray(cargo_ids) ? cargo_ids.map((x) => Number(x)) : [],
+    };
+    const { data } = await axiosInstance.post(`/cargos/status`, payload, { timeout: 20000 });
+    return data?.data ?? data ?? {};
+  } catch (err) {
     parseAxiosError(err);
   }
 }

@@ -5,8 +5,16 @@ import * as XLSX from "xlsx";
 import { CiMenuKebab } from "react-icons/ci";
 import { GiCargoCrate } from "react-icons/gi";
 import { getCargos } from "../../api/createCargoApi";
+import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 import { Link } from "react-router-dom";
 import "./ShipmentStyles.css";
+
+ const unwrapArray = (o) =>
+   Array.isArray(o) ? o :
+   Array.isArray(o?.data?.data) ? o.data.data :
+   Array.isArray(o?.data) ? o.data :
+   Array.isArray(o?.items) ? o.items :
+   Array.isArray(o?.results) ? o.results : [];
 
 const initialFilter = {
   sender: "",
@@ -22,6 +30,7 @@ function AllCargoList() {
   const [filter, setFilter] = useState(initialFilter);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [statuses, setStatuses] = useState([]);
 
   // selection
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -58,6 +67,15 @@ function AllCargoList() {
 
   useEffect(() => {
     fetchCargos();
+   (async () => {
+     try {
+       const res = await getActiveShipmentStatuses();
+       setStatuses(unwrapArray(res)); // expect [{id, name}, ...]
+     } catch (e) {
+       console.error("getActiveShipmentStatuses failed:", e);
+       setStatuses([]); // fall back to unique list from data
+     }
+   })();
   }, []);
 
   // filtering
@@ -84,9 +102,15 @@ function AllCargoList() {
             .includes(receiver.toLowerCase())
         : true;
 
-      const statusMatch = status
-        ? String(c.status?.name || c.status || "").toLowerCase() === status.toLowerCase()
-        : true;
+    const statusMatch = status
+   ? (
+       // match by id if present
+       String(c.status_id ?? c.status?.id ?? "") === String(status) ||
+       // or by name (resolve selected id → name; or if user somehow typed a name)
+       String(c.status?.name || c.status || "").toLowerCase() ===
+         (statusIdToName.get(String(status))?.toLowerCase() || String(status).toLowerCase())
+     )
+   : true;
 
       const dateStr = c.date || "";
       return senderMatch && receiverMatch && statusMatch && inRange(dateStr);
@@ -253,19 +277,25 @@ function AllCargoList() {
             className="border p-2 rounded-lg w-full"
             placeholder="Filter by Receiver"
           />
-          <select
-            name="status"
-            value={filter.status}
-            onChange={handleFilterChange}
-            className="border p-2 rounded-lg w-full"
-          >
-            <option value="">All Statuses</option>
-            {uniqueStatuses.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+       <select
+              name="status"
+              value={filter.status}
+              onChange={handleFilterChange}
+              className="border p-2 rounded-lg w-full"
+            >
+              <option value="">All Statuses</option>
+              {statuses.length > 0
+                ? statuses.map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {s.name}
+                    </option>
+                  ))
+                : uniqueStatuses.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+            </select>
           <input
             type="date"
             name="fromDate"
