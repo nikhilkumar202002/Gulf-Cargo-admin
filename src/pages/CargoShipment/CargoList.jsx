@@ -433,9 +433,16 @@ function AllCargoList() {
                                     )}
                                   </Menu.Item>
                                 <Menu.Item>
-                                  <button className="block w-full text-left px-4 py-2 text-sm text-gray-700">
-                                    View
-                                  </button>
+                                  {({ active }) => (
+                                    <Link
+                                      to={`/cargo/view/${c.id}`}
+                                      className={`block w-full text-left px-4 py-2 text-sm ${
+                                        active ? "bg-gray-50 text-gray-900" : "text-gray-700"
+                                      }`}
+                                    >
+                                      View
+                                    </Link>
+                                  )}
                                 </Menu.Item>
                                 <Menu.Item>
                                   <button className="block w-full text-left px-4 py-2 text-sm text-gray-700">

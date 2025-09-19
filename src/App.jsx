@@ -25,6 +25,7 @@ import ShipmentList from "./pages/CargoShipment/ShipmentList";
 import CreateShipment from "./pages/CargoShipment/CreateShipment";
 import CargoList from "./pages/CargoShipment/CargoList";
 import EditCargo from "./pages/CargoShipment/EditCargo";
+import ViewCargo from "./pages/CargoShipment/ViewCargo";
 
 import UserProfile from "./pages/Profile/UserProfile";
 import EditBranch from "./pages/Branches/EditBranch";
@@ -220,6 +221,7 @@ export default function App() {
           <Route path="branches/edit/:id" element={<PrivateRoute><EditBranch /></PrivateRoute>} />
           <Route path="shipments/shipmentsview/:id" element={<PrivateRoute><ShipmentList /></PrivateRoute>} />
           <Route path="cargo/:id" element={<PrivateRoute><EditCargo /></PrivateRoute>} />
+          <Route path="cargo/view/:id" element={<PrivateRoute><ViewCargo /></PrivateRoute>} />
           <Route path="shipments/shipmentsview/:id/invoice" element={<PrivateRoute><InvoiceView /></PrivateRoute>} />
         </Route>
 
