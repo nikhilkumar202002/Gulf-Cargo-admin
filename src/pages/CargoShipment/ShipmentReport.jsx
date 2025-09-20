@@ -1,20 +1,21 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+// src/pages/ShipmentReport.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { listShipments, updateShipmentStatus } from "../../api/shipmentsApi";
-import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi"; // optional; falls back if missing
-import { FaRegEye } from "react-icons/fa6";
-import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
-import { FaRegEdit } from "react-icons/fa";
+import { listCargoShipments } from "../../api/shipmentCargo";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
-
 const Spinner = ({ className = "h-5 w-5 text-indigo-600" }) => (
   <svg className={cx("animate-spin", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
   </svg>
 );
-
+const formatDate = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
 const Badge = ({ text = "", color = "indigo" }) => (
   <span
     className={cx(
@@ -31,261 +32,128 @@ const Badge = ({ text = "", color = "indigo" }) => (
     {text || "—"}
   </span>
 );
-
-const formatDate = (iso) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const statusColor = (s = "") => {
+  const v = s.toLowerCase();
+  if (v.includes("hold") || v.includes("wait")) return "amber";
+  if (v.includes("deliver") || v.includes("cleared") || v.includes("forward")) return "green";
+  if (v.includes("cancel")) return "red";
+  return "indigo";
 };
 
+// Unwrap server response into (list, meta)
+function unwrapShipments(resp, fallbackPage = 1, fallbackSize = 10) {
+  const list =
+    (Array.isArray(resp?.data?.data) && resp.data.data) ||
+    (Array.isArray(resp?.data) && resp.data) ||
+    (Array.isArray(resp?.list) && resp.list) ||
+    (Array.isArray(resp?.items) && resp.items) ||
+    (Array.isArray(resp) && resp) ||
+    [];
+  const meta =
+    resp?.meta ||
+    resp?.data?.meta || {
+      current_page: fallbackPage,
+      per_page: fallbackSize,
+      last_page: 1,
+      total: list.length,
+    };
+  return { list, meta };
+}
+
 export default function ShipmentReport() {
-  // server data
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ current_page: 1, per_page: 10, last_page: 1, total: 0 });
 
-  // ui state
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // filters
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
-  const [from, setFrom] = useState(""); // yyyy-mm-dd
-  const [to, setTo] = useState("");     // yyyy-mm-dd
-
-  // pagination
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
-  // bulk update UI state
-  const [bulkStatus, setBulkStatus] = useState("");
-  const [updating, setUpdating] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
+  const load = async (overrides = {}) => {
+    setLoading(true);
+    setErr("");
+    try {
+      const p = overrides.page ?? page;
+      const pp = overrides.perPage ?? perPage;
 
-  // status options (from API if available, else fallback)
-  const [statusOptions, setStatusOptions] = useState([
-    "Shipment booked",
-    "Shipment received",
-    "Waiting for clearance",
-    "In transit",
-    "Cleared",
-    "Delivered",
-    "On hold",
-    "Cancelled",
-  ]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const apiList = await getActiveShipmentStatuses(); // expects objects with .name
-        const names = Array.isArray(apiList) ? apiList.map((s) => s?.name).filter(Boolean) : [];
-        if (names.length) setStatusOptions(names);
-      } catch (_) {
-        // ignore — fallback list already set
-      }
-    })();
-  }, []);
-
-// replace your load() with this
-const load = async (overrides = {}) => {
-  setLoading(true);
-  setErr("");
-  try {
-    const args = {
-      page, perPage, query, status, from, to,   // current state
-      ...overrides                              // explicit overrides win
-    };
-    const { list, meta } = await listShipments(args);
-    setRows(Array.isArray(list) ? list : []);
-    setMeta(
-      meta || {
-        current_page: args.page,
-        per_page: args.perPage,
-        last_page: 1,
-        total: Array.isArray(list) ? list.length : 0,
-      }
-    );
-  } catch (e) {
-    setErr(e?.message || "Failed to load shipments");
-    setRows([]);
-    setMeta({ current_page: 1, per_page: perPage, last_page: 1, total: 0 });
-  } finally {
-    setLoading(false);
-  }
-};
-
-// and change onApply to *force* page=1 on the request it fires
-const onApply = async (e) => {
-  e?.preventDefault?.();
-  setPage(1);
-  await load({ page: 1 });  // guarantees the request uses page 1
-};
-
+      const resp = await listCargoShipments({ page: p, per_page: pp });
+      const { list, meta: m } = unwrapShipments(resp, p, pp);
+      setRows(list);
+      setMeta(m);
+    } catch (e) {
+      setErr(e?.message || "Failed to load shipments");
+      setRows([]);
+      setMeta({ current_page: 1, per_page: perPage, last_page: 1, total: 0 });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, perPage]);
 
-  const onReset = () => {
-    setQuery("");
-    setStatus("all");
-    setFrom("");
-    setTo("");
-    setPerPage(10);
-    setPage(1);
-    load();
-  };
+  const filtered = useMemo(() => {
+    if (!query.trim()) return rows;
+    const q = query.toLowerCase();
+    return rows.filter((r) => {
+      const hay = [
+        r.id,
+        r.shipment_number,
+        r.awb_or_container_number,
+        r.track_code,
+        r.sender,
+        r.receiver,
+        r.origin_port,
+        r.destination_port,
+        r.shipment_status,
+        r.created_on,
+        r.branch,
+        r.created_by,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, query]);
 
-  const statusColor = (s = "") => {
-    const v = s.toLowerCase();
-    if (v.includes("hold")) return "amber";
-    if (v.includes("deliver")) return "green";
-    if (v.includes("cancel")) return "red";
-    if (v.includes("book")) return "indigo";
-    if (v.includes("wait")) return "amber";
-    return "indigo";
-  };
+  const columns = [
+    { key: "id", label: "ID" },
+    { key: "created_on", label: "Shipment Date" },
+    { key: "awb_or_container_number", label: "AWB / Container" },
+    { key: "origin_port", label: "Origin" },
+    { key: "destination_port", label: "Destination" },
+    { key: "branch", label: "Branch" },
+    { key: "created_by", label: "Created By" },
+    { key: "no_of_cargos", label: "No. of Cargos" }, // <<--- only the count
+    { key: "status", label: "Status" },
+    { key: "view", label: "View" },
+  ];
 
-  const columns = useMemo(
-    () => [
-      { key: "id", label: "ID" },
-      { key: "created_at", label: "Booking Date" },
-      { key: "awb_number", label: "AWB No." },
-      { key: "sender", label: "Sender" },
-      { key: "receiver", label: "Receiver" },
-      { key: "origin_port", label: "Origin" },
-      { key: "destination_port", label: "Destination" },
-      { key: "cargo", label: "Cargo Items" },
-      { key: "total_weight", label: "Weight (kg)" },
-      { key: "status", label: "Status" },
-      { key: "view", label: "View" },
-    ],
-    []
-  );
-
-  const showingFrom = rows.length ? (meta.current_page - 1) * meta.per_page + 1 : 0;
-  const showingTo = rows.length ? showingFrom + rows.length - 1 : 0;
-
-  // ---- BULK UPDATE: fetch all filtered IDs, then update each ----
-  const fetchAllFilteredIds = async () => {
-    const ids = [];
-    let p = 1;
-    const size = 100; // bigger page to cut trips
-    for (;;) {
-      const { list, meta: m } = await listShipments({
-        page: p,
-        perPage: size,
-        query,
-        status,
-        from,
-        to,
-      });
-      const batch = (list || []).map((r) => r.id).filter(Boolean);
-      ids.push(...batch);
-      const last = (m && m.last_page) || (batch.length < size); // fallback stop
-      if (last === true || (m && p >= m.last_page)) break;
-      p += 1;
-      if (p > 2000) break; // safety
-    }
-    return ids;
-  };
-
-  const onBulkUpdate = async () => {
-    if (!bulkStatus) {
-      alert("Choose a status to update.");
-      return;
-    }
-    setUpdating(true);
-    setProgress({ done: 0, total: 0, errors: [] });
-
-    try {
-      const ids = await fetchAllFilteredIds(); // across all pages
-      if (!ids.length) {
-        setUpdating(false);
-        return;
-      }
-      setProgress({ done: 0, total: ids.length, errors: [] });
-
-      // sequential updates (simple & safe)
-      let done = 0;
-      const errors = [];
-      for (const id of ids) {
-        try {
-          await updateShipmentStatus(id, bulkStatus);
-        } catch (e) {
-          errors.push({ id, message: e?.message || "Failed" });
-        }
-        done += 1;
-        setProgress({ done, total: ids.length, errors });
-      }
-
-      // reload current page data
-      await load();
-    } finally {
-      setUpdating(false);
-    }
-  };
+  const showingFrom = filtered.length ? (meta.current_page - 1) * meta.per_page + 1 : 0;
+  const showingTo = filtered.length ? showingFrom + filtered.length - 1 : 0;
 
   return (
     <div className="min-h-screen">
-      <div>
-        <header>
-          <div className="mx-auto max-w-6xl">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Shipment Report</h1>
-            <p className="mt-1 text-sm text-slate-600">View, filter, and update status for filtered shipments.</p>
-          </div>
-        </header>
-      </div>
-    
+      <header>
+        <div className="mx-auto max-w-6xl">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Shipment Report</h1>
+          <p className="mt-1 text-sm text-slate-600">All shipments fetched from the API.</p>
+        </div>
+      </header>
 
-      <main className="mx-auto max-w-6xl  py-6 ">
-        {/* Filters */}
-        <form
-          onSubmit={onApply}
-          className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-6"
-        >
-          <div className="lg:col-span-2">
+      <main className="mx-auto max-w-6xl py-6">
+        <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="lg:col-span-3">
             <label className="mb-1 block text-xs font-medium text-slate-600">Search</label>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Sender, Receiver, AWB/Track code…"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Status</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="all">All</option>
-              {statusOptions.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">From</label>
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">To</label>
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
+              placeholder="Search AWB, ports, branch, user, status…"
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -310,58 +178,27 @@ const onApply = async (e) => {
 
           <div className="flex items-end gap-2">
             <button
-              type="submit"
+              type="button"
+              onClick={() => load({ page: 1 })}
               className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              {loading ? <Spinner className="h-4 w-4 text-white" /> : "Apply"}
+              {loading ? <Spinner className="h-4 w-4 text-white" /> : "Refresh"}
             </button>
             <button
               type="button"
-              onClick={onReset}
+              onClick={() => {
+                setQuery("");
+                setPerPage(10);
+                setPage(1);
+                load({ page: 1, perPage: 10 });
+              }}
               className="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               Reset
             </button>
           </div>
-        </form>
-
-        {/* Bulk update toolbar */}
-        <div className="mb-6 flex flex-col items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-slate-700">Bulk update status for filtered results</label>
-            <select
-              value={bulkStatus}
-              onChange={(e) => setBulkStatus(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">Select status…</option>
-              {statusOptions.map((s) => (
-                <option key={`bulk-${s}`} value={s}>{s}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={updating || !bulkStatus}
-              onClick={onBulkUpdate}
-              className={cx(
-                "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm",
-                updating || !bulkStatus ? "bg-indigo-300" : "bg-indigo-600 hover:bg-indigo-700"
-              )}
-              title={meta?.total ? `Will update ~${meta.total} shipments` : undefined}
-            >
-              {updating ? <Spinner className="h-4 w-4 text-white" /> : null}
-              {updating ? `Updating ${progress.done}/${progress.total}…` : `Update ${meta?.total ?? 0} shipments`}
-            </button>
-          </div>
-
-          {progress.errors.length > 0 && (
-            <div className="max-w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {progress.errors.length} failed. First error: {progress.errors[0].id} – {progress.errors[0].message}
-            </div>
-          )}
         </div>
 
-        {/* Table */}
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
@@ -370,17 +207,13 @@ const onApply = async (e) => {
                   {columns.map((c) => (
                     <th
                       key={c.key}
-                      className={cx(
-                        "px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600",
-                        c.key === "sender" || c.key === "receiver" ? "min-w-[12rem]" : ""
-                      )}
+                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600"
                     >
                       {c.label}
                     </th>
                   ))}
                 </tr>
               </thead>
-
               <tbody className="divide-y divide-slate-200">
                 {loading &&
                   Array.from({ length: 6 }).map((_, i) => (
@@ -401,7 +234,7 @@ const onApply = async (e) => {
                   </tr>
                 )}
 
-                {!loading && !err && rows.length === 0 && (
+                {!loading && !err && filtered.length === 0 && (
                   <tr>
                     <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-slate-500">
                       No shipments found.
@@ -411,54 +244,42 @@ const onApply = async (e) => {
 
                 {!loading &&
                   !err &&
-                  rows.map((r) => {
-                    const cargoItems = Array.isArray(r.items) ? r.items.length : Number(r.total_pieces) || 0;
-                    const weight = r.total_weight ?? r.weight ?? "—";
+                  filtered.map((r) => {
+                    // <<< ONLY COUNT OF CARGOS >>>
+                    const noOfCargos = Array.isArray(r.cargos)
+                      ? r.cargos.length
+                      : Number(r.no_of_cargos || r.total_cargos || r.cargo_count || 0);
+
+                    const statusText = r.shipment_status || r.status || "";
                     return (
-                      <tr key={r.id ?? r.track_code}>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">{r.id ?? "—"}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">
-                          {formatDate(r.created_at ?? r.booking_date)}
+                      <tr key={r.id}>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">
+                          {r.id ?? "—"}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{r.awb_number ?? "—"}</td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{r.sender ?? "—"}</td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{r.receiver ?? "—"}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">
+                          {formatDate(r.created_on ?? r.created_at)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          {r.awb_or_container_number ?? r.awb_number ?? "—"}
+                        </td>
                         <td className="px-4 py-3 text-sm text-slate-700">{r.origin_port ?? "—"}</td>
                         <td className="px-4 py-3 text-sm text-slate-700">{r.destination_port ?? "—"}</td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{cargoItems}</td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{weight}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{r.branch ?? "—"}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{r.created_by ?? "—"}</td>
+                        <td className="px-4 py-3 text-sm text-slate-800">{noOfCargos}</td>
                         <td className="px-4 py-3 text-sm">
-                          <Badge text={r.status ?? "—"} color={statusColor(r.status)} />
+                          <Badge text={statusText || "—"} color={statusColor(statusText)} />
                         </td>
-                      <td className="px-4 py-3 text-sm">
-                        <div className="flex items-center gap-2">
+                        <td className="px-4 py-3 text-sm">
                           <Link
                             to={`/shipments/shipmentsview/${r.id}`}
                             state={{ shipment: r }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
+                            className="inline-flex items-center rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            title="View"
                           >
-                            
-                            <FaRegEye/>
+                            View
                           </Link>
-
-                          <Link
-                            to={`/shipments/shipmentsview/${r.id}/invoice`}
-                            state={{ shipment: r }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-2 py-1.5 font-medium text-indigo-700 hover:bg-indigo-50"
-                          >                            
-                            <LiaFileInvoiceDollarSolid/>
-                          </Link>
-
-                            <Link
-                            to={`/shipments/shipmentsview/${r.id}/invoice`}
-                            state={{ shipment: r }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 px-2 py-1.5 font-medium text-indigo-700 hover:bg-indigo-50"
-                          >                            
-                            <FaRegEdit/>
-                          </Link>
-                        </div>
-                      </td>
-  
+                        </td>
                       </tr>
                     );
                   })}
@@ -466,12 +287,12 @@ const onApply = async (e) => {
             </table>
           </div>
 
-          {/* Footer / Pagination */}
+          {/* Pagination */}
           <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 p-3 sm:flex-row">
             <div className="text-sm text-slate-600">
-              Showing <span className="font-medium">{rows.length ? showingFrom : 0}</span> to{" "}
-              <span className="font-medium">{rows.length ? showingTo : 0}</span> of{" "}
-              <span className="font-medium">{meta.total ?? rows.length}</span> shipments
+              Showing <span className="font-medium">{filtered.length ? showingFrom : 0}</span> to{" "}
+              <span className="font-medium">{filtered.length ? showingTo : 0}</span> of{" "}
+              <span className="font-medium">{meta.total ?? filtered.length}</span> shipments
             </div>
 
             <div className="flex items-center gap-2">

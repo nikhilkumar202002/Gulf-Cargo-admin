@@ -1,15 +1,13 @@
 import React, { useState } from "react";
-import { useAuth } from "../../auth/AuthContext";
 import { createPort } from "../../api/portApi";
 import { useNavigate } from "react-router-dom";
 
 export default function PortCreate() {
-  const { token } = useAuth();
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [status, setStatus] = useState("1"); // ✅ 1 = Active, 0 = Inactive
+  const [status, setStatus] = useState("1"); // 1 = Active, 0 = Inactive
 
   const [submitting, setSubmitting] = useState(false);
   const [touchedName, setTouchedName] = useState(false);
@@ -43,7 +41,8 @@ export default function PortCreate() {
 
     try {
       setSubmitting(true);
-      await createPort(payload, token);
+      // NO TOKEN PASSED
+      await createPort(payload);
 
       const statusLabel = status === "1" ? "Active" : "Inactive";
 
@@ -113,13 +112,28 @@ export default function PortCreate() {
               )}
             </div>
 
+            {/* If you actually want to capture `code`, render an input: */}
+            {/* 
+            <div>
+              <label htmlFor="port-code" className="block text-sm font-medium text-gray-900">
+                Port Code (optional)
+              </label>
+              <input
+                id="port-code"
+                type="text"
+                className="mt-2 block w-full rounded-xl border border-gray-300 px-3.5 py-2.5 shadow-sm text-gray-900 placeholder:text-gray-400
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="e.g., COK"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </div>
+            */}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-
-
               <div>
                 <span className="block text-sm font-medium text-gray-900">Status</span>
                 <div className="mt-3 flex items-center gap-3">
-                  {/* Active = 1 */}
                   <button
                     type="button"
                     onClick={() => setStatus("1")}
@@ -127,15 +141,10 @@ export default function PortCreate() {
                       ${status === "1" ? "bg-green-50 text-green-700 ring-green-200" : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50"}`}
                     aria-pressed={status === "1"}
                   >
-                    <span
-                      className={`h-2.5 w-2.5 rounded-full ${
-                        status === "1" ? "bg-green-500" : "bg-gray-300"
-                      }`}
-                    />
+                    <span className={`h-2.5 w-2.5 rounded-full ${status === "1" ? "bg-green-500" : "bg-gray-300"}`} />
                     Active
                   </button>
 
-                  {/* Inactive = 0 */}
                   <button
                     type="button"
                     onClick={() => setStatus("0")}
@@ -143,11 +152,7 @@ export default function PortCreate() {
                       ${status === "0" ? "bg-red-50 text-red-700 ring-red-200" : "bg-white text-gray-700 ring-gray-300 hover:bg-gray-50"}`}
                     aria-pressed={status === "0"}
                   >
-                    <span
-                      className={`h-2.5 w-2.5 rounded-full ${
-                        status === "0" ? "bg-red-500" : "bg-gray-300"
-                      }`}
-                    />
+                    <span className={`h-2.5 w-2.5 rounded-full ${status === "0" ? "bg-red-500" : "bg-gray-300"}`} />
                     Inactive
                   </button>
                 </div>

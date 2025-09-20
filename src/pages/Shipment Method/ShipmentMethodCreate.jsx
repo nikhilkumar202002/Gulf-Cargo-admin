@@ -1,10 +1,8 @@
 import React, { useState } from "react";
-import { useAuth } from "../../auth/AuthContext";
 import { createShipmentMethod } from "../../api/shipmentMethodApi";
 import { useNavigate } from "react-router-dom";
 
 export default function ShipmentMethodCreate() {
-  const { token } = useAuth();
   const navigate = useNavigate();
 
   // form state
@@ -41,9 +39,9 @@ export default function ShipmentMethodCreate() {
 
     try {
       setSubmitting(true);
-      await createShipmentMethod(payload, token);
+      // NO TOKEN PASSED
+      await createShipmentMethod(payload);
 
-      // Send toast to the list page and redirect
       navigate("/shipmentmethod/view", {
         state: {
           toast: {
@@ -182,7 +180,7 @@ export default function ShipmentMethodCreate() {
               </button>
             </div>
 
-            {/* Local error message (optional) */}
+            {/* Local error message */}
             {msg.text && msg.variant === "error" && (
               <div className="rounded-xl px-4 py-3 text-sm bg-red-50 text-red-800 ring-1 ring-red-200">
                 {msg.text}
