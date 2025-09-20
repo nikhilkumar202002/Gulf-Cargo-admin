@@ -1,7 +1,5 @@
-// src/api/createCargoApi.js
 import axiosInstance from "./axiosInstance";
 
-/** Surface backend validation clearly */
 function parseAxiosError(err) {
   const status = err?.response?.status;
   const data = err?.response?.data;
@@ -163,14 +161,24 @@ export async function updateCargo(id, payload, { retryWithoutItems = true } = {}
 }
 
 export async function bulkUpdateCargoStatus({ status_id, cargo_ids }) {
+  const payload = {
+    status_id: Number(status_id),
+    cargo_ids: Array.isArray(cargo_ids) ? cargo_ids.map(Number) : [],
+  };
+
   try {
-    const payload = {
-      status_id: Number(status_id),
-      cargo_ids: Array.isArray(cargo_ids) ? cargo_ids.map((x) => Number(x)) : [],
-    };
-    const { data } = await axiosInstance.post(`/cargos/status`, payload, { timeout: 20000 });
+    const { data } = await axiosInstance.patch(
+      "/cargos/status",
+      payload,
+      { headers: { "Content-Type": "application/json" }, timeout: 20000 }
+    );
     return data?.data ?? data ?? {};
   } catch (err) {
+    // if your backend actually mounted the singular path, uncomment:
+    // if (err?.response?.status === 404) {
+    //   const { data } = await axiosInstance.patch("/cargo/status", payload);
+    //   return data?.data ?? data ?? {};
+    // }
     parseAxiosError(err);
   }
 }
