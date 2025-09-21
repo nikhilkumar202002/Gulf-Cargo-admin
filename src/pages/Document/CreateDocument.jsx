@@ -1,17 +1,15 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiSave, FiXCircle, FiFileText } from "react-icons/fi";
-import { useAuth } from "../../auth/AuthContext";
 import { createDocumentType } from "../../api/documentTypeApi";  // Import the function
 import "../Styles.css";
 
 const DocumentTypeCreate = () => {
   const navigate = useNavigate();
-  const { token, logout } = useAuth();
 
   const [formData, setFormData] = useState({
     documentType: "",
-    status: "1", 
+    status: "1",
   });
 
   const [loading, setLoading] = useState(false);
@@ -60,9 +58,6 @@ const DocumentTypeCreate = () => {
           err.response?.data?.message ||
             "Invalid input. Please check the fields and try again."
         );
-      } else if (err.response?.status === 401) {
-        setError("Session expired. Logging out...");
-        setTimeout(() => logout(), 1500);
       } else {
         setError("Something went wrong. Please try again later.");
       }

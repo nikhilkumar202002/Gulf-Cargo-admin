@@ -18,6 +18,10 @@ import { IoLocationSharp } from "react-icons/io5";
 import { MdAddIcCall } from "react-icons/md";
 import { BsFillBoxSeamFill } from "react-icons/bs";
 
+import { Link } from "react-router-dom";
+
+import { GoPlus } from "react-icons/go";
+
 import "./ShipmentStyles.css";
 
 /* ---------------- helpers ---------------- */
@@ -481,10 +485,32 @@ export default function CreateCargo() {
 
       <div className="min-h-screen bg-gray-50 flex items-start justify-center p-6">
         <div className="w-full max-w-6xl bg-white rounded-2xl p-8">
-          <h2 className="header-cargo-heading flex items-center gap-2">
+         
+         <div className="add-cargo-header flex justify-between items-center">
+               <h2 className="header-cargo-heading flex items-center gap-2">
             <span className="header-cargo-icon"><BsFillBoxSeamFill /></span>
             Create Cargo
           </h2>
+           <nav aria-label="Breadcrumb" className="">
+                    <ol className="flex items-center gap-2 text-sm">
+                      <li>
+                        <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">
+                          Home
+                        </Link>
+                      </li>
+                      <li className="text-gray-400">/</li>
+                      <li>
+                        <Link to="/cargo/allcargolist" className="text-gray-500 hover:text-gray-700 hover:underline">
+                          Cargos
+                        </Link>
+                      </li>
+                      <li className="text-gray-400">/</li>
+                      <li aria-current="page" className="text-gray-800 font-medium">
+                        Add Cargo
+                      </li>
+                    </ol>
+                  </nav>
+         </div>
 
           {/* inline banner removed; we use the toast above */}
 
@@ -551,7 +577,8 @@ export default function CreateCargo() {
                 <h3 className="font-semibold">Sender Info</h3>
                 <div>
                   <label className="block text-sm mb-1">Sender/Customer</label>
-                  <select
+                  <div className="flex gap-2">
+                        <select
                     className="w-full border rounded-lg px-3 py-2"
                     value={form.senderId}
                     onChange={(e) => setForm((f) => ({ ...f, senderId: e.target.value }))}
@@ -564,6 +591,10 @@ export default function CreateCargo() {
                       </option>
                     ))}
                   </select>
+
+                  <span className="add-customer border rounded-lg px-3 py-2"><Link to="/customers/create"><GoPlus/></Link></span>
+                  </div>
+                
                 </div>
                 <div className="party-details w-full rounded-lg py-2">
                   <p className="w-full px-3 flex items-center gap-1">
@@ -581,6 +612,7 @@ export default function CreateCargo() {
                 <h3 className="font-semibold">Receiver Info</h3>
                 <div>
                   <label className="block text-sm mb-1">Receiver/Customer</label>
+                   <div className="flex gap-2">
                   <select
                     className="w-full border rounded-lg px-3 py-2"
                     value={form.receiverId}
@@ -594,6 +626,8 @@ export default function CreateCargo() {
                       </option>
                     ))}
                   </select>
+                  <span className="add-customer border rounded-lg px-3 py-2"><Link to="/customers/create"><GoPlus/></Link></span>
+                  </div>
                 </div>
                 <div className="party-details w-full rounded-lg py-2">
                   <p className="w-full px-3 flex items-center gap-1">

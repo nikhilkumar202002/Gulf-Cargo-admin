@@ -3,11 +3,14 @@ import axiosInstance from "./axiosInstance";
 // POST /driver - Create a new driver
 export const createDriver = async (driverData) => {
   try {
-    const { data } = await axiosInstance.post('/driver', driverData);
-    return data;  // Return the response data
+    const isFD = typeof FormData !== "undefined" && driverData instanceof FormData;
+    const { data } = await axiosInstance.post("/driver", driverData, {
+      headers: isFD ? {} : { "Content-Type": "application/json", Accept: "application/json" },
+    });
+    return data;
   } catch (error) {
-    console.error('Error creating driver:', error);
-    throw error;  // Propagate error for handling in component
+    console.error("Error creating driver:", error);
+    throw error;
   }
 };
 

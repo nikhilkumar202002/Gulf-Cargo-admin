@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiMoreVertical, FiEye, FiEdit2, FiTrash2, FiPlus } from "react-icons/fi";
+import { FiPlus } from "react-icons/fi";
 import { FaCcVisa } from "react-icons/fa";
-import { useAuth } from "../../auth/AuthContext";
-import axios from "axios";
+import { getVisaTypes } from "../../api/visaType"; // <-- use API helper
 import "../styles.css";
 
 const VisaTypeList = () => {
   const navigate = useNavigate();
-  const { token, logout } = useAuth();
 
   const [visaTypes, setVisaTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,34 +14,21 @@ const VisaTypeList = () => {
   const [openMenu, setOpenMenu] = useState(null);
   const menuRef = useRef(null);
 
-  const toggleMenu = (id) => {
-    setOpenMenu(openMenu === id ? null : id);
-  };
-
   const fetchVisaTypes = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(
-        "https://api.gulfcargoksa.com/public/api/visa-types",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      setError("");
 
-      if (response.data.success) {
-        setVisaTypes(response.data.data || []);
-      } else {
-        setVisaTypes([]);
-        setError(response.data.message || "Failed to fetch visa types");
-      }
+      const res = await getVisaTypes(); // returns response.data from axiosInstance
+
+      // Normalize shape: support either array payload or { success, data }
+      const list = Array.isArray(res) ? res : res?.data ?? [];
+      setVisaTypes(list);
     } catch (err) {
-      console.error("Error fetching visa types:", err.response?.data || err.message);
-      if (err.response?.status === 401) {
-        setError("Session expired. Logging out...");
-        setTimeout(() => logout(), 1500);
+      console.error("Error fetching visa types:", err?.response?.data || err?.message);
+      const status = err?.response?.status;
+      if (status === 401) {
+        setError("Unauthorized (401). Please sign in and try again.");
       } else {
         setError("Something went wrong. Please try again later.");
       }
@@ -56,7 +41,7 @@ const VisaTypeList = () => {
     fetchVisaTypes();
   }, []);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click (kept, in case you wire menu later)
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -64,10 +49,32 @@ const VisaTypeList = () => {
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const renderStatusBadge = (raw) => {
+    // Accept "Active"/"Inactive", 1/0, true/false, or strings "1"/"0"
+    const isActive = (() => {
+      if (typeof raw === "boolean") return raw;
+      if (typeof raw === "number") return raw === 1;
+      if (typeof raw === "string") {
+        const s = raw.toLowerCase();
+        if (s === "active" || s === "enabled" || s === "true" || s === "1") return true;
+        if (s === "inactive" || s === "disabled" || s === "false" || s === "0") return false;
+      }
+      return false;
+    })();
+
+    return (
+      <span
+        className={`px-3 py-1 text-sm rounded-full ${
+          isActive ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
+        }`}
+      >
+        {isActive ? "Active" : "Inactive"}
+      </span>
+    );
+  };
 
   return (
     <>
@@ -109,40 +116,30 @@ const VisaTypeList = () => {
                   <th className="py-6 px-6 text-center">Actions</th>
                 </tr>
               </thead>
-     <tbody>
-  {visaTypes.map((visa, index) => (
-    <tr
-      key={visa.id}
-      className="hover:bg-gray-50 border-b border-gray-200 last:border-none"
-    >
-      {/* Visa Name */}
-      <td className="px-6 py-4">{visa.type_name}</td>
+              <tbody>
+                {visaTypes.map((visa) => (
+                  <tr
+                    key={visa.id ?? visa.type_name}
+                    className="hover:bg-gray-50 border-b border-gray-200 last:border-none"
+                  >
+                    {/* Visa Name */}
+                    <td className="px-6 py-4">
+                      {visa.type_name ?? visa.name ?? `Visa #${visa.id ?? ""}`}
+                    </td>
 
-      {/* Status Badge */}
-      <td className="px-6 py-4">
-        <span
-          className={`px-3 py-1 text-sm rounded-full ${
-            visa.status === "Active"
-              ? "bg-green-100 text-green-600"
-              : "bg-red-100 text-red-600"
-          }`}
-        >
-          {visa.status}
-        </span>
-      </td>
+                    {/* Status Badge */}
+                    <td className="px-6 py-4">{renderStatusBadge(visa.status)}</td>
 
-      {/* Employees Count */}
-      <td className="px-6 py-4 text-center">0</td>
+                    {/* Employees Count (placeholder) */}
+                    <td className="px-6 py-4 text-center">0</td>
 
-      {/* Actions */}
-      <td className="px-6 py-4 text-center text-gray-500 cursor-pointer">
-        ⋮
-      </td>
-    </tr>
-  ))}
-</tbody>
-
-
+                    {/* Actions */}
+                    <td className="px-6 py-4 text-center text-gray-500 cursor-pointer" ref={menuRef}>
+                      ⋮
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           )}
         </div>

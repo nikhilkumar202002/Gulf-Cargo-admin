@@ -134,7 +134,7 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
         : [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id];
 
       const name = isSender ? (shipment.sender?.name || shipment.sender || shipment.shipper_name)
-                            : (shipment.receiver?.name || shipment.receiver || shipment.consignee_name);
+        : (shipment.receiver?.name || shipment.receiver || shipment.consignee_name);
 
       // by ID
       for (const pid of idCandidates) {
@@ -143,7 +143,7 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
           const res = await getPartyById(pid);
           const data = res?.party || res?.data || res;
           if (data?.id) return extractParty(data);
-        } catch (_) {}
+        } catch (_) { }
       }
 
       // by name + role (Sender/Receiver)
@@ -160,7 +160,7 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
           const list = parsePartyList(res);
           const found = matchByName(name, list) || list[0];
           if (found) return extractParty(found);
-        } catch (_) {}
+        } catch (_) { }
       }
 
       // fallback from shipment
@@ -419,6 +419,23 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
 
           <div className="border-t border-slate-200 px-6 py-4 text-xs text-slate-500">
             Thank you for your business.
+            <div className="invoice-terms-conditions-content">
+              <h2>Accept the goods only after checking and confirming them on delivery.</h2>
+              <p>NO GUARANTEE FOR GLASS/BREAKABLE ITEMS. COMPANY NOT RESPONSIBLE FOR ITEMS RECEIVED IN DAMAGED CONDITION.COMPLAINTS WILL NOT BE ACCEPTED AFTER 2 DAYS FROM THE DATE OF DELIVERY.COMPANY NOT RESPONSIBLE FOR OCTROI CHARGES OR ANY OTHER CHARGES LEVIED LOCALLY.IN CASE OF CLAIM (LOSS), PROOF OF DOCUMENTS SHOULD BE PRODUCED IN CASE OF LOSS OF PACKAGE.SETTLEMENT WILL BE MADE (20 SAR/KGS) PER COMPANY RULES.COMPANY WILL NOT TAKE RESPONSIBILITY FOR NATURAL CALAMITY AND DELAY IN CUSTOMS CLEARANCE.</p>
+              <p>لن تقبل أي شكوى بعد مرور يومين من استلام البضاعة.
+                الشركة غير مسؤولة عن أي رسوم ومصاريف تفرض من السلطات المحلية.
+                عند حدوث فقدان في البضاعة يجب إحضار دليل رسمي. يتم تعويض المفقود في البضائع المفقودة أو الناقصة بمبلغ عشرون ريال سعودي للكيلو حسب أنظمة الشركة. الشركة غير مسؤولة عن الكوارث الطبيعية أو التأخير في التخليص الجمركي.</p>
+                <p>വസ്തുക്കൾ / ഗ്ലാസ് / പൊട്ടിത്തെറിക്കാൻ സാധ്യതയുള്ള സാധനങ്ങൾക്ക് ഗ്യാരണ്ടി ഇല്ല.
+                    വസ്തുക്കൾ കേടായ അവസ്ഥയിൽ ലഭിച്ചാൽ കമ്പനി ഉത്തരവാദികളല്ല.
+                    വസ്തുക്കൾ വാങ്ങിയ ശേഷം 2 ദിവസത്തിനു ശേഷം പരാതി സ്വീകരിക്കുകയില്ല.
+                    പ്രാദേശിക അധികാരികൾ ചുമത്തുന്ന ഓക്ട്രോയ് ചാർജ് കമ്പനി ഉത്തരവാദിയല്ല.
+                    പാക്കേജ് നഷ്ടപ്പെട്ടാൽ അവകാശം ആവശ്യപ്പെടാൻ തെളിവുകൾ സമർപ്പിക്കണം.
+                    കമ്പനി നിയമങ്ങൾ പ്രകാരം കിലോയ്ക്ക് 20 SAR വീതം തീർപ്പാക്കും.
+                    പ്രകൃതിക്ഷോഭം കൊണ്ടോ കസ്റ്റംസ് ക്ലിയറൻസിലെ വൈകീൽ കൊണ്ടോ കമ്പനി ഉത്തരവാദികളല്ല.</p>
+                    <p>डिलीवरी के समय सामान की जाँच और पुष्टि करने के बाद ही उसे स्वीकार करें। <br></br>
+                        कांच/टूटने वाली वस्तुओं की कोई गारंटी नहीं है। कंपनी क्षतिग्रस्त स्थिति में प्राप्त वस्तुओं के लिए जिम्मेदार नहीं है। डिलीवरी की तारीख से कुछ दिनों के बाद शिकायतें स्वीकार नहीं की जाएंगी। कंपनी स्थानीय प्राधिकरणों द्वारा लगाए गए ऑक्ट्री शुल्क या किसी अन्य शुल्क के लिए जिम्मेदार नहीं है। पैकेज के नुकसान की स्थिति में दावा करने के लिए दस्तावेज़ का प्रमाण प्रस्तुत करना होगा। कंपनी के नियमों के अनुसार प्रति किलोग्राम 20 सऊदी रियाल (SAR) का निपटान किया जाएगा। प्राकृतिक आपदाओं और सीमा शुल्क निकासी में देरी के लिए कंपनी जिम्मेदार नहीं होगी।
+                    </p>
+            </div>
           </div>
         </div>
       </main>

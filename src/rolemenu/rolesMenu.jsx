@@ -10,6 +10,7 @@ import {
   FaCog,
   FaCcVisa
 } from "react-icons/fa";
+import { IoDocumentAttachSharp } from "react-icons/io5";
 import { RiMailSendFill } from "react-icons/ri";
 import { BiSolidDashboard } from "react-icons/bi";
 
@@ -63,57 +64,57 @@ export const rolesMenu = {
         { name: "Add Drivers", path: "/drivers/addnewdriver" },
       ]
     },
-    {
-      key: "agency",
-      icon: <FaUser />,
-      label: "Agency & Partners",
-      submenus: [
-        { name: "Partner Agencies", path: "/partner-agencies" },
-        { name: "Contracts & Agreements", path: "/contracts" },
-        { name: "Agency Performance", path: "/performance" },
-      ]
-    },
+    // {
+    //   key: "agency",
+    //   icon: <FaUser />,
+    //   label: "Agency & Partners",
+    //   submenus: [
+    //     { name: "Partner Agencies", path: "/partner-agencies" },
+    //     { name: "Contracts & Agreements", path: "/contracts" },
+    //     { name: "Agency Performance", path: "/performance" },
+    //   ]
+    // },
     {
       key: "visa",
       icon: <FaCcVisa />,
       label: "Visa",
       submenus: [
         { name: "All Visa", path: "/visa/allvisa" },
-        { name: "Visa Employee", path: "/visaemployee" },
+        // { name: "Visa Employee", path: "/visaemployee" },
         { name: "Create Visa Type", path: "/visatype/create" },
       ]
     },
     {
       key: "document",
-      icon: <FaCcVisa />,
+      icon: <IoDocumentAttachSharp />,
       label: "Document Type",
       submenus: [
         { name: "Create Document Type", path: "/documents/createdocument" },
         { name: "Document List", path: "/documents/documentlist" },
       ]
     },
-    {
-      key: "finance",
-      icon: <FaMoneyBill />,
-      label: "Finance & Accounts",
-      submenus: [
-        { name: "Invoices & Payments", path: "financeaccounts/invoicepayment" },
-        { name: "Expenses & Purchase Orders", path: "financeaccounts/outstandingpayments" },
-        { name: "Outstanding Payments", path: "financeaccounts/expensespurchaseorders" },
-        { name: "Financial Reports", path: "financeaccounts/financialreports" },
-      ]
-    },
-    {
-      key: "reports",
-      icon: <FaChartBar />,
-      label: "Reports & Analytics",
-      submenus: [
-        { name: "Shipment Reports", path: "shipmentreport/shipmentreport" },
-        { name: "Revenue & Expense Reports", path: "shipmentreport/revenueexpensereport" },
-        { name: "Delivery Performance", path: "shipmentreport/deliveryperformance" },
-        { name: "Branch-wise Analysis", path: "shipmentreport/branchanalysis" },
-      ]
-    },
+    // {
+    //   key: "finance",
+    //   icon: <FaMoneyBill />,
+    //   label: "Finance & Accounts",
+    //   submenus: [
+    //     { name: "Invoices & Payments", path: "financeaccounts/invoicepayment" },
+    //     { name: "Expenses & Purchase Orders", path: "financeaccounts/outstandingpayments" },
+    //     { name: "Outstanding Payments", path: "financeaccounts/expensespurchaseorders" },
+    //     { name: "Financial Reports", path: "financeaccounts/financialreports" },
+    //   ]
+    // },
+    // {
+    //   key: "reports",
+    //   icon: <FaChartBar />,
+    //   label: "Reports & Analytics",
+    //   submenus: [
+    //     { name: "Shipment Reports", path: "shipmentreport/shipmentreport" },
+    //     { name: "Revenue & Expense Reports", path: "shipmentreport/revenueexpensereport" },
+    //     { name: "Delivery Performance", path: "shipmentreport/deliveryperformance" },
+    //     { name: "Branch-wise Analysis", path: "shipmentreport/branchanalysis" },
+    //   ]
+    // },
     {
       key: "settings",
       icon: <FaCog />,

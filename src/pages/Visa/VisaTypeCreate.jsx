@@ -2,17 +2,15 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiSave, FiXCircle } from "react-icons/fi";
 import { FaCcVisa } from "react-icons/fa6";
-import { useAuth } from "../../auth/AuthContext"; 
-import { createVisaType } from "../../api/visaType"; // Import the API function
+import { createVisaType } from "../../api/visaType"; // API function
 import "../Styles.css";
 
 const VisaTypeCreate = () => {
   const navigate = useNavigate();
-  const { token, logout } = useAuth();
 
   const [formData, setFormData] = useState({
     visaType: "",
-    status: "1", 
+    status: "1",
   });
 
   const [loading, setLoading] = useState(false);
@@ -21,7 +19,7 @@ const VisaTypeCreate = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -42,7 +40,7 @@ const VisaTypeCreate = () => {
         status: Number(formData.status),
       });
 
-      if (response.success) {
+      if (response?.success) {
         setSuccess("Visa Type created successfully!");
         setFormData({ visaType: "", status: "1" });
 
@@ -50,19 +48,19 @@ const VisaTypeCreate = () => {
           navigate("/visa/allvisa");
         }, 1500);
       } else {
-        setError(response.message || "Failed to create visa type.");
+        setError(response?.message || "Failed to create visa type.");
       }
     } catch (err) {
-      console.error("Error creating visa type:", err.response?.data || err.message);
+      console.error("Error creating visa type:", err?.response?.data || err?.message);
+      const status = err?.response?.status;
 
-      if (err.response?.status === 422) {
+      if (status === 422) {
         setError(
-          err.response?.data?.message ||
-          "Invalid input. Please check the fields and try again."
+          err?.response?.data?.message ||
+            "Invalid input. Please check the fields and try again."
         );
-      } else if (err.response?.status === 401) {
-        setError("Session expired. Logging out...");
-        setTimeout(() => logout(), 1500);
+      } else if (status === 401) {
+        setError("Unauthorized (401). Please sign in and try again.");
       } else {
         setError("Something went wrong. Please try again later.");
       }
@@ -95,7 +93,7 @@ const VisaTypeCreate = () => {
               <input
                 type="text"
                 name="visaType"
-                value={formData.visaType}  
+                value={formData.visaType}
                 onChange={handleChange}
                 placeholder="e.g., Company Visa"
                 required
@@ -122,7 +120,7 @@ const VisaTypeCreate = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex items-center gap-2 bg-[#262262] hover:bg-[#18153d] text-white px-5 py-2 rounded-lg shadow-md transition-all duration-200"
+                className="flex items-center gap-2 bg-[#262262] hover:bg-[#18153d] text-white px-5 py-2 rounded-lg shadow-md transition-all duration-200 disabled:opacity-70"
               >
                 <FiSave className="text-lg" />
                 {loading ? "Saving..." : "Save"}

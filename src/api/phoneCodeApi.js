@@ -1,9 +1,9 @@
+// api/phoneCodeApi.js
 import axiosInstance from "./axiosInstance";
 
 const LIST_ENDPOINT = "/phone-codes";
 const ONE_ENDPOINT  = "/phone-code";
 
-// robust extractor for many common API shapes
 const extractArray = (res) => {
   const d = res?.data ?? res;
   if (Array.isArray(d)) return d;
@@ -22,7 +22,7 @@ export const getPhoneCodes = async (params = {}, token, axiosOpts = {}) => {
     cfg.headers = { ...(axiosOpts.headers || {}), Authorization: `Bearer ${token}` };
   }
   const res = await axiosInstance.get(LIST_ENDPOINT, cfg);
-  return extractArray(res); 
+  return extractArray(res);
 };
 
 export const getPhoneCode = async (params, token, axiosOpts = {}) => {
@@ -31,5 +31,5 @@ export const getPhoneCode = async (params, token, axiosOpts = {}) => {
     cfg.headers = { ...(axiosOpts.headers || {}), Authorization: `Bearer ${token}` };
   }
   const res = await axiosInstance.get(ONE_ENDPOINT, cfg);
-  return (res?.data ?? res);
+  return res?.data ?? res;
 };
