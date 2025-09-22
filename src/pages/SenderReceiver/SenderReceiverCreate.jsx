@@ -1,5 +1,10 @@
+// src/pages/SenderCreate.jsx
 import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { FaUserTie } from "react-icons/fa";
+import { FiAlertCircle, FiPaperclip } from "react-icons/fi";
+import { Toaster, toast } from "react-hot-toast";
+
 import { getCustomerTypes } from "../../api/customerTypeApi";
 import { getDocumentTypes } from "../../api/documentTypeApi";
 import {
@@ -10,16 +15,14 @@ import {
 } from "../../api/worldApi";
 import { getAllBranches } from "../../api/branchApi";
 import { createParty } from "../../api/partiesApi";
+import { getPhoneCodes } from "../../api/phoneCodeApi";
 
 import CreateReceiverSenderModal from "../../components/CreateReceiverSenderModal";
 import ErrorBoundary from "../../components/ErrorBoundary";
 
-import { Link } from "react-router-dom";
-
 import "./CustomerStyles.css";
 
-
-/* ---------------------- Helpers ---------------------- */
+/* ───────────────────────────── Helpers ───────────────────────────── */
 const normalizeList = (p) => {
   if (Array.isArray(p)) return p;
   if (Array.isArray(p?.data)) return p.data;
@@ -33,18 +36,14 @@ const normalizeList = (p) => {
   }
   return [];
 };
-
 const debugNormalize = (label, res) => {
-  console.debug(`[WORLD-API] ${label} raw:`, res);
   const list = normalizeList(res);
-  console.debug(
-    `[WORLD-API] ${label} normalized length:`,
-    Array.isArray(list) ? list.length : 0,
-    Array.isArray(list) ? list.slice(0, 3) : list
-  );
+  console.debug(`[WORLD-API] ${label}`, {
+    length: Array.isArray(list) ? list.length : 0,
+    peek: list.slice?.(0, 3),
+  });
   return list;
 };
-
 const pickLabel = (obj, keys) => {
   for (const k of keys) {
     const v = obj?.[k];
@@ -52,7 +51,6 @@ const pickLabel = (obj, keys) => {
   }
   return null;
 };
-
 const getId = (o) =>
   typeof o === "string" ? o : String(o?.id ?? o?._id ?? o?.code ?? o?.uuid ?? "");
 
@@ -62,13 +60,11 @@ const getCountryLabel = (c) =>
     ? c
     : pickLabel(c, ["name", "country", "country_name", "title", "label"]) ||
       `Country ${getId(c)}`;
-
 const getStateLabel = (s) =>
   typeof s === "string"
     ? s
     : pickLabel(s, ["name", "state", "state_name", "title", "label"]) ||
       `State ${getId(s)}`;
-
 const getDistrictLabel = (d) =>
   typeof d === "string"
     ? d
@@ -119,21 +115,19 @@ const getBranchLabel = (b) =>
     ? b
     : b?.branch_name ?? b?.name ?? b?.title ?? b?.label ?? `Branch ${getBranchId(b)}`;
 
-/* Resolve an ID to a label from a list */
+/* Resolve ID → label */
 const resolveLabel = (id, list, getLabelFn) => {
   if (!id) return "";
   const item = list.find((x) => String(getId(x)) === String(id));
   return item ? getLabelFn(item) : String(id);
 };
 
-/* ---------------------- Upload Controls (413 prevention) ---------------------- */
+/* Upload limits */
 const MAX_FILE_MB = 8; // per file
-const MAX_TOTAL_MB = 24; // all files combined
-const MAX_DIMENSION = 2000; // px, longest side after resize
-const WEBP_QUALITY = 0.82; // 0..1
-
+const MAX_TOTAL_MB = 24; // total
+const MAX_DIMENSION = 2000;
+const WEBP_QUALITY = 0.82;
 const bytesToMB = (b) => b / (1024 * 1024);
-
 const loadImageFromFile = (file) =>
   new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -148,101 +142,163 @@ const loadImageFromFile = (file) =>
     };
     img.src = url;
   });
-
 async function compressIfImage(file) {
-  if (!file.type.startsWith("image/")) return file; // only compress images
+  if (!file.type.startsWith("image/")) return file;
   try {
     const img = await loadImageFromFile(file);
     let { width, height } = img;
-
     const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height));
     if (scale < 1) {
       width = Math.round(width * scale);
       height = Math.round(height * scale);
     }
-
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0, width, height);
-
     const blob = await new Promise((res) => canvas.toBlob(res, "image/webp", WEBP_QUALITY));
     if (!blob) return file;
-
-    if (blob.size >= file.size) return file; // keep original if not smaller
-
+    if (blob.size >= file.size) return file;
     return new File([blob], file.name.replace(/\.\w+$/, "") + ".webp", {
       type: "image/webp",
       lastModified: Date.now(),
     });
   } catch {
-    return file; // fail-open
+    return file;
   }
 }
 
-/* ---------------------- Main Component ---------------------- */
+/* ─────────────── Phone code helpers (for Contact section) ─────────────── */
+const getDialCode = (o) =>
+  String(
+    o?.dial_code ?? o?.phone_code ?? o?.code ?? o?.calling_code ?? o?.isd ?? o?.prefix ?? ""
+  ).replace(/\s+/g, "");
 
-// single source of truth for empty form (use camelCase locally)
+const getDialLabel = (o) => {
+  const name = o?.country ?? o?.country_name ?? o?.name ?? o?.title ?? o?.label ?? "—";
+  const dc = getDialCode(o);
+  return dc ? `${name} (${dc})` : name;
+};
+
+const pickDialCodeByNumber = (num = "", codes = []) => {
+  if (!num?.startsWith("+")) return null;
+  const only = num.replace(/[^\d+]/g, "");
+  let best = null;
+  for (const c of codes) {
+    const dc = getDialCode(c);
+    if (!dc || !dc.startsWith("+")) continue;
+    if (only.startsWith(dc) && (!best || dc.length > getDialCode(best).length)) best = c;
+  }
+  return best;
+};
+
+const composeE164 = (code, local) => {
+  const c = String(code || "").trim();
+  const n = String(local || "").trim();
+  if (!c && !n) return "";
+  if (n.startsWith("+")) return n.replace(/\s+/g, "");
+  const cc = c.startsWith("+") ? c : `+${c}`;
+  return (cc + n.replace(/[^\d]/g, "")).replace(/\s+/g, "");
+};
+
+/* ───────────────────────────── UI bits ───────────────────────────── */
+const Section = ({ title, subtitle, children, icon }) => (
+  <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
+    <div className="mb-4 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-900 text-white">
+          {icon}
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-slate-800">{title}</h3>
+          {subtitle ? <p className="text-xs text-slate-500">{subtitle}</p> : null}
+        </div>
+      </div>
+    </div>
+    {children}
+  </div>
+);
+
+const Label = ({ children, required }) => (
+  <label className="mb-1 block text-sm font-medium text-slate-700">
+    {children} {required ? <span className="text-rose-600">*</span> : null}
+  </label>
+);
+
+const fieldBase =
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none ring-emerald-500 focus:ring";
+const fieldDisabled = "disabled:cursor-not-allowed disabled:bg-slate-50";
+
+const ErrorMsg = ({ children }) =>
+  children ? (
+    <p className="mt-1 flex items-center gap-1 text-sm text-rose-700">
+      <FiAlertCircle /> {children}
+    </p>
+  ) : null;
+
+/* ─────────────────────────── Main Component ─────────────────────────── */
 const makeInitialForm = () => ({
   name: "",
   email: "",
-  branch: "", // branch_id
-  customerType: "", // customer_type_id
+  branch: "",
+  customerType: "",
   whatsappNumber: "",
   contactNumber: "",
-  senderIdType: "", // document_type_id
-  senderId: "", // maps to document_id
-  documents: [], // File[]
-  country: "", // country_id
-  state: "", // state_id
-  district: "", // district_id
+  senderIdType: "",
+  senderId: "",
+  documents: [],
+  country: "",
+  state: "",
+  district: "",
   city: "",
   zipCode: "",
   address: "",
 });
 
 const SenderCreate = () => {
-  /* selects data */
+  // selects
   const [customerTypes, setCustomerTypes] = useState([]);
   const [docTypes, setDocTypes] = useState([]);
   const [branches, setBranches] = useState([]);
-
   const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
   const [districts, setDistricts] = useState([]);
 
-  /* loaders + errors */
+  // phone codes
+  const [phoneCodes, setPhoneCodes] = useState([]);
+  const [phoneCodesLoading, setPhoneCodesLoading] = useState(true);
+  const [phoneCodesError, setPhoneCodesError] = useState("");
+
+  // selected dial codes
+  const [contactCode, setContactCode] = useState("+");
+  const [whatsappCode, setWhatsappCode] = useState("+");
+
+  // loaders/errors
   const [typesLoading, setTypesLoading] = useState(true);
   const [docsLoading, setDocsLoading] = useState(true);
   const [branchLoading, setBranchLoading] = useState(true);
-
   const [typesError, setTypesError] = useState("");
   const [docsError, setDocsError] = useState("");
   const [branchError, setBranchError] = useState("");
-
   const [countryLoading, setCountryLoading] = useState(true);
   const [stateLoading, setStateLoading] = useState(false);
   const [districtLoading, setDistrictLoading] = useState(false);
-
   const [countryError, setCountryError] = useState("");
   const [stateError, setStateError] = useState("");
   const [districtError, setDistrictError] = useState("");
 
-  /* form state */
+  // form + submit
   const [formData, setFormData] = useState(makeInitialForm());
-  const [fileKey, setFileKey] = useState(0); // force-reset file input
-
-  /* submit state */
+  const [fileKey, setFileKey] = useState(0);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [submitNotice, setSubmitNotice] = useState(""); // soft warnings (trimmed, oversized, etc.)
+  const [submitNotice, setSubmitNotice] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdData, setCreatedData] = useState(null);
   const [displayDetails, setDisplayDetails] = useState(null);
 
-  /* reset everything */
   const resetForm = () => {
     setFormData(makeInitialForm());
     setFieldErrors({});
@@ -251,47 +307,48 @@ const SenderCreate = () => {
     setCreatedData(null);
     setDisplayDetails(null);
     setFileKey((k) => k + 1);
+    // keep selected codes as-is
   };
 
-  /* handle input */
   const handleChange = async (e) => {
     const { name, value, files } = e.target;
 
     // cascading clears
-  if (name === "country") {
-  setStates([]);       // clear state options
-   setDistricts([]);    // clear district options
-   return setFormData((prev) => ({ ...prev, country: value, state: "", district: "" }));
- }
- if (name === "state") {
-   setDistricts([]);    // clear district options
-   return setFormData((prev) => ({ ...prev, state: value, district: "" }));
- }
+    if (name === "country") {
+      setStates([]);
+      setDistricts([]);
+      return setFormData((prev) => ({ ...prev, country: value, state: "", district: "" }));
+    }
+    if (name === "state") {
+      setDistricts([]);
+      return setFormData((prev) => ({ ...prev, state: value, district: "" }));
+    }
 
-    // special camelCase fields
+    // phone numbers → auto-pick dial code if "+…"
     if (name === "whatsappNumber" || name === "contactNumber") {
+      if (value?.startsWith("+") && phoneCodes.length) {
+        const match = pickDialCodeByNumber(value, phoneCodes);
+        if (match) {
+          const code = getDialCode(match);
+          if (name === "whatsappNumber") setWhatsappCode(code);
+          if (name === "contactNumber") setContactCode(code);
+        }
+      }
       setFormData((prev) => ({ ...prev, [name]: value }));
       return;
     }
 
-    // document uploads: compress → filter per-file → cap total
+    // files
     if (name === "documents") {
       setSubmitNotice("");
       const picked = Array.from(files || []);
-
-      // compress images (non-images pass through)
       const processed = await Promise.all(picked.map(compressIfImage));
-
-      // filter by per-file size
       const overs = processed.filter((f) => bytesToMB(f.size) > MAX_FILE_MB);
       if (overs.length) {
-        setSubmitNotice(
-          `Some files exceed ${MAX_FILE_MB}MB: ${overs.map((f) => f.name).join(", ")}`
-        );
+        setSubmitNotice(`Some files exceed ${MAX_FILE_MB}MB: ${overs.map((f) => f.name).join(", ")}`);
       }
       const kept = processed.filter((f) => bytesToMB(f.size) <= MAX_FILE_MB);
 
-      // cap total size
       const totalMB = kept.reduce((s, f) => s + bytesToMB(f.size), 0);
       if (totalMB > MAX_TOTAL_MB) {
         let running = 0;
@@ -303,23 +360,19 @@ const SenderCreate = () => {
           trimmed.push(f);
         }
         setFormData((prev) => ({ ...prev, documents: trimmed }));
-        setSubmitNotice(
-          `Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length} file(s).`
-        );
+        setSubmitNotice(`Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length} file(s).`);
         return;
       }
-
       setFormData((prev) => ({ ...prev, documents: kept }));
       return;
     }
 
-    // default
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const fetchStamp = useRef(0);
 
-  /* load customer types + doc types + branches (once) */
+  /* first fetch: branches/types/docs */
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -330,13 +383,11 @@ const SenderCreate = () => {
         setTypesError("");
         setDocsError("");
         setBranchError("");
-
         const [branchesRes, docsRes, custTypesRes] = await Promise.all([
           getAllBranches({ per_page: 500 }),
           getDocumentTypes({ per_page: 1000 }),
           getCustomerTypes({ per_page: 1000 }),
         ]);
-
         if (!mounted) return;
         setBranches(normalizeList(branchesRes));
         setDocTypes(normalizeList(docsRes));
@@ -357,73 +408,84 @@ const SenderCreate = () => {
     return () => {
       mounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* Countries / States / Districts cascading fetch */
+  /* phone codes (once) */
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setPhoneCodesLoading(true);
+        setPhoneCodesError("");
+        const token = localStorage.getItem("token");
+        const list = await getPhoneCodes({ per_page: 1000 }, token);
+        if (!alive) return;
+        setPhoneCodes(Array.isArray(list) ? list : []);
+      } catch (e) {
+        if (!alive) return;
+        console.error("[PHONE-CODES] load failed:", e);
+        setPhoneCodesError("Failed to load phone codes.");
+        setPhoneCodes([]);
+      } finally {
+        if (!alive) return;
+        setPhoneCodesLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /* countries / states / districts cascade */
   useEffect(() => {
     let mounted = true;
     const myStamp = ++fetchStamp.current;
-
     (async () => {
       try {
-        // Countries (once)
         if (countries.length === 0) {
           setCountryLoading(true);
           try {
-            console.debug("[WORLD-API] getCountries params:", { per_page: 500 });
             const cRes = await getCountries({ per_page: 500 });
             if (!mounted || fetchStamp.current !== myStamp) return;
             setCountries(debugNormalize("countries", cRes));
             setCountryError("");
           } catch (e) {
             if (!mounted || fetchStamp.current !== myStamp) return;
-            console.error("[WORLD-API] getCountries failed:", e);
             setCountryError("Failed to load countries.");
           } finally {
             if (mounted && fetchStamp.current === myStamp) setCountryLoading(false);
           }
         }
 
-        // States by country
         if (formData.country) {
           setStateLoading(true);
           try {
-            const countryId = Number(formData.country); // APIs often want numeric IDs
-            const params = { country_id: countryId };
-            console.debug("[WORLD-API] getStatesByCountry params:", params);
             const sRes = await getStatesByCountry(Number(formData.country));
             if (!mounted || fetchStamp.current !== myStamp) return;
             setStates(debugNormalize("states", sRes));
             setStateError("");
           } catch (e) {
             if (!mounted || fetchStamp.current !== myStamp) return;
-            console.error("[WORLD-API] getStatesByCountry failed:", e);
             setStateError("Failed to load states.");
           } finally {
             if (mounted && fetchStamp.current === myStamp) setStateLoading(false);
           }
         }
 
-        // Districts by state
         if (formData.state) {
           setDistrictLoading(true);
           try {
             const stateId = Number(formData.state);
-            console.debug("[WORLD-API] getDistrictsByState params:", { state_id: stateId });
             let dRes = await getDistrictsByState(stateId);
             let list = normalizeList(dRes);
             if (Array.isArray(list) && list.length === 0) {
-              console.debug("[WORLD-API] districts empty — trying getActiveDistrictsByState");
               dRes = await getActiveDistrictsByState(stateId);
             }
-
             if (!mounted || fetchStamp.current !== myStamp) return;
             setDistricts(debugNormalize("districts", dRes));
             setDistrictError("");
           } catch (e) {
             if (!mounted || fetchStamp.current !== myStamp) return;
-            console.error("[WORLD-API] getDistrictsByState failed:", e);
             setDistrictError("Failed to load districts.");
           } finally {
             if (mounted && fetchStamp.current === myStamp) setDistrictLoading(false);
@@ -433,23 +495,25 @@ const SenderCreate = () => {
         console.error("[WORLD-API] unexpected error:", err);
       }
     })();
-
     return () => {
       mounted = false;
     };
-    // NOTE: we intentionally do NOT depend on `countries` to avoid re-fetch loops
-  }, [formData.country, formData.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [formData.country, formData.state]); // intentionally not depending on countries list
 
-  /* Build payload (JSON or multipart if files present) */
+  /* payload (JSON or multipart) */
   const buildPartyPayload = (fd) => {
     const files = Array.isArray(fd.documents) ? fd.documents : [];
     const hasFiles = files.length > 0;
 
+    // compose full numbers
+    const whatsappFull = composeE164(whatsappCode, fd.whatsappNumber);
+    const contactFull = composeE164(contactCode, fd.contactNumber);
+
     const map = {
       name: fd.name,
       email: fd.email,
-      contact_number: fd.contactNumber, // snake_case expected by API
-      whatsapp_number: fd.whatsappNumber,
+      contact_number: contactFull, // E.164
+      whatsapp_number: whatsappFull, // E.164
       customer_type_id: fd.customerType ? Number(fd.customerType) : "",
       document_type_id: fd.senderIdType ? Number(fd.senderIdType) : "",
       document_id: fd.senderId,
@@ -458,14 +522,16 @@ const SenderCreate = () => {
       state_id: fd.state ? Number(fd.state) : "",
       district_id: fd.district ? Number(fd.district) : "",
       city: fd.city,
-      postal_code: fd.zipCode, // snake_case expected by some APIs
+      postal_code: fd.zipCode,
       address: fd.address,
+      // If backend also wants the raw codes, uncomment:
+      // phone_code: contactCode,
+      // whatsapp_phone_code: whatsappCode,
     };
 
     if (!hasFiles) {
       return Object.fromEntries(Object.entries(map).filter(([, v]) => v !== "" && v != null));
     }
-
     const f = new FormData();
     for (const [k, v] of Object.entries(map)) {
       if (v !== "" && v != null) f.append(k, v);
@@ -475,7 +541,7 @@ const SenderCreate = () => {
     return f;
   };
 
-  /* Submit */
+  /* submit */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError("");
@@ -489,13 +555,23 @@ const SenderCreate = () => {
     try {
       setSubmitLoading(true);
       const payload = buildPartyPayload(formData);
-      const created = await createParty(payload);
+
+      // Toasted submit
+      const created = await toast.promise(
+        createParty(payload),
+        {
+          loading: "Submitting…",
+          success: "Customer created successfully",
+          error: (e) => e?.response?.data?.message || "Failed to submit form.",
+        },
+        { position: "top-right" }
+      );
 
       const details = {
         Name: formData.name,
         Email: formData.email,
-        WhatsApp: formData.whatsappNumber,
-        Phone: formData.contactNumber,
+        WhatsApp: composeE164(whatsappCode, formData.whatsappNumber),
+        Phone: composeE164(contactCode, formData.contactNumber),
         "Customer Type": resolveLabel(formData.customerType, customerTypes, getTypeLabel),
         "Document Type": resolveLabel(formData.senderIdType, docTypes, getDocLabel),
         "Document ID": formData.senderId,
@@ -507,40 +583,35 @@ const SenderCreate = () => {
         "Zip Code": formData.zipCode,
         Address: formData.address,
         Attachments:
-          formData.documents?.length > 0
-            ? formData.documents.map((f) => f.name).join(", ")
-            : "—",
+          formData.documents?.length > 0 ? formData.documents.map((f) => f.name).join(", ") : "—",
       };
 
       setCreatedData(created ?? null);
       setDisplayDetails(details);
       setShowSuccess(true);
-      // keep filled until modal close
+      // do not reset immediately; modal close will reset
     } catch (err) {
       console.error(err);
-      const status = err?.response?.status;
-      if (status === 413) {
-        setSubmitError(
-          `Your attachments are too large for the server limit (413). Trim files or upload fewer/smaller files.`
-        );
+      if (err?.response?.status === 413) {
+        setSubmitError("Attachments exceed server limit (413). Trim or upload fewer files.");
+        toast.error("Attachments too large (413)", { position: "top-right" });
         return;
       }
       const apiMsg = err?.response?.data?.message || "Failed to submit form.";
-      const apiErrors = err?.response?.data?.errors;
       setSubmitError(apiMsg);
+      const apiErrors = err?.response?.data?.errors;
       if (apiErrors && typeof apiErrors === "object") setFieldErrors(apiErrors);
     } finally {
       setSubmitLoading(false);
     }
   };
 
-  /* Close modal */
   const handleCloseSuccess = () => {
     setShowSuccess(false);
     resetForm();
   };
 
-  /* Renderers */
+  /* options */
   const renderCountryOptions = () =>
     countries.map((c) => (
       <option key={getId(c)} value={getId(c)}>
@@ -561,343 +632,402 @@ const SenderCreate = () => {
     ));
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center items-start py-10">
-      <div className="bg-white shadow-lg rounded-xl w-full max-w-5xl p-8">
-      <div className="add-cargo-header flex justify-between items-center">
-            <h2 className="header-cargo-heading flex items-center gap-2">
-              <span className="header-cargo-icon"><FaUserTie /></span>
-              Create Sender/Receiver
-            </h2>
-            <nav aria-label="Breadcrumb" className="">
-              <ol className="flex items-center gap-2 text-sm">
-                <li>
-                  <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">
-                    Home
-                  </Link>
-                </li>
-                <li className="text-gray-400">/</li>
-                <li>
-                  <Link to="/cargo/allcargolist" className="text-gray-500 hover:text-gray-700 hover:underline">
-                    Customers
-                  </Link>
-                </li>
-                <li className="text-gray-400">/</li>
-                <li aria-current="page" className="text-gray-800 font-medium">
-                  Add Customer
-                </li>
-              </ol>
-            </nav>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-8">
+      {/* Toaster */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3500,
+          success: {
+            style: { background: "#10B981", color: "white" },
+            iconTheme: { primary: "white", secondary: "#10B981" },
+          },
+          error: {
+            style: { background: "#EF4444", color: "white" },
+            iconTheme: { primary: "white", secondary: "#EF4444" },
+          },
+        }}
+      />
+
+      <div className="mx-auto w-full max-w-6xl px-4">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-rose-600 text-white shadow-sm">
+              <FaUserTie />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900">Create Sender / Receiver</h2>
+              <div className="mt-0.5 text-xs text-slate-500">
+                Add a new customer party with identity, contact, and address.
+              </div>
+            </div>
           </div>
 
-        <form className="space-y-6" onSubmit={handleSubmit}>
-          {/* Top */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <input
-                type="text"
-                name="name"
-                placeholder="Enter Name"
-                value={formData.name}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-red-300"
-              />
-              {fieldErrors.name && <p className="text-sm text-red-600">{fieldErrors.name[0]}</p>}
-            </div>
+          <nav aria-label="Breadcrumb" className="text-sm">
+            <ol className="flex items-center gap-2">
+              <li>
+                <Link to="/dashboard" className="text-slate-500 hover:text-slate-700 hover:underline">
+                  Home
+                </Link>
+              </li>
+              <li className="text-slate-400">/</li>
+              <li>
+                <Link to="/cargo/allcargolist" className="text-slate-500 hover:text-slate-700 hover:underline">
+                  Customers
+                </Link>
+              </li>
+              <li className="text-slate-400">/</li>
+              <li aria-current="page" className="font-medium text-slate-800">
+                Add Customer
+              </li>
+            </ol>
+          </nav>
+        </div>
 
-            <div>
-              <input
-                type="email"
-                name="email"
-                placeholder="Enter Email ID"
-                value={formData.email}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-red-300"
-              />
-              {fieldErrors.email && <p className="text-sm text-red-600">{fieldErrors.email[0]}</p>}
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Identity */}
+          <Section title="Identity" subtitle="Basic info & classification" icon={<FaUserTie size={16} />}>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <Label required>Name</Label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className={fieldBase}
+                  placeholder="Enter full name"
+                  aria-invalid={!!fieldErrors.name}
+                />
+                <ErrorMsg>{fieldErrors.name?.[0]}</ErrorMsg>
+              </div>
 
-            {/* Branch */}
-            <div>
-              <select
-                name="branch"
-                value={String(formData.branch ?? "")}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-red-300"
-                disabled={branchLoading}
-              >
-                <option value="">{branchLoading ? "Loading..." : "Select Branch"}</option>
-                {!branchLoading &&
-                  branches.map((b) => {
-                    const id = getBranchId(b);
-                    const label = getBranchLabel(b);
-                    return (
-                      <option key={id} value={id}>
-                        {label}
+              <div>
+                <Label>Email</Label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className={fieldBase}
+                  placeholder="name@example.com"
+                  aria-invalid={!!fieldErrors.email}
+                />
+                <ErrorMsg>{fieldErrors.email?.[0]}</ErrorMsg>
+              </div>
+
+              <div>
+                <Label required>Branch</Label>
+                <select
+                  name="branch"
+                  value={String(formData.branch ?? "")}
+                  onChange={handleChange}
+                  className={`${fieldBase} ${fieldDisabled}`}
+                  disabled={branchLoading}
+                  aria-invalid={!!fieldErrors.branch_id}
+                >
+                  <option value="">{branchLoading ? "Loading..." : "Select Branch"}</option>
+                  {!branchLoading &&
+                    branches.map((b) => (
+                      <option key={getBranchId(b)} value={getBranchId(b)}>
+                        {getBranchLabel(b)}
                       </option>
-                    );
-                  })}
-              </select>
-              {branchError && <p className="text-sm text-red-600">{branchError}</p>}
-              {fieldErrors.branch_id && (
-                <p className="text-sm text-red-600">{fieldErrors.branch_id[0]}</p>
-              )}
+                    ))}
+                </select>
+                {branchError && <ErrorMsg>{branchError}</ErrorMsg>}
+                <ErrorMsg>{fieldErrors.branch_id?.[0]}</ErrorMsg>
+              </div>
+
+              <div>
+                <Label required>Customer Type</Label>
+                <select
+                  name="customerType"
+                  value={String(formData.customerType ?? "")}
+                  onChange={handleChange}
+                  className={`${fieldBase} ${fieldDisabled}`}
+                  disabled={typesLoading}
+                  aria-invalid={!!fieldErrors.customer_type_id}
+                >
+                  <option value="">{typesLoading ? "Loading..." : "Select Customer Type"}</option>
+                  {!typesLoading &&
+                    customerTypes.map((t) => (
+                      <option key={getTypeId(t)} value={getTypeId(t)}>
+                        {getTypeLabel(t)}
+                      </option>
+                    ))}
+                </select>
+                {typesError && <ErrorMsg>{typesError}</ErrorMsg>}
+                <ErrorMsg>{fieldErrors.customer_type_id?.[0]}</ErrorMsg>
+              </div>
+            </div>
+          </Section>
+
+          {/* Contact with phone codes */}
+          <Section
+            title="Contact"
+            subtitle="Reachability details"
+            icon={<FiAlertCircle size={16} className="rotate-180 opacity-70" />}
+          >
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              {/* WhatsApp */}
+              <div>
+                <Label>WhatsApp Number</Label>
+                <div className="grid grid-cols-[150px,1fr] gap-2">
+                  <select
+                    value={whatsappCode}
+                    onChange={(e) => setWhatsappCode(e.target.value)}
+                    disabled={phoneCodesLoading}
+                    className={`${fieldBase} ${fieldDisabled}`}
+                  >
+                    <option value="+">{phoneCodesLoading ? "Loading…" : "Code"}</option>
+                    {!phoneCodesLoading &&
+                      phoneCodes.map((pc, i) => (
+                        <option key={i} value={getDialCode(pc)}>
+                          {getDialLabel(pc)}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    type="text"
+                    name="whatsappNumber"
+                    placeholder="WhatsApp number"
+                    value={formData.whatsappNumber}
+                    onChange={handleChange}
+                    className={fieldBase}
+                  />
+                </div>
+                {phoneCodesError && <p className="mt-1 text-sm text-rose-700">{phoneCodesError}</p>}
+                <ErrorMsg>{(fieldErrors.whatsapp?.[0] ?? fieldErrors.whatsapp_number?.[0])}</ErrorMsg>
+              </div>
+
+              {/* Contact */}
+              <div>
+                <Label>Contact Number</Label>
+                <div className="grid grid-cols-[150px,1fr] gap-2">
+                  <select
+                    value={contactCode}
+                    onChange={(e) => setContactCode(e.target.value)}
+                    disabled={phoneCodesLoading}
+                    className={`${fieldBase} ${fieldDisabled}`}
+                  >
+                    <option value="+">{phoneCodesLoading ? "Loading…" : "Code"}</option>
+                    {!phoneCodesLoading &&
+                      phoneCodes.map((pc, i) => (
+                        <option key={i} value={getDialCode(pc)}>
+                          {getDialLabel(pc)}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    type="text"
+                    name="contactNumber"
+                    placeholder="Contact number"
+                    value={formData.contactNumber}
+                    onChange={handleChange}
+                    className={fieldBase}
+                  />
+                </div>
+                <ErrorMsg>{(fieldErrors.phone?.[0] ?? fieldErrors.contact_number?.[0])}</ErrorMsg>
+              </div>
             </div>
 
-            {/* Customer Type */}
-            <div>
-              <select
-                name="customerType"
-                value={String(formData.customerType ?? "")}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-red-300"
-                disabled={typesLoading}
-              >
-                <option value="">{typesLoading ? "Loading..." : "Select Customer Type"}</option>
-                {!typesLoading &&
-                  customerTypes.map((t) => (
-                    <option key={getTypeId(t)} value={getTypeId(t)}>
-                      {getTypeLabel(t)}
-                    </option>
-                  ))}
-              </select>
-              {typesError && <p className="text-sm text-red-600">{typesError}</p>}
-              {fieldErrors.customer_type_id && (
-                <p className="text-sm text-red-600">{fieldErrors.customer_type_id[0]}</p>
-              )}
-            </div>
-          </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Tip: paste a full <span className="font-mono">+CC…</span> number; the dial code will auto-select.
+            </p>
+          </Section>
 
-          {/* Contact */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <input
-                type="text"
-                name="whatsappNumber"
-                placeholder="Enter WhatsApp Number"
-                value={formData.whatsappNumber}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
-              />
-              {/* Depending on backend, this might be `whatsapp_number` in errors */}
-              {(fieldErrors.whatsapp || fieldErrors.whatsapp_number) && (
-                <p className="text-sm text-red-600">
-                  {fieldErrors.whatsapp?.[0] ?? fieldErrors.whatsapp_number?.[0]}
-                </p>
-              )}
-            </div>
-            <div>
-              <input
-                type="text"
-                name="contactNumber"
-                placeholder="Enter Contact Number"
-                value={formData.contactNumber}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
-              />
-              {/* Depending on backend, this might be `phone` or `contact_number` */}
-              {(fieldErrors.phone || fieldErrors.contact_number) && (
-                <p className="text-sm text-red-600">
-                  {fieldErrors.phone?.[0] ?? fieldErrors.contact_number?.[0]}
-                </p>
-              )}
-            </div>
-          </div>
+          {/* Identification */}
+          <Section title="Identification" subtitle="Government ID / document" icon={<FiPaperclip size={16} />}>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              <div>
+                <Label required>ID Type</Label>
+                <select
+                  name="senderIdType"
+                  value={String(formData.senderIdType ?? "")}
+                  onChange={handleChange}
+                  className={`${fieldBase} ${fieldDisabled}`}
+                  disabled={docsLoading}
+                  aria-invalid={!!fieldErrors.document_type_id}
+                >
+                  <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
+                  {!docsLoading &&
+                    docTypes.map((d) => (
+                      <option key={getDocId(d)} value={getDocId(d)}>
+                        {getDocLabel(d)}
+                      </option>
+                    ))}
+                </select>
+                {docsError && <ErrorMsg>{docsError}</ErrorMsg>}
+                <ErrorMsg>{fieldErrors.document_type_id?.[0]}</ErrorMsg>
+              </div>
 
-          {/* ID Info */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <select
-                name="senderIdType"
-                value={String(formData.senderIdType ?? "")}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
-                disabled={docsLoading}
-              >
-                <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
-                {!docsLoading &&
-                  docTypes.map((d) => (
-                    <option key={getDocId(d)} value={getDocId(d)}>
-                      {getDocLabel(d)}
-                    </option>
-                  ))}
-              </select>
-              {docsError && <p className="text-sm text-red-600">{docsError}</p>}
-              {fieldErrors.document_type_id && (
-                <p className="text-sm text-red-600">{fieldErrors.document_type_id[0]}</p>
-              )}
-            </div>
+              <div>
+                <Label required>Document ID</Label>
+                <input
+                  type="text"
+                  name="senderId"
+                  value={formData.senderId}
+                  onChange={handleChange}
+                  className={fieldBase}
+                  placeholder="e.g., ABC12345"
+                  aria-invalid={!!(fieldErrors.document_id || fieldErrors["document id"])}
+                />
+                <ErrorMsg>{fieldErrors.document_id?.[0] ?? fieldErrors["document id"]?.[0]}</ErrorMsg>
+              </div>
 
-            <div>
-              <input
-                type="text"
-                name="senderId"
-                placeholder="Document ID"
-                value={formData.senderId}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
-              />
-              {(fieldErrors.document_id || fieldErrors["document id"]) && (
-                <p className="text-sm text-red-600">
-                  {fieldErrors.document_id?.[0] ?? fieldErrors["document id"]?.[0]}
-                </p>
-              )}
+              <div>
+                <Label>Attachments</Label>
+                <input
+                  key={fileKey}
+                  type="file"
+                  name="documents"
+                  multiple
+                  accept="image/*,application/pdf"
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-black"
+                />
+                {submitNotice && <p className="mt-1 text-xs text-amber-700">{submitNotice}</p>}
+                {formData.documents?.length > 0 && (
+                  <p className="mt-1 line-clamp-2 break-all text-xs text-slate-600">
+                    {formData.documents.length} file(s): {formData.documents.map((f) => f.name).join(", ")}
+                  </p>
+                )}
+                <ErrorMsg>{fieldErrors["documents.0"]?.[0]}</ErrorMsg>
+              </div>
             </div>
-
-            <div>
-              <input
-                key={fileKey}
-                type="file"
-                name="documents"
-                multiple
-                accept="image/*,application/pdf"
-                onChange={handleChange}
-                className="w-full border rounded-lg px-1 py-1 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-red-500 file:text-white hover:file:bg-red-600 cursor-pointer"
-              />
-              {submitNotice && <p className="text-xs text-amber-700 mt-1">{submitNotice}</p>}
-              {formData.documents?.length > 0 && (
-                <p className="text-xs text-gray-600 mt-1">
-                  {formData.documents.length} file(s):{" "}
-                  {formData.documents.map((f) => f.name).join(", ")}
-                </p>
-              )}
-              {fieldErrors["documents.0"] && (
-                <p className="text-sm text-red-600">{fieldErrors["documents.0"][0]}</p>
-              )}
-            </div>
-          </div>
-
-          <hr />
+          </Section>
 
           {/* Address */}
-          <h3 className="text-lg font-semibold text-gray-700">Add Address</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Country */}
-            <div>
-              <select
-                name="country"
-                value={String(formData.country ?? "")}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
-                disabled={countryLoading}
-              >
-                <option value="">{countryLoading ? "Loading..." : "Select Country"}</option>
-                {!countryLoading && renderCountryOptions()}
-              </select>
-              {countryError && <p className="text-sm text-red-600">{countryError}</p>}
-              {fieldErrors.country_id && (
-                <p className="text-sm text-red-600">{fieldErrors.country_id[0]}</p>
-              )}
+          <Section title="Address" subtitle="Location details" icon={<FiAlertCircle size={16} />}>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              <div>
+                <Label>Country</Label>
+                <select
+                  name="country"
+                  value={String(formData.country ?? "")}
+                  onChange={handleChange}
+                  className={`${fieldBase} ${fieldDisabled}`}
+                  disabled={countryLoading}
+                  aria-invalid={!!fieldErrors.country_id}
+                >
+                  <option value="">{countryLoading ? "Loading..." : "Select Country"}</option>
+                  {!countryLoading && renderCountryOptions()}
+                </select>
+                {countryError && <ErrorMsg>{countryError}</ErrorMsg>}
+                <ErrorMsg>{fieldErrors.country_id?.[0]}</ErrorMsg>
+              </div>
+
+              <div>
+                <Label>State</Label>
+                <select
+                  name="state"
+                  value={String(formData.state ?? "")}
+                  onChange={handleChange}
+                  className={`${fieldBase} ${fieldDisabled}`}
+                  disabled={!formData.country || stateLoading}
+                  aria-invalid={!!fieldErrors.state_id}
+                >
+                  <option value="">
+                    {!formData.country ? "Select Country first" : stateLoading ? "Loading..." : "Select State"}
+                  </option>
+                  {!stateLoading && formData.country && renderStateOptions()}
+                </select>
+                {stateError && <ErrorMsg>{stateError}</ErrorMsg>}
+                <ErrorMsg>{fieldErrors.state_id?.[0]}</ErrorMsg>
+              </div>
+
+              <div>
+                <Label>District</Label>
+                <select
+                  name="district"
+                  value={String(formData.district ?? "")}
+                  onChange={handleChange}
+                  className={`${fieldBase} ${fieldDisabled}`}
+                  disabled={!formData.state || districtLoading}
+                  aria-invalid={!!fieldErrors.district_id}
+                >
+                  <option value="">
+                    {!formData.state ? "Select State first" : districtLoading ? "Loading..." : "Select District"}
+                  </option>
+                  {!districtLoading && formData.state && renderDistrictOptions()}
+                </select>
+                {districtError && <ErrorMsg>{districtError}</ErrorMsg>}
+                <ErrorMsg>{fieldErrors.district_id?.[0]}</ErrorMsg>
+              </div>
             </div>
 
-            {/* State */}
-            <div>
-              <select
-                name="state"
-                value={String(formData.state ?? "")}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
-                disabled={!formData.country || stateLoading}
-              >
-                <option value="">
-                  {!formData.country
-                    ? "Select Country first"
-                    : stateLoading
-                    ? "Loading..."
-                    : "Select State"}
-                </option>
-                {!stateLoading && formData.country && renderStateOptions()}
-              </select>
-              {stateError && <p className="text-sm text-red-600">{stateError}</p>}
-              {fieldErrors.state_id && (
-                <p className="text-sm text-red-600">{fieldErrors.state_id[0]}</p>
-              )}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <Label>City</Label>
+                <input
+                  type="text"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleChange}
+                  className={fieldBase}
+                  placeholder="City"
+                  aria-invalid={!!fieldErrors.city}
+                />
+                <ErrorMsg>{fieldErrors.city?.[0]}</ErrorMsg>
+              </div>
+              <div>
+                <Label>Zip / Postal Code</Label>
+                <input
+                  type="text"
+                  name="zipCode"
+                  value={formData.zipCode}
+                  onChange={handleChange}
+                  className={`${fieldBase} font-mono`}
+                  placeholder="e.g., 682001"
+                  aria-invalid={!!fieldErrors.zip_code}
+                />
+                <ErrorMsg>{fieldErrors.zip_code?.[0]}</ErrorMsg>
+              </div>
             </div>
 
-            {/* District */}
             <div>
-              <select
-                name="district"
-                value={String(formData.district ?? "")}
+              <Label>Address</Label>
+              <textarea
+                name="address"
+                value={formData.address}
                 onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
-                disabled={!formData.state || districtLoading}
-              >
-                <option value="">
-                  {!formData.state
-                    ? "Select State first"
-                    : districtLoading
-                    ? "Loading..."
-                    : "Select District"}
-                </option>
-                {!districtLoading && formData.state && renderDistrictOptions()}
-              </select>
-              {districtError && <p className="text-sm text-red-600">{districtError}</p>}
-              {fieldErrors.district_id && (
-                <p className="text-sm text-red-600">{fieldErrors.district_id[0]}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <input
-                type="text"
-                name="city"
-                placeholder="City"
-                value={formData.city}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
+                className={`${fieldBase} min-h-[96px]`}
+                placeholder="Street, Building, Landmark"
+                aria-invalid={!!fieldErrors.address}
               />
-              {fieldErrors.city && <p className="text-sm text-red-600">{fieldErrors.city[0]}</p>}
+              <ErrorMsg>{fieldErrors.address?.[0]}</ErrorMsg>
             </div>
-            <div>
-              <input
-                type="text"
-                name="zipCode"
-                placeholder="Zip Code"
-                value={formData.zipCode}
-                onChange={handleChange}
-                className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
-              />
-              {fieldErrors.zip_code && (
-                <p className="text-sm text-red-600">{fieldErrors.zip_code[0]}</p>
-              )}
+          </Section>
+
+          {/* Global submit error */}
+          {submitError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {submitError}
             </div>
-          </div>
+          )}
 
-          <div>
-            <textarea
-              name="address"
-              placeholder="Address"
-              value={formData.address}
-              onChange={handleChange}
-              className="border rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-red-300"
-            />
-            {fieldErrors.address && (
-              <p className="text-sm text-red-600">{fieldErrors.address[0]}</p>
-            )}
-          </div>
-
-          {submitError && <p className="text-sm text-red-600">{submitError}</p>}
-
-          <div className="flex justify-end gap-4 pt-2">
-            <button
-              type="button"
-              className="bg-gray-300 text-gray-800 px-6 py-2 rounded-lg hover:bg-gray-400 transition"
-              onClick={resetForm}
-              disabled={submitLoading}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`px-6 py-2 rounded-lg transition text-white ${
-                submitLoading ? "bg-red-300" : "bg-red-500 hover:bg-red-600"
-              }`}
-              disabled={submitLoading}
-            >
-              {submitLoading ? "Submitting..." : "Submit"}
-            </button>
+          {/* Sticky footer actions */}
+          <div className="sticky bottom-0 z-10 -mx-4 border-t border-slate-200 bg-white/70 px-4 py-3 backdrop-blur">
+            <div className="mx-auto flex max-w-6xl items-center justify-end gap-3">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-slate-700 hover:bg-slate-50"
+                onClick={resetForm}
+                disabled={submitLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitLoading}
+                className={`rounded-lg px-5 py-2 text-white transition ${
+                  submitLoading ? "cursor-not-allowed bg-rose-400" : "bg-rose-600 hover:bg-rose-700"
+                }`}
+              >
+                {submitLoading ? "Submitting…" : "Submit"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -906,7 +1036,7 @@ const SenderCreate = () => {
         <CreateReceiverSenderModal
           open={showSuccess}
           onClose={handleCloseSuccess}
-          data={createdData} // component normalizes internally
+          data={createdData}
           details={displayDetails}
         />
       </ErrorBoundary>
