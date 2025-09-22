@@ -3,6 +3,7 @@ import auth from './slices/authSlice';
 import dashboard from './slices/dashboardSlice'; // example, below
 import branchReducer from "./slices/branchSlice";
 
+
 export const store = configureStore({
   reducer: {
     auth,

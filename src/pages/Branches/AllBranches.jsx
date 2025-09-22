@@ -8,7 +8,6 @@ import DropdownMenu from "../../components/DropdownMenu";
 import api from "../../api/axiosInstance";
 import "../styles.css";
 
-
 const AllBranches = () => {
 
    const [branches, setBranches] = useState([]);

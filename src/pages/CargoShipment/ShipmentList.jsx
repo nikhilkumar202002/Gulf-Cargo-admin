@@ -1,30 +1,33 @@
+// src/pages/ShipmentView.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, Link, useLocation } from "react-router-dom";
-import { getShipment } from "../../api/shipmentsApi"; // adjust path
+import { useParams } from "react-router-dom";
+import { getCargoShipment } from "../../api/shipmentCargo"; // uses your existing API wrapper
 
+/* -------------------------- tiny UI/format helpers -------------------------- */
 const cx = (...c) => c.filter(Boolean).join(" ");
 const formatDate = (iso) => {
   if (!iso) return "—";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
+  if (Number.isNaN(d.getTime())) return iso; // show raw if it's already "YYYY-MM-DD"
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
-
-const Spinner = ({ className = "h-5 w-5 text-indigo-600" }) => (
-  <svg className={cx("animate-spin", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-  </svg>
-);
-
-const Badge = ({ text = "", color = "indigo" }) => (
+const formatNum = (v, digits = 2) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(digits) : String(v ?? "—");
+};
+const Badge = ({ text, color = "indigo" }) => (
   <span
     className={{
-      indigo: "inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700",
-      green: "inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700",
-      amber: "inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800",
-      red: "inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700",
-      slate: "inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700",
+      indigo:
+        "inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700",
+      green:
+        "inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700",
+      amber:
+        "inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800",
+      red:
+        "inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700",
+      slate:
+        "inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700",
     }[color] || "inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"}
   >
     {text || "—"}
@@ -32,174 +35,190 @@ const Badge = ({ text = "", color = "indigo" }) => (
 );
 
 const statusColor = (s = "") => {
-  const v = (s || "").toLowerCase();
-  if (v.includes("hold") || v.includes("wait")) return "amber";
-  if (v.includes("deliver") || v.includes("cleared")) return "green";
-  if (v.includes("cancel")) return "red";
+  const v = s.toLowerCase();
+  if (v.includes("receive") || v.includes("cleared") || v.includes("deliver")) return "green";
+  if (v.includes("hold") || v.includes("wait") || v.includes("pending")) return "amber";
+  if (v.includes("cancel") || v.includes("fail")) return "red";
   return "indigo";
 };
 
-/* field helpers for flexible item schemas */
-const pick = (obj, keys, fallback = "—") => {
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
-  }
-  return fallback;
-};
-const normalizeItems = (items = []) =>
-  (Array.isArray(items) ? items : []).map((it, i) => ({
-    idx: i + 1,
-    name: pick(it, ["name", "item_name", "cargo_name", "description", "title", "item"], "Item"),
-    qty: pick(it, ["quantity", "qty", "pieces", "count"], "—"),
-    weight: pick(it, ["weight", "weight_kg", "kg"], "—"),
-    notes: pick(it, ["notes", "remarks", "comment"], ""),
-    raw: it,
-  }));
+const Box = ({ label, value }) => (
+  <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+    <div className="mt-1 text-sm font-semibold text-slate-900 break-all">{value ?? "—"}</div>
+  </div>
+);
 
-export default function ShipmentList() {
+/* ---------------------------------- page ----------------------------------- */
+export default function ShipmentView() {
   const { id } = useParams();
-  const location = useLocation();
-  const hydrated = location.state?.shipment || null;
-
-  const [shipment, setShipment] = useState(hydrated || null);
-  const [loading, setLoading] = useState(!hydrated);
+  const [data, setData] = useState(null);        // raw API "data" (shipment)
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const items = useMemo(() => normalizeItems(shipment?.items || []), [shipment]);
-
   useEffect(() => {
-    if (!id || hydrated) return;
+    let alive = true;
     (async () => {
       setLoading(true);
       setErr("");
       try {
-        const s = await getShipment(id);
-        setShipment(s || null);
+        const res = await getCargoShipment(id);
+        // API returns: { success, data: {...shipment...} }
+        const record = res?.data ?? res;
+        if (alive) setData(record || null);
       } catch (e) {
-        setErr(e?.message || "Failed to load shipment");
-        setShipment(null);
+        if (alive) {
+          setErr(e?.message || "Failed to load shipment");
+          setData(null);
+        }
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
-  }, [id, hydrated]);
+    return () => {
+      alive = false;
+    };
+  }, [id]);
 
-  const stat = (label, val) => (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-sm font-semibold text-slate-900">{val ?? "—"}</div>
-    </div>
-  );
+  const cargos = Array.isArray(data?.cargos) ? data.cargos : [];
+  const totals = useMemo(() => {
+    let pieces = 0;
+    let weight = 0;
+    for (const c of cargos) {
+      for (const it of c?.items || []) {
+        const p = Number(it?.piece_no ?? it?.pieces ?? it?.qty ?? 0);
+        const w = Number(it?.weight ?? it?.weight_kg ?? 0);
+        if (Number.isFinite(p)) pieces += p;
+        if (Number.isFinite(w)) weight += w;
+      }
+    }
+    return { pieces, weight };
+  }, [cargos]);
 
   return (
-    <section className="shipment-list-view">
-      <div className="shipment-list-container min-h-screen bg-slate-50">
+    <section className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-6xl px-4 py-6">
         {/* Header */}
-        <div className="mx-auto max-w-6xl px-4 py-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-semibold text-slate-900">Shipment</h1>
-            <button
-              onClick={() => window.history.back()}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Back
-            </button>
-          </div>
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-slate-900">Shipment Details</h1>
+          <button
+            onClick={() => window.history.back()}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Back
+          </button>
+        </div>
 
-          {/* Card: Identity */}
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
-            {loading ? (
-              <div className="flex items-center gap-2 text-slate-600"><Spinner /><span>Loading shipment…</span></div>
-            ) : err ? (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">{err}</div>
-            ) : !shipment ? (
-              <div className="text-slate-600">Shipment not found.</div>
-            ) : (
-              <>
-                {/* Top row: Track badge + AWB */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="inline-flex items-center rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-1.5 font-mono text-sm font-semibold text-white shadow-sm">
-                    {shipment.track_code ?? "—"}
-                  </span>
-                  {shipment.track_code && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try { await navigator.clipboard.writeText(shipment.track_code); } catch {}
-                      }}
-                      className="text-slate-500 hover:text-slate-700"
-                      title="Copy track code"
-                    >
-                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="9" y="9" width="13" height="13" rx="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                      </svg>
-                    </button>
-                  )}
-                  {shipment.awb_number ? (
-                    <div className="text-xs text-slate-600">AWB: <span className="font-medium">{shipment.awb_number}</span></div>
-                  ) : null}
-                  <div className="ml-auto">
-                    <Badge text={shipment.status ?? "—"} color={statusColor(shipment.status)} />
-                  </div>
-                </div>
-
-                {/* Meta grid */}
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {stat("Booking Date", formatDate(shipment.created_at ?? shipment.booking_date))}
-                  {stat("Sender", shipment.sender)}
-                  {stat("Receiver", shipment.receiver)}
-                  {stat("Route", `${shipment.origin_port ?? "—"} → ${shipment.destination_port ?? "—"}`)}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Items Table */}
-          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 px-5 py-3">
-              <h2 className="text-sm font-semibold text-slate-900">Cargo Items</h2>
-              <p className="text-xs text-slate-600">Items inside this shipment.</p>
+        {/* Status / top card */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          {loading ? (
+            <div className="flex items-center gap-2 text-slate-600">
+              <svg className="h-5 w-5 animate-spin text-indigo-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+              <span>Loading shipment…</span>
             </div>
-
-            {loading ? (
-              <div className="p-5 text-slate-600"><Spinner /> </div>
-            ) : (items.length === 0) ? (
-              <div className="p-5 text-sm text-slate-600">No items found.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">#</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Item</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Qty</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Weight (kg)</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {items.map((it) => (
-                      <tr key={it.idx} className="hover:bg-slate-50">
-                        <td className="px-4 py-2 text-sm text-slate-700">{it.idx}</td>
-                        <td className="px-4 py-2 text-sm text-slate-800">{it.name}</td>
-                        <td className="px-4 py-2 text-sm text-slate-700">{it.qty}</td>
-                        <td className="px-4 py-2 text-sm text-slate-700">{it.weight}</td>
-                        <td className="px-4 py-2 text-sm text-slate-700">
-                          {it.notes || (
-                            <code className="rounded bg-slate-50 px-1 py-0.5 text-[11px] text-slate-500">
-                              id:{String(it.raw?.id ?? "-")}
-                            </code>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          ) : err ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">{err}</div>
+          ) : !data ? (
+            <div className="text-slate-600">Shipment not found.</div>
+          ) : (
+            <>
+              {/* Top line: Shipment no + AWB/container + Status */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-1.5 font-mono text-sm font-semibold text-white shadow-sm">
+                  {data.shipment_number || "—"}
+                </div>
+                {data.awb_or_container_number && (
+                  <div className="text-xs text-slate-600">
+                    AWB/Container: <span className="font-medium">{data.awb_or_container_number}</span>
+                  </div>
+                )}
+                <div className="ml-auto">
+                  <Badge text={data.shipment_status || "—"} color={statusColor(data.shipment_status || "")} />
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Meta grid */}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Box label="Created On" value={formatDate(data.created_on)} />
+                <Box label="Shipping Method" value={data.shipping_method || "—"} />
+                <Box label="Route" value={`${data.origin_port ?? "—"} → ${data.destination_port ?? "—"}`} />
+                <Box label="Branch" value={data.branch || "—"} />
+                <Box label="Created By" value={data.created_by || "—"} />
+                <Box label="License Details" value={data.license_details || "—"} />
+                <Box label="Exchange Rate" value={formatNum(data.exchange_rate, 4)} />
+                <Box label="Details / Remarks" value={data.shipment_details || "—"} />
+              </div>
+
+              {/* Totals */}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Box label="Total Cargos" value={cargos.length} />
+                <Box label="Total Pieces" value={totals.pieces} />
+                <Box label="Total Weight (kg)" value={formatNum(totals.weight, 3)} />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Cargo list with nested items */}
+        <div className="mt-6 space-y-6">
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-600">Loading cargos…</div>
+          ) : cargos.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">No cargos found.</div>
+          ) : (
+            cargos.map((cargo, idx) => {
+              const items = Array.isArray(cargo.items) ? cargo.items : [];
+              return (
+                <div key={cargo.id ?? idx} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <Badge text={`#${idx + 1}`} color="slate" />
+                      <h2 className="text-sm font-semibold text-slate-900">
+                        Cargo: <span className="font-mono">{cargo.booking_no || cargo.id}</span>
+                      </h2>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Items: <span className="font-medium text-slate-700">{items.length}</span>
+                    </div>
+                  </div>
+
+                  {items.length === 0 ? (
+                    <div className="p-5 text-sm text-slate-600">No items in this cargo.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Sl No</th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Item</th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Pieces</th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Unit Price</th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Total Price</th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Weight (kg)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {items.map((it, i) => (
+                            <tr key={`${cargo.id}-${i}`} className="hover:bg-slate-50">
+                              <td className="px-4 py-2 text-sm text-slate-700">{it.slno ?? i + 1}</td>
+                              <td className="px-4 py-2 text-sm text-slate-800">{it.name ?? "—"}</td>
+                              <td className="px-4 py-2 text-sm text-slate-700">{it.piece_no ?? it.pieces ?? it.qty ?? "—"}</td>
+                              <td className="px-4 py-2 text-sm text-slate-700">{formatNum(it.unit_price, 2)}</td>
+                              <td className="px-4 py-2 text-sm text-slate-700">{formatNum(it.total_price, 2)}</td>
+                              <td className="px-4 py-2 text-sm text-slate-700">{formatNum(it.weight, 3)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </section>

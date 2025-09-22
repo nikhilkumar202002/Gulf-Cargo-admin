@@ -2,12 +2,22 @@ import React, { useEffect, useRef, useState } from "react";
 import { FaUserTie } from "react-icons/fa";
 import { getCustomerTypes } from "../../api/customerTypeApi";
 import { getDocumentTypes } from "../../api/documentTypeApi";
-import { getCountries, getStatesByCountry, getDistrictsByState } from "../../api/worldApi";
+import {
+  getCountries,
+  getStatesByCountry,
+  getDistrictsByState,
+  getActiveDistrictsByState,
+} from "../../api/worldApi";
 import { getAllBranches } from "../../api/branchApi";
 import { createParty } from "../../api/partiesApi";
 
 import CreateReceiverSenderModal from "../../components/CreateReceiverSenderModal";
 import ErrorBoundary from "../../components/ErrorBoundary";
+
+import { Link } from "react-router-dom";
+
+import "./CustomerStyles.css";
+
 
 /* ---------------------- Helpers ---------------------- */
 const normalizeList = (p) => {
@@ -22,6 +32,17 @@ const normalizeList = (p) => {
     if (Array.isArray(firstArray)) return firstArray;
   }
   return [];
+};
+
+const debugNormalize = (label, res) => {
+  console.debug(`[WORLD-API] ${label} raw:`, res);
+  const list = normalizeList(res);
+  console.debug(
+    `[WORLD-API] ${label} normalized length:`,
+    Array.isArray(list) ? list.length : 0,
+    Array.isArray(list) ? list.slice(0, 3) : list
+  );
+  return list;
 };
 
 const pickLabel = (obj, keys) => {
@@ -39,12 +60,14 @@ const getId = (o) =>
 const getCountryLabel = (c) =>
   typeof c === "string"
     ? c
-    : pickLabel(c, ["name", "country", "country_name", "title", "label"]) || `Country ${getId(c)}`;
+    : pickLabel(c, ["name", "country", "country_name", "title", "label"]) ||
+      `Country ${getId(c)}`;
 
 const getStateLabel = (s) =>
   typeof s === "string"
     ? s
-    : pickLabel(s, ["name", "state", "state_name", "title", "label"]) || `State ${getId(s)}`;
+    : pickLabel(s, ["name", "state", "state_name", "title", "label"]) ||
+      `State ${getId(s)}`;
 
 const getDistrictLabel = (d) =>
   typeof d === "string"
@@ -104,7 +127,6 @@ const resolveLabel = (id, list, getLabelFn) => {
 };
 
 /* ---------------------- Upload Controls (413 prevention) ---------------------- */
-// limits (tune as needed)
 const MAX_FILE_MB = 8; // per file
 const MAX_TOTAL_MB = 24; // all files combined
 const MAX_DIMENSION = 2000; // px, longest side after resize
@@ -112,7 +134,6 @@ const WEBP_QUALITY = 0.82; // 0..1
 
 const bytesToMB = (b) => b / (1024 * 1024);
 
-// Load an image File → HTMLImageElement
 const loadImageFromFile = (file) =>
   new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -162,14 +183,14 @@ async function compressIfImage(file) {
 
 /* ---------------------- Main Component ---------------------- */
 
-// single source of truth for empty form
+// single source of truth for empty form (use camelCase locally)
 const makeInitialForm = () => ({
   name: "",
   email: "",
   branch: "", // branch_id
   customerType: "", // customer_type_id
-  whatsapp_number: "",  // Add whatsappNumber here
-  contact_number: "",  // Add contactNumber here
+  whatsappNumber: "",
+  contactNumber: "",
   senderIdType: "", // document_type_id
   senderId: "", // maps to document_id
   documents: [], // File[]
@@ -177,7 +198,7 @@ const makeInitialForm = () => ({
   state: "", // state_id
   district: "", // district_id
   city: "",
-  postal_code: "",
+  zipCode: "",
   address: "",
 });
 
@@ -233,62 +254,70 @@ const SenderCreate = () => {
   };
 
   /* handle input */
-const handleChange = async (e) => {
-  const { name, value, files } = e.target;
+  const handleChange = async (e) => {
+    const { name, value, files } = e.target;
 
-  // For whatsappNumber and contactNumber, capture the values correctly
-  if (name === "whatsappNumber" || name === "contactNumber") {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  }
+    // cascading clears
+  if (name === "country") {
+  setStates([]);       // clear state options
+   setDistricts([]);    // clear district options
+   return setFormData((prev) => ({ ...prev, country: value, state: "", district: "" }));
+ }
+ if (name === "state") {
+   setDistricts([]);    // clear district options
+   return setFormData((prev) => ({ ...prev, state: value, district: "" }));
+ }
 
-  // document uploads: compress → filter per-file → cap total
-  if (name === "documents") {
-    setSubmitNotice("");
-    const picked = Array.from(files || []);
-
-    // compress images (non-images pass through)
-    const processed = await Promise.all(picked.map(compressIfImage));
-
-    // filter by per-file size
-    const overs = processed.filter((f) => bytesToMB(f.size) > MAX_FILE_MB);
-    if (overs.length) {
-      setSubmitNotice(
-        `Some files exceed ${MAX_FILE_MB}MB: ${overs.map((f) => f.name).join(", ")}`
-      );
-    }
-    const kept = processed.filter((f) => bytesToMB(f.size) <= MAX_FILE_MB);
-
-    // cap total size
-    const totalMB = kept.reduce((s, f) => s + bytesToMB(f.size), 0);
-    if (totalMB > MAX_TOTAL_MB) {
-      let running = 0;
-      const trimmed = [];
-      for (const f of kept) {
-        const next = running + bytesToMB(f.size);
-        if (next > MAX_TOTAL_MB) break;
-        running = next;
-        trimmed.push(f);
-      }
-      setFormData((prev) => ({ ...prev, documents: trimmed }));
-      setSubmitNotice(
-        `Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length} file(s).`
-      );
+    // special camelCase fields
+    if (name === "whatsappNumber" || name === "contactNumber") {
+      setFormData((prev) => ({ ...prev, [name]: value }));
       return;
     }
 
-    setFormData((prev) => ({ ...prev, documents: kept }));
-    return;
-  }
+    // document uploads: compress → filter per-file → cap total
+    if (name === "documents") {
+      setSubmitNotice("");
+      const picked = Array.from(files || []);
 
-  // cascading selects
-  if (name === "country")
-    return setFormData((prev) => ({ ...prev, country: value, state: "", district: "" }));
-  if (name === "state")
-    return setFormData((prev) => ({ ...prev, state: value, district: "" }));
+      // compress images (non-images pass through)
+      const processed = await Promise.all(picked.map(compressIfImage));
 
-  setFormData((prev) => ({ ...prev, [name]: value }));
-};
+      // filter by per-file size
+      const overs = processed.filter((f) => bytesToMB(f.size) > MAX_FILE_MB);
+      if (overs.length) {
+        setSubmitNotice(
+          `Some files exceed ${MAX_FILE_MB}MB: ${overs.map((f) => f.name).join(", ")}`
+        );
+      }
+      const kept = processed.filter((f) => bytesToMB(f.size) <= MAX_FILE_MB);
 
+      // cap total size
+      const totalMB = kept.reduce((s, f) => s + bytesToMB(f.size), 0);
+      if (totalMB > MAX_TOTAL_MB) {
+        let running = 0;
+        const trimmed = [];
+        for (const f of kept) {
+          const next = running + bytesToMB(f.size);
+          if (next > MAX_TOTAL_MB) break;
+          running = next;
+          trimmed.push(f);
+        }
+        setFormData((prev) => ({ ...prev, documents: trimmed }));
+        setSubmitNotice(
+          `Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length} file(s).`
+        );
+        return;
+      }
+
+      setFormData((prev) => ({ ...prev, documents: kept }));
+      return;
+    }
+
+    // default
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const fetchStamp = useRef(0);
 
   /* load customer types + doc types + branches (once) */
   useEffect(() => {
@@ -331,172 +360,179 @@ const handleChange = async (e) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ONE useEffect for country → state → district chain */
-  const fetchStamp = useRef(0);
-useEffect(() => {
+  /* Countries / States / Districts cascading fetch */
+  useEffect(() => {
     let mounted = true;
     const myStamp = ++fetchStamp.current;
 
-    // Define an inner async function
-    const fetchData = async () => {
-        try {
-            // Countries once
-            if (countries.length === 0) {
-                setCountryLoading(true);
-                try {
-                    const cRes = await getCountries({ per_page: 500 });
-                    if (!mounted || fetchStamp.current !== myStamp) return;
-                    setCountries(normalizeList(cRes));
-                } catch (e) {
-                    if (!mounted || fetchStamp.current !== myStamp) return;
-                    setCountryError("Failed to load countries.");
-                    console.error(e);
-                } finally {
-                    if (mounted && fetchStamp.current === myStamp) setCountryLoading(false);
-                }
-            }
-
-            // States when country chosen
-            if (formData.country) {
-                setStateLoading(true);
-                try {
-                    const sRes = await getStatesByCountry(formData.country);
-                    if (!mounted || fetchStamp.current !== myStamp) return;
-                    setStates(normalizeList(sRes));
-                } catch (e) {
-                    if (!mounted || fetchStamp.current !== myStamp) return;
-                    setStateError("Failed to load states.");
-                    console.error(e);
-                } finally {
-                    if (mounted && fetchStamp.current === myStamp) setStateLoading(false);
-                }
-            }
-
-            // Districts when state chosen
-            if (formData.state) {
-                setDistrictLoading(true);
-                try {
-                    const dRes = await getDistrictsByState(formData.state);
-                    if (!mounted || fetchStamp.current !== myStamp) return;
-                    setDistricts(normalizeList(dRes));
-                } catch (e) {
-                    if (!mounted || fetchStamp.current !== myStamp) return;
-                    setDistrictError("Failed to load districts.");
-                    console.error(e);
-                } finally {
-                    if (mounted && fetchStamp.current === myStamp) setDistrictLoading(false);
-                }
-            }
-        } catch (err) {
-            console.error(err);
+    (async () => {
+      try {
+        // Countries (once)
+        if (countries.length === 0) {
+          setCountryLoading(true);
+          try {
+            console.debug("[WORLD-API] getCountries params:", { per_page: 500 });
+            const cRes = await getCountries({ per_page: 500 });
+            if (!mounted || fetchStamp.current !== myStamp) return;
+            setCountries(debugNormalize("countries", cRes));
+            setCountryError("");
+          } catch (e) {
+            if (!mounted || fetchStamp.current !== myStamp) return;
+            console.error("[WORLD-API] getCountries failed:", e);
+            setCountryError("Failed to load countries.");
+          } finally {
+            if (mounted && fetchStamp.current === myStamp) setCountryLoading(false);
+          }
         }
-    };
 
-    // Call the async function inside useEffect
-    fetchData();
+        // States by country
+        if (formData.country) {
+          setStateLoading(true);
+          try {
+            const countryId = Number(formData.country); // APIs often want numeric IDs
+            const params = { country_id: countryId };
+            console.debug("[WORLD-API] getStatesByCountry params:", params);
+            const sRes = await getStatesByCountry(Number(formData.country));
+            if (!mounted || fetchStamp.current !== myStamp) return;
+            setStates(debugNormalize("states", sRes));
+            setStateError("");
+          } catch (e) {
+            if (!mounted || fetchStamp.current !== myStamp) return;
+            console.error("[WORLD-API] getStatesByCountry failed:", e);
+            setStateError("Failed to load states.");
+          } finally {
+            if (mounted && fetchStamp.current === myStamp) setStateLoading(false);
+          }
+        }
+
+        // Districts by state
+        if (formData.state) {
+          setDistrictLoading(true);
+          try {
+            const stateId = Number(formData.state);
+            console.debug("[WORLD-API] getDistrictsByState params:", { state_id: stateId });
+            let dRes = await getDistrictsByState(stateId);
+            let list = normalizeList(dRes);
+            if (Array.isArray(list) && list.length === 0) {
+              console.debug("[WORLD-API] districts empty — trying getActiveDistrictsByState");
+              dRes = await getActiveDistrictsByState(stateId);
+            }
+
+            if (!mounted || fetchStamp.current !== myStamp) return;
+            setDistricts(debugNormalize("districts", dRes));
+            setDistrictError("");
+          } catch (e) {
+            if (!mounted || fetchStamp.current !== myStamp) return;
+            console.error("[WORLD-API] getDistrictsByState failed:", e);
+            setDistrictError("Failed to load districts.");
+          } finally {
+            if (mounted && fetchStamp.current === myStamp) setDistrictLoading(false);
+          }
+        }
+      } catch (err) {
+        console.error("[WORLD-API] unexpected error:", err);
+      }
+    })();
 
     return () => {
-        mounted = false;
+      mounted = false;
     };
-}, [formData.country, formData.state]); // Triggered when country or state changes
-// Triggered when country or state changes
-
+    // NOTE: we intentionally do NOT depend on `countries` to avoid re-fetch loops
+  }, [formData.country, formData.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Build payload (JSON or multipart if files present) */
-const buildPartyPayload = (fd) => {
-  const files = Array.isArray(fd.documents) ? fd.documents : [];
-  const hasFiles = files.length > 0;
+  const buildPartyPayload = (fd) => {
+    const files = Array.isArray(fd.documents) ? fd.documents : [];
+    const hasFiles = files.length > 0;
 
-  const map = {
-    name: fd.name,
-    email: fd.email,
-    contact_number: fd.contactNumber,   // ✅ corrected
-    whatsapp_number: fd.whatsappNumber, // ✅ corrected
-    customer_type_id: fd.customerType ? Number(fd.customerType) : "",
-    document_type_id: fd.senderIdType ? Number(fd.senderIdType) : "",
-    document_id: fd.senderId,
-    branch_id: fd.branch ? Number(fd.branch) : "",
-    country_id: fd.country ? Number(fd.country) : "",
-    state_id: fd.state ? Number(fd.state) : "",
-    district_id: fd.district ? Number(fd.district) : "",
-    city: fd.city,
-    postal_code: fd.zipCode,            // ✅ corrected
-    address: fd.address,
-  };
-
-  if (!hasFiles) {
-    return Object.fromEntries(Object.entries(map).filter(([, v]) => v !== "" && v != null));
-  }
-
-  const f = new FormData();
-  for (const [k, v] of Object.entries(map)) {
-    if (v !== "" && v != null) f.append(k, v);
-  }
-  files.forEach((file) => f.append("documents[]", file, file.name));
-  if (files.length === 1) f.append("document", files[0], files[0].name);
-  return f;
-};
-
-
-  /* Submit */
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setSubmitError("");
-  setFieldErrors({});
-
-  if (!formData.name || !formData.customerType || !formData.senderIdType || !formData.senderId) {
-    setSubmitError("Name, Customer Type, ID Type, and Document ID are required.");
-    return;
-  }
-
-  try {
-    setSubmitLoading(true);
-    const payload = buildPartyPayload(formData); // Ensure whatsappNumber and contactNumber are in payload
-    const created = await createParty(payload);
-
-    const details = {
-      Name: formData.name,
-      Email: formData.email,
-      WhatsApp: formData.whatsappNumber,
-      Phone: formData.contactNumber, // Ensure phone and whatsapp are passed
-      "Customer Type": resolveLabel(formData.customerType, customerTypes, getTypeLabel),
-      "Document Type": resolveLabel(formData.senderIdType, docTypes, getDocLabel),
-      "Document ID": formData.senderId,
-      Branch: resolveLabel(formData.branch, branches, getBranchLabel),
-      Country: resolveLabel(formData.country, countries, getCountryLabel),
-      State: resolveLabel(formData.state, states, getStateLabel),
-      District: resolveLabel(formData.district, districts, getDistrictLabel),
-      City: formData.city,
-      "Zip Code": formData.zipCode,
-      Address: formData.address,
-      Attachments:
-        formData.documents?.length > 0
-          ? formData.documents.map((f) => f.name).join(", ")
-          : "—",
+    const map = {
+      name: fd.name,
+      email: fd.email,
+      contact_number: fd.contactNumber, // snake_case expected by API
+      whatsapp_number: fd.whatsappNumber,
+      customer_type_id: fd.customerType ? Number(fd.customerType) : "",
+      document_type_id: fd.senderIdType ? Number(fd.senderIdType) : "",
+      document_id: fd.senderId,
+      branch_id: fd.branch ? Number(fd.branch) : "",
+      country_id: fd.country ? Number(fd.country) : "",
+      state_id: fd.state ? Number(fd.state) : "",
+      district_id: fd.district ? Number(fd.district) : "",
+      city: fd.city,
+      postal_code: fd.zipCode, // snake_case expected by some APIs
+      address: fd.address,
     };
 
-    setCreatedData(created ?? null);
-    setDisplayDetails(details);
-    setShowSuccess(true);
-    // resetForm(); // keep filled until modal close
-  } catch (err) {
-    console.error(err);
-    const status = err?.response?.status;
-    if (status === 413) {
-      setSubmitError(
-        `Your attachments are too large for the server limit (413). Trim files or upload fewer/smaller files.`
-      );
+    if (!hasFiles) {
+      return Object.fromEntries(Object.entries(map).filter(([, v]) => v !== "" && v != null));
+    }
+
+    const f = new FormData();
+    for (const [k, v] of Object.entries(map)) {
+      if (v !== "" && v != null) f.append(k, v);
+    }
+    files.forEach((file) => f.append("documents[]", file, file.name));
+    if (files.length === 1) f.append("document", files[0], files[0].name);
+    return f;
+  };
+
+  /* Submit */
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitError("");
+    setFieldErrors({});
+
+    if (!formData.name || !formData.customerType || !formData.senderIdType || !formData.senderId) {
+      setSubmitError("Name, Customer Type, ID Type, and Document ID are required.");
       return;
     }
-    const apiMsg = err?.response?.data?.message || "Failed to submit form.";
-    const apiErrors = err?.response?.data?.errors;
-    setSubmitError(apiMsg);
-    if (apiErrors && typeof apiErrors === "object") setFieldErrors(apiErrors);
-  } finally {
-    setSubmitLoading(false);
-  }
-};
 
+    try {
+      setSubmitLoading(true);
+      const payload = buildPartyPayload(formData);
+      const created = await createParty(payload);
+
+      const details = {
+        Name: formData.name,
+        Email: formData.email,
+        WhatsApp: formData.whatsappNumber,
+        Phone: formData.contactNumber,
+        "Customer Type": resolveLabel(formData.customerType, customerTypes, getTypeLabel),
+        "Document Type": resolveLabel(formData.senderIdType, docTypes, getDocLabel),
+        "Document ID": formData.senderId,
+        Branch: resolveLabel(formData.branch, branches, getBranchLabel),
+        Country: resolveLabel(formData.country, countries, getCountryLabel),
+        State: resolveLabel(formData.state, states, getStateLabel),
+        District: resolveLabel(formData.district, districts, getDistrictLabel),
+        City: formData.city,
+        "Zip Code": formData.zipCode,
+        Address: formData.address,
+        Attachments:
+          formData.documents?.length > 0
+            ? formData.documents.map((f) => f.name).join(", ")
+            : "—",
+      };
+
+      setCreatedData(created ?? null);
+      setDisplayDetails(details);
+      setShowSuccess(true);
+      // keep filled until modal close
+    } catch (err) {
+      console.error(err);
+      const status = err?.response?.status;
+      if (status === 413) {
+        setSubmitError(
+          `Your attachments are too large for the server limit (413). Trim files or upload fewer/smaller files.`
+        );
+        return;
+      }
+      const apiMsg = err?.response?.data?.message || "Failed to submit form.";
+      const apiErrors = err?.response?.data?.errors;
+      setSubmitError(apiMsg);
+      if (apiErrors && typeof apiErrors === "object") setFieldErrors(apiErrors);
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
 
   /* Close modal */
   const handleCloseSuccess = () => {
@@ -527,12 +563,31 @@ const handleSubmit = async (e) => {
   return (
     <div className="min-h-screen bg-gray-50 flex justify-center items-start py-10">
       <div className="bg-white shadow-lg rounded-xl w-full max-w-5xl p-8">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-6 border-b pb-3">
-          <span className="staff-panel-heading-icon">
-            <FaUserTie />
-          </span>
-          Create Sender/Receiver
-        </h2>
+      <div className="add-cargo-header flex justify-between items-center">
+            <h2 className="header-cargo-heading flex items-center gap-2">
+              <span className="header-cargo-icon"><FaUserTie /></span>
+              Create Sender/Receiver
+            </h2>
+            <nav aria-label="Breadcrumb" className="">
+              <ol className="flex items-center gap-2 text-sm">
+                <li>
+                  <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">
+                    Home
+                  </Link>
+                </li>
+                <li className="text-gray-400">/</li>
+                <li>
+                  <Link to="/cargo/allcargolist" className="text-gray-500 hover:text-gray-700 hover:underline">
+                    Customers
+                  </Link>
+                </li>
+                <li className="text-gray-400">/</li>
+                <li aria-current="page" className="text-gray-800 font-medium">
+                  Add Customer
+                </li>
+              </ol>
+            </nav>
+          </div>
 
         <form className="space-y-6" onSubmit={handleSubmit}>
           {/* Top */}
@@ -623,8 +678,11 @@ const handleSubmit = async (e) => {
                 onChange={handleChange}
                 className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
               />
-              {fieldErrors.whatsapp && (
-                <p className="text-sm text-red-600">{fieldErrors.whatsapp[0]}</p>
+              {/* Depending on backend, this might be `whatsapp_number` in errors */}
+              {(fieldErrors.whatsapp || fieldErrors.whatsapp_number) && (
+                <p className="text-sm text-red-600">
+                  {fieldErrors.whatsapp?.[0] ?? fieldErrors.whatsapp_number?.[0]}
+                </p>
               )}
             </div>
             <div>
@@ -636,7 +694,12 @@ const handleSubmit = async (e) => {
                 onChange={handleChange}
                 className="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-red-300 w-full"
               />
-              {fieldErrors.phone && <p className="text-sm text-red-600">{fieldErrors.phone[0]}</p>}
+              {/* Depending on backend, this might be `phone` or `contact_number` */}
+              {(fieldErrors.phone || fieldErrors.contact_number) && (
+                <p className="text-sm text-red-600">
+                  {fieldErrors.phone?.[0] ?? fieldErrors.contact_number?.[0]}
+                </p>
+              )}
             </div>
           </div>
 
@@ -693,7 +756,8 @@ const handleSubmit = async (e) => {
               {submitNotice && <p className="text-xs text-amber-700 mt-1">{submitNotice}</p>}
               {formData.documents?.length > 0 && (
                 <p className="text-xs text-gray-600 mt-1">
-                  {formData.documents.length} file(s): {formData.documents.map((f) => f.name).join(", ")}
+                  {formData.documents.length} file(s):{" "}
+                  {formData.documents.map((f) => f.name).join(", ")}
                 </p>
               )}
               {fieldErrors["documents.0"] && (
@@ -842,7 +906,7 @@ const handleSubmit = async (e) => {
         <CreateReceiverSenderModal
           open={showSuccess}
           onClose={handleCloseSuccess}
-          data={createdData}          // <-- pass whole response; component normalizes internally
+          data={createdData} // component normalizes internally
           details={displayDetails}
         />
       </ErrorBoundary>

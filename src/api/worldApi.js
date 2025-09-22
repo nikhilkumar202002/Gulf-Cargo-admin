@@ -2,7 +2,7 @@ import api from "./axiosInstance";
 
 const unwrap = (res) => res?.data ?? res;
 
-// country
+/* -------------------- Countries -------------------- */
 export const createCountry = async (payload) => {
   const res = await api.post("/country", payload);
   return unwrap(res);
@@ -24,7 +24,6 @@ export const getInactiveCountries = async (params = {}) => {
 };
 
 /* -------------------- States -------------------- */
-
 export const createState = async (payload) => {
   const res = await api.post("/state", payload);
   return unwrap(res);
@@ -46,15 +45,12 @@ export const getInactiveStates = async (params = {}) => {
 };
 
 export const getStatesByCountry = async (countryId, extra = {}) =>
-  getStates({ country_id: countryId, ...extra });
+  getStates({ country_id: Number(countryId), ...extra });
 
 export const getActiveStatesByCountry = async (countryId, extra = {}) =>
-  getActiveStates({ country_id: countryId, ...extra });
-
-
+  getActiveStates({ country_id: Number(countryId), ...extra });
 
 /* -------------------- Districts -------------------- */
-
 export const createDistrict = async (payload) => {
   const res = await api.post("/district", payload);
   return unwrap(res);
@@ -76,10 +72,10 @@ export const getInactiveDistricts = async (params = {}) => {
 };
 
 export const getDistrictsByState = async (stateId, extra = {}) =>
-  getDistricts({ state_id: stateId, ...extra });
+  getDistricts({ state_id: Number(stateId), ...extra });
 
 export const getActiveDistrictsByState = async (stateId, extra = {}) =>
-  getActiveDistricts({ state_id: stateId, ...extra });
+  getActiveDistricts({ state_id: Number(stateId), ...extra });
 
 export default {
   // countries

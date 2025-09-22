@@ -1,40 +1,43 @@
 // src/pages/InvoiceView.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "react-router-dom";
-import { getShipment } from "../api/shipmentsApi";
-import { getPartyById, getParties } from "../api/partiesApi";
+import { normalizeCargoToInvoice, getCargoById } from "../api/createCargoApi";
+import { getPartyById, getParties /* optional: getPartiesByCustomerType */ } from "../api/partiesApi";
 import InvoiceLogo from "../assets/Logo.png";
 import "./invoice.css";
 
+/* ---------- utils ---------- */
 const cx = (...c) => c.filter(Boolean).join(" ");
-const fmtDate = (iso) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-};
+const toNum = (v) => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
+
 const fmtMoney = (n, currency = "INR") => {
   if (n === null || n === undefined || n === "") return "—";
-  try { return new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(Number(n) || 0); }
-  catch { return String(n); }
+  try {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(Number(n) || 0);
+  } catch {
+    return String(n);
+  }
 };
-
-const Spinner = ({ className = "h-5 w-5 text-indigo-600" }) => (
-  <svg className={cx("animate-spin", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-  </svg>
-);
 
 const pick = (obj, keys, fallback = "—") => {
   for (const k of keys) {
-    const v = obj?.[k];
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+    // allow dotted paths like "origin_port.name"
+    const path = String(k).split(".");
+    let cur = obj;
+    let ok = true;
+    for (const p of path) {
+      if (cur == null || cur[p] == null || String(cur[p]).trim() === "") {
+        ok = false;
+        break;
+      }
+      cur = cur[p];
+    }
+    if (ok && cur !== undefined && cur !== null && String(cur).trim() !== "") return cur;
   }
   return fallback;
 };
 
-/* ---------- Company header content ---------- */
+/* ---------- Company header (keep yours) ---------- */
 const COMPANY = {
   arHeadingLine1: "شركة سواحل الخليج للنقل",
   arHeadingLine2: "البحري",
@@ -48,7 +51,7 @@ const COMPANY = {
   defaultShipmentType: "IND AIR",
 };
 
-/* ---------------- Party helpers ---------------- */
+/* ---------- Party helpers ---------- */
 const parsePartyList = (res) => {
   if (Array.isArray(res)) return res;
   if (Array.isArray(res?.data)) return res.data;
@@ -83,47 +86,59 @@ const matchByName = (name, list) => {
   return list.find((x) => getName(x) === low) || list.find((x) => getName(x).includes(low)) || null;
 };
 
-/* QR helper */
+/* ---------- QR helper ---------- */
 const buildQrUrl = (data, size = 160) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(data)}`;
 
-export default function InvoiceView({ shipment: injectedShipment = null, modal = false }) {
+/* =======================================================================
+   Component
+   - Accepts: (a) route param :id  -> GET /cargo/:id, or
+              (b) location.state.cargo or .shipment, or
+              (c) prop `shipment` containing { success, cargo } or cargo object
+   - Normalizes using normalizeCargoToInvoice
+   - Fetches Sender/Receiver from Parties by ID or name search
+   ======================================================================= */
+export default function InvoiceView({ shipment: injected = null, modal = false }) {
   const { id } = useParams();
   const location = useLocation();
-  const hydrated = location.state?.shipment || null;
 
-  const [shipment, setShipment] = useState(injectedShipment || hydrated || null);
-  const [loading, setLoading] = useState(!injectedShipment && !hydrated && !!id);
+  // allow passing via route state; support both { cargo } and { shipment } shapes
+  const hydratedFromState = location.state?.cargo || location.state?.shipment || null;
+
+  const [shipment, setShipment] = useState(null);
+  const [loading, setLoading] = useState(!!id && !injected && !hydratedFromState);
   const [err, setErr] = useState("");
 
   const [senderParty, setSenderParty] = useState(null);
   const [receiverParty, setReceiverParty] = useState(null);
   const [partyLoading, setPartyLoading] = useState(false);
 
-  // allow hot-prop updates (modal path)
+  // boot: prefer prop → route state → fetch by id
   useEffect(() => {
-    if (injectedShipment) setShipment(injectedShipment);
-  }, [injectedShipment]);
-
-  // load shipment if only URL param is present
-  useEffect(() => {
-    if (!id || injectedShipment || hydrated) return;
     (async () => {
-      setLoading(true);
-      setErr("");
       try {
-        const s = await getShipment(id);
-        setShipment(s || null);
+        if (injected) {
+          setShipment(normalizeCargoToInvoice(injected)); // handles {success,cargo} OR plain cargo
+          return;
+        }
+        if (hydratedFromState) {
+          setShipment(normalizeCargoToInvoice(hydratedFromState));
+          return;
+        }
+        if (id) {
+          setLoading(true);
+          const cargo = await getCargoById(id); // returns cargo object
+          setShipment(normalizeCargoToInvoice({ cargo }));
+        }
       } catch (e) {
-        setErr(e?.message || "Failed to load shipment");
-        setShipment(null);
+        setErr(e?.message || "Failed to load cargo");
       } finally {
         setLoading(false);
       }
     })();
-  }, [id, hydrated, injectedShipment]);
+  }, [id, injected, hydratedFromState]);
 
-  // load parties once shipment is ready (ID first; then name fallback)
+  // fetch Sender/Receiver party once we have shipment basics
   useEffect(() => {
     if (!shipment) return;
 
@@ -133,37 +148,46 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
         ? [shipment.sender_id, shipment.shipper_id, shipment.sender_party_id]
         : [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id];
 
-      const name = isSender ? (shipment.sender?.name || shipment.sender || shipment.shipper_name)
-        : (shipment.receiver?.name || shipment.receiver || shipment.consignee_name);
+      const name =
+        isSender
+          ? shipment.sender?.name || shipment.sender || shipment.shipper_name
+          : shipment.receiver?.name || shipment.receiver || shipment.consignee_name;
 
-      // by ID
+      // 1) by ID
       for (const pid of idCandidates) {
         if (!pid) continue;
         try {
           const res = await getPartyById(pid);
           const data = res?.party || res?.data || res;
           if (data?.id) return extractParty(data);
-        } catch (_) { }
+        } catch (_) {}
       }
 
-      // by name + role (Sender/Receiver)
-      const variants = [
-        { name, customer_type: isSender ? "Sender" : "Receiver" },
-        { q: name, customer_type: isSender ? "Sender" : "Receiver" },
-        { search: name, customer_type: isSender ? "Sender" : "Receiver" },
-        { name }, { q: name }, { search: name },
-      ];
-      for (const params of variants) {
-        if (!name) break;
+      // 2) by name (broad search), then filter by role when possible
+      if (name) {
         try {
-          const res = await getParties(params);
+          const res = await getParties({ search: name });
           const list = parsePartyList(res);
-          const found = matchByName(name, list) || list[0];
-          if (found) return extractParty(found);
-        } catch (_) { }
+
+          // Prefer role-filtered match if present:
+          const roleFiltered = list.filter((p) => {
+            const typeId = Number(p.customer_type_id);
+            const typeName = String(p.customer_type || "").toLowerCase();
+            return isSender ? (typeId === 1 || typeName.includes("sender")) : (typeId === 2 || typeName.includes("receiver"));
+          });
+
+          const chosen =
+            matchByName(name, roleFiltered) ||
+            matchByName(name, list) ||
+            roleFiltered[0] ||
+            list[0] ||
+            null;
+
+          if (chosen) return extractParty(chosen);
+        } catch (_) {}
       }
 
-      // fallback from shipment
+      // 3) ultimate fallback: use whatever is on shipment
       const address = isSender
         ? pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")
         : pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "");
@@ -189,30 +213,42 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
     })();
   }, [shipment]);
 
+  /* ---------- normalized basics ---------- */
   const currency = pick(shipment, ["currency", "currency_code"], "INR");
-
-  // normalize items for table
   const items = useMemo(() => {
     const raw = Array.isArray(shipment?.items) ? shipment.items : [];
     return raw.map((it, i) => ({
       idx: i + 1,
       name: pick(it, ["description", "name", "item_name", "cargo_name", "title", "item"], "Item"),
-      qty: pick(it, ["no_of_pieces", "quantity", "qty", "pieces", "count"], ""),
+      qty: pick(it, ["qty", "no_of_pieces", "quantity", "pieces", "count", "piece_no"], ""),
       weight: pick(it, ["weight", "weight_kg", "kg"], ""),
       unitPrice: pick(it, ["unit_price", "price", "rate"], ""),
-      amount: (() => {
-        const up = Number(it?.unit_price ?? it?.price ?? it?.rate ?? 0);
-        const q = Number(it?.no_of_pieces ?? it?.quantity ?? it?.qty ?? it?.pieces ?? 0);
-        return up && q ? up * q : (it?.amount ?? it?.line_total ?? "");
-      })(),
+      amount:
+        it?.total_price ??
+        it?.amount ??
+        it?.line_total ??
+        (toNum(it?.unit_price ?? it?.price ?? it?.rate) * toNum(it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces)),
     }));
   }, [shipment]);
 
   const subtotal = shipment?.subtotal ?? items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
   const tax = shipment?.tax ?? shipment?.tax_amount ?? 0;
-  const total = shipment?.total_amount ?? shipment?.grand_total ?? (Number(subtotal) + Number(tax));
+  const bill = shipment?.bill_charges ?? 0;
+  const total = shipment?.grand_total ?? (Number(subtotal) + Number(bill) + Number(tax));
 
-  const qrText = `INV|${shipment?.track_code || ""}|AWB:${shipment?.awb_number || ""}|TOTAL:${total}`;
+  const qrText = `INV|${shipment?.track_code || ""}|BOOK:${shipment?.booking_no || shipment?.invoice_no || ""}|TOTAL:${total}`;
+
+  if (loading) {
+    return (
+      <div className="p-6 text-slate-600">Loading invoice…</div>
+    );
+  }
+  if (err) {
+    return <div className="p-6 text-rose-700">{err}</div>;
+  }
+  if (!shipment) {
+    return <div className="p-6 text-rose-700">No cargo found.</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -247,14 +283,14 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
         <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           {/* ======= COMPANY HEADER ======= */}
           <div className="px-6 pt-6">
-            <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-3">
+            <div className="flex justify-between items-center">
               {/* Logo */}
-              <div className="flex items-center sm:justify-start justify-center">
+              <div className="invoice-logo flex items-center sm:justify-start justify-center">
                 <img src={InvoiceLogo} alt="Gulf Cargo" className="h-16 object-contain" />
               </div>
 
               {/* QR */}
-              <div className="flex items-center justify-center">
+              <div className="invoice-qrcode flex items-center justify-center">
                 <img
                   src={buildQrUrl(qrText, 160)}
                   alt="Invoice QR"
@@ -293,31 +329,47 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
           </div>
           {/* ======= END COMPANY HEADER ======= */}
 
-          {/* Meta strip */}
-          <div className="grid grid-cols-1 gap-4 border-b border-slate-200 px-6 py-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* ======= META STRIP (your ask) ======= */}
+          <div className="grid grid-cols-1 gap-4 border-b border-slate-200 px-6 py-4 sm:grid-cols-2 lg:grid-cols-6">
             <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Track No.</div>
               <div className="mt-1 inline-flex items-center rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 px-2.5 py-1 font-mono text-xs font-semibold text-white">
-                {shipment?.track_code ?? "—"}
+                {shipment?.track_code || "—"}
               </div>
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">AWB</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.awb_number ?? "—"}</div>
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Route</div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Booking No</div>
               <div className="mt-1 text-sm font-medium text-slate-900">
-                {(shipment?.origin_port?.name ?? shipment?.origin_port ?? "—")} → {(shipment?.destination_port?.name ?? shipment?.destination_port ?? "—")}
+                {shipment?.booking_no || shipment?.invoice_no || "—"}
+              </div>
+            </div>
+           <div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Branch</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {pick(
+                  shipment,
+                  ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"],
+                  "—"
+                )}
               </div>
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Status</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.status?.name ?? shipment?.status ?? "—"}</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {shipment?.status?.name ?? shipment?.status ?? "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Delivery Type</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.delivery_type || "—"}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Payment Method</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.payment_method || "—"}</div>
             </div>
           </div>
 
-          {/* Parties */}
+          {/* ======= PARTIES ======= */}
           <div className="grid grid-cols-1 gap-6 border-b border-slate-200 px-6 py-6 sm:grid-cols-2">
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Shipper</div>
@@ -330,11 +382,14 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
                   pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")}
               </div>
               <div className="text-sm text-slate-700">
-                {senderParty?.phones || pick(shipment?.sender, ["contact_number", "whatsapp_number"], "") ||
+                {senderParty?.phones ||
+                  pick(shipment?.sender, ["contact_number", "whatsapp_number"], "") ||
                   pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")}
               </div>
               <div className="text-sm text-slate-700">
-                {senderParty?.email || pick(shipment?.sender, ["email"], "") || pick(shipment, ["sender_email", "shipper_email"], "")}
+                {senderParty?.email ||
+                  pick(shipment?.sender, ["email"], "") ||
+                  pick(shipment, ["sender_email", "shipper_email"], "")}
               </div>
             </div>
 
@@ -349,22 +404,30 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
                   pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "")}
               </div>
               <div className="text-sm text-slate-700">
-                {receiverParty?.phones || pick(shipment?.receiver, ["contact_number", "whatsapp_number"], "") ||
+                {receiverParty?.phones ||
+                  pick(shipment?.receiver, ["contact_number", "whatsapp_number"], "") ||
                   pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "")}
               </div>
               <div className="text-sm text-slate-700">
-                {receiverParty?.email || pick(shipment?.receiver, ["email"], "") || pick(shipment, ["receiver_email", "consignee_email"], "")}
+                {receiverParty?.email ||
+                  pick(shipment?.receiver, ["email"], "") ||
+                  pick(shipment, ["receiver_email", "consignee_email"], "")}
               </div>
             </div>
           </div>
 
-          {/* Items */}
+          {/* ======= ITEMS ======= */}
           <div className="px-6 py-6">
             <div className="mb-3 text-sm font-semibold text-slate-900">Cargo Items</div>
-            {loading || partyLoading ? (
-              <div className="flex items-center gap-2 text-slate-600"><Spinner /><span>Loading…</span></div>
-            ) : err ? (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{err}</div>
+
+            {partyLoading ? (
+              <div className="flex items-center gap-2 text-slate-600">
+                <svg className={cx("animate-spin", "h-5 w-5 text-indigo-600")} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+                <span>Loading parties…</span>
+              </div>
             ) : !items.length ? (
               <div className="text-sm text-slate-600">No items found.</div>
             ) : (
@@ -387,7 +450,9 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
                         <td className="px-3 py-2 text-sm text-slate-800">{it.name}</td>
                         <td className="px-3 py-2 text-sm text-slate-700">{it.qty || "—"}</td>
                         <td className="px-3 py-2 text-sm text-slate-700">{it.weight || "—"}</td>
-                        <td className="px-3 py-2 text-right text-sm text-slate-700">{it.unitPrice ? fmtMoney(it.unitPrice, currency) : "—"}</td>
+                        <td className="px-3 py-2 text-right text-sm text-slate-700">
+                          {it.unitPrice ? fmtMoney(it.unitPrice, currency) : "—"}
+                        </td>
                         <td className="px-3 py-2 text-right text-sm font-medium text-slate-900">
                           {it.amount ? fmtMoney(it.amount, currency) : "—"}
                         </td>
@@ -406,6 +471,10 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
                   <div className="font-medium text-slate-900">{fmtMoney(subtotal, currency)}</div>
                 </div>
                 <div className="mt-1 flex justify-between text-sm text-slate-700">
+                  <div>Bill Charges</div>
+                  <div className="font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
+                </div>
+                <div className="mt-1 flex justify-between text-sm text-slate-700">
                   <div>Tax</div>
                   <div className="font-medium text-slate-900">{fmtMoney(tax, currency)}</div>
                 </div>
@@ -417,24 +486,19 @@ export default function InvoiceView({ shipment: injectedShipment = null, modal =
             </div>
           </div>
 
+          {/* ======= FOOTER ======= */}
           <div className="border-t border-slate-200 px-6 py-4 text-xs text-slate-500">
             Thank you for your business.
             <div className="invoice-terms-conditions-content">
               <h2>Accept the goods only after checking and confirming them on delivery.</h2>
-              <p>NO GUARANTEE FOR GLASS/BREAKABLE ITEMS. COMPANY NOT RESPONSIBLE FOR ITEMS RECEIVED IN DAMAGED CONDITION.COMPLAINTS WILL NOT BE ACCEPTED AFTER 2 DAYS FROM THE DATE OF DELIVERY.COMPANY NOT RESPONSIBLE FOR OCTROI CHARGES OR ANY OTHER CHARGES LEVIED LOCALLY.IN CASE OF CLAIM (LOSS), PROOF OF DOCUMENTS SHOULD BE PRODUCED IN CASE OF LOSS OF PACKAGE.SETTLEMENT WILL BE MADE (20 SAR/KGS) PER COMPANY RULES.COMPANY WILL NOT TAKE RESPONSIBILITY FOR NATURAL CALAMITY AND DELAY IN CUSTOMS CLEARANCE.</p>
-              <p>لن تقبل أي شكوى بعد مرور يومين من استلام البضاعة.
-                الشركة غير مسؤولة عن أي رسوم ومصاريف تفرض من السلطات المحلية.
-                عند حدوث فقدان في البضاعة يجب إحضار دليل رسمي. يتم تعويض المفقود في البضائع المفقودة أو الناقصة بمبلغ عشرون ريال سعودي للكيلو حسب أنظمة الشركة. الشركة غير مسؤولة عن الكوارث الطبيعية أو التأخير في التخليص الجمركي.</p>
-                <p>വസ്തുക്കൾ / ഗ്ലാസ് / പൊട്ടിത്തെറിക്കാൻ സാധ്യതയുള്ള സാധനങ്ങൾക്ക് ഗ്യാരണ്ടി ഇല്ല.
-                    വസ്തുക്കൾ കേടായ അവസ്ഥയിൽ ലഭിച്ചാൽ കമ്പനി ഉത്തരവാദികളല്ല.
-                    വസ്തുക്കൾ വാങ്ങിയ ശേഷം 2 ദിവസത്തിനു ശേഷം പരാതി സ്വീകരിക്കുകയില്ല.
-                    പ്രാദേശിക അധികാരികൾ ചുമത്തുന്ന ഓക്ട്രോയ് ചാർജ് കമ്പനി ഉത്തരവാദിയല്ല.
-                    പാക്കേജ് നഷ്ടപ്പെട്ടാൽ അവകാശം ആവശ്യപ്പെടാൻ തെളിവുകൾ സമർപ്പിക്കണം.
-                    കമ്പനി നിയമങ്ങൾ പ്രകാരം കിലോയ്ക്ക് 20 SAR വീതം തീർപ്പാക്കും.
-                    പ്രകൃതിക്ഷോഭം കൊണ്ടോ കസ്റ്റംസ് ക്ലിയറൻസിലെ വൈകീൽ കൊണ്ടോ കമ്പനി ഉത്തരവാദികളല്ല.</p>
-                    <p>डिलीवरी के समय सामान की जाँच और पुष्टि करने के बाद ही उसे स्वीकार करें। <br></br>
-                        कांच/टूटने वाली वस्तुओं की कोई गारंटी नहीं है। कंपनी क्षतिग्रस्त स्थिति में प्राप्त वस्तुओं के लिए जिम्मेदार नहीं है। डिलीवरी की तारीख से कुछ दिनों के बाद शिकायतें स्वीकार नहीं की जाएंगी। कंपनी स्थानीय प्राधिकरणों द्वारा लगाए गए ऑक्ट्री शुल्क या किसी अन्य शुल्क के लिए जिम्मेदार नहीं है। पैकेज के नुकसान की स्थिति में दावा करने के लिए दस्तावेज़ का प्रमाण प्रस्तुत करना होगा। कंपनी के नियमों के अनुसार प्रति किलोग्राम 20 सऊदी रियाल (SAR) का निपटान किया जाएगा। प्राकृतिक आपदाओं और सीमा शुल्क निकासी में देरी के लिए कंपनी जिम्मेदार नहीं होगी।
-                    </p>
+              <p>
+                NO GUARANTEE FOR GLASS/BREAKABLE ITEMS. COMPANY NOT RESPONSIBLE FOR ITEMS RECEIVED IN DAMAGED CONDITION.
+                COMPLAINTS WILL NOT BE ACCEPTED AFTER 2 DAYS FROM THE DATE OF DELIVERY. COMPANY NOT RESPONSIBLE FOR OCTROI
+                CHARGES OR ANY OTHER CHARGES LEVIED LOCALLY. IN CASE OF CLAIM (LOSS), PROOF OF DOCUMENTS SHOULD BE PRODUCED.
+                SETTLEMENT WILL BE MADE (20 SAR/KGS) PER COMPANY RULES. COMPANY WILL NOT TAKE RESPONSIBILITY FOR NATURAL
+                CALAMITY AND DELAY IN CUSTOMS CLEARANCE.
+              </p>
+              
             </div>
           </div>
         </div>

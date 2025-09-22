@@ -1,5 +1,13 @@
 // src/pages/CreateCargo.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  memo,
+  startTransition,
+} from "react";
 import { useSelector } from "react-redux";
 
 import { createCargo, normalizeCargoToInvoice } from "../../api/createCargoApi";
@@ -17,10 +25,8 @@ import InvoiceModal from "../../components/InvoiceModal";
 import { IoLocationSharp } from "react-icons/io5";
 import { MdAddIcCall } from "react-icons/md";
 import { BsFillBoxSeamFill } from "react-icons/bs";
-
-import { Link } from "react-router-dom";
-
 import { GoPlus } from "react-icons/go";
+import { Link } from "react-router-dom";
 
 import "./ShipmentStyles.css";
 
@@ -102,6 +108,80 @@ const buildInitialForm = (branchId = "") => ({
   vatPercentage: 0,
 });
 
+/* ---------- Memoized row component to avoid whole-table re-renders ---------- */
+const ItemRow = memo(function ItemRow({ i, it, setItem, removeRow }) {
+  const onName = useCallback((e) => setItem(i, "name", e.target.value), [i, setItem]);
+  const onPieces = useCallback((e) => setItem(i, "pieces", e.target.value), [i, setItem]);
+  const onUnit = useCallback((e) => setItem(i, "unitPrice", e.target.value), [i, setItem]);
+  const onWeight = useCallback((e) => setItem(i, "weight", e.target.value), [i, setItem]);
+
+  const rowTotal = useMemo(() => {
+    const pieces = Number(it.pieces || 0);
+    const unit = Number(it.unitPrice || 0);
+    return Number((pieces * unit).toFixed(2));
+  }, [it.pieces, it.unitPrice]);
+
+  return (
+    <tr className={i % 2 ? "bg-white" : "bg-gray-50"}>
+      <td className="px-3 py-2 text-center text-gray-500">{i + 1}</td>
+      <td className="px-3 py-2">
+        <input
+          className={`w-full border rounded-lg px-3 py-2 ${!it.name?.trim() ? "border-rose-300" : ""}`}
+          placeholder="Item name"
+          value={it.name}
+          onChange={onName}
+        />
+      </td>
+      <td className="px-3 py-2">
+        <input
+          type="number"
+          min="0"
+          className="w-full border rounded-lg px-3 py-2 text-right"
+          placeholder="0"
+          value={it.pieces}
+          onChange={onPieces}
+        />
+      </td>
+      <td className="px-3 py-2">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          className="w-full border rounded-lg px-3 py-2 text-right"
+          placeholder="0.00"
+          value={it.unitPrice}
+          onChange={onUnit}
+        />
+      </td>
+      <td className="px-3 py-2">
+        <input
+          type="number"
+          min="0"
+          step="0.001"
+          className={`w-full border rounded-lg px-3 py-2 text-right ${Number(it.weight || 0) <= 0 ? "border-rose-300" : ""}`}
+          placeholder="0.000"
+          value={it.weight}
+          onChange={onWeight}
+        />
+      </td>
+      <td className="px-3 py-2 text-right font-medium">
+        {rowTotal.toFixed(2)}
+      </td>
+      <td className="px-3 py-2">
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => removeRow(i)}
+            className="px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+          >
+            Remove
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
 
@@ -120,45 +200,61 @@ export default function CreateCargo() {
 
   // UI
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState({ text: "", variant: "" }); // still used as the single source of truth
+  const [msg, setMsg] = useState({ text: "", variant: "" }); // single source of truth
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceShipment, setInvoiceShipment] = useState(null);
 
   // toast (top-right slide in)
   const [toast, setToast] = useState({ visible: false, text: "", variant: "success" });
   const toastTimer = useRef(null);
-  const showToast = (text, variant = "success", duration = 3500) => {
+  const showToast = useCallback((text, variant = "success", duration = 3500) => {
     try { clearTimeout(toastTimer.current); } catch {}
     setToast({ visible: true, text, variant });
     toastTimer.current = setTimeout(() => {
       setToast((t) => ({ ...t, visible: false }));
     }, duration);
-  };
-  const hideToast = () => {
+  }, []);
+  const hideToast = useCallback(() => {
     try { clearTimeout(toastTimer.current); } catch {}
     setToast((t) => ({ ...t, visible: false }));
-  };
+  }, []);
 
   // form
   const [form, setForm] = useState(buildInitialForm());
 
   // items
   const [items, setItems] = useState([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
-  const rowTotal = (it) =>
-    Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2));
-  const subtotal = items.reduce((s, it) => s + rowTotal(it), 0);
 
-  // totals
-  const billCharges = Number(form.billCharges || 0);
-  const vatPercentage = Number(form.vatPercentage || 0);
-  const totalCost = Number(subtotal.toFixed(2));
-  const vatCost = Number(((totalCost * vatPercentage) / 100).toFixed(2));
-  const netTotal = Number((totalCost + billCharges + vatCost).toFixed(2));
-  const totalWeight = Number(
-    items
-      .reduce((sum, it) => sum + Number(it.weight || 0) * Number(it.pieces || 0), 0)
-      .toFixed(3)
+  // Derived totals (memoized)
+  const subtotal = useMemo(() => {
+    let s = 0;
+    for (const it of items) {
+      const pieces = Number(it.pieces || 0);
+      const price = Number(it.unitPrice || 0);
+      s += pieces * price;
+    }
+    return Number(s.toFixed(2));
+  }, [items]);
+
+  const billCharges = useMemo(() => Number(form.billCharges || 0), [form.billCharges]);
+  const vatPercentage = useMemo(() => Number(form.vatPercentage || 0), [form.vatPercentage]);
+
+  const totalCost = subtotal;
+  const vatCost = useMemo(
+    () => Number(((totalCost * vatPercentage) / 100).toFixed(2)),
+    [totalCost, vatPercentage]
   );
+  const netTotal = useMemo(
+    () => Number((totalCost + billCharges + vatCost).toFixed(2)),
+    [totalCost, billCharges, vatCost]
+  );
+  const totalWeight = useMemo(() => {
+    let sum = 0;
+    for (const it of items) {
+      sum += Number(it.weight || 0) * Number(it.pieces || 0);
+    }
+    return Number(sum.toFixed(3));
+  }, [items]);
 
   /* ---------- preferred branch from token (fallback) ---------- */
   const tokenClaims = useMemo(() => safeDecodeJwt(token), [token]);
@@ -167,11 +263,11 @@ export default function CreateCargo() {
   /* Toast on any msg change */
   useEffect(() => {
     if (msg.text) showToast(msg.text, msg.variant || "success");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [msg.text, msg.variant]);
+  }, [msg.text, msg.variant, showToast]);
 
   /* ---------- initial load ---------- */
   useEffect(() => {
+    let alive = true;
     (async () => {
       setLoading(true);
       setMsg({ text: "", variant: "" });
@@ -184,6 +280,7 @@ export default function CreateCargo() {
           getActiveDeliveryTypes(),
           getActiveCollected(),        // { success, data: [ {id, name} ] }
         ]);
+        if (!alive) return;
 
         const profile = me?.data ?? me ?? null;
         setUserProfile(profile);
@@ -196,23 +293,26 @@ export default function CreateCargo() {
 
         // set branchId from profile (fallback to token)
         const preferredBranchId = pickBranchId(profile) ?? tokenBranchId ?? "";
-        setForm((f) => buildInitialForm(preferredBranchId));
+        setForm(buildInitialForm(preferredBranchId));
 
         const [snd, rcv] = await Promise.all([
           getParties({ customer_type: "Sender" }),
           getParties({ customer_type: "Receiver" }),
         ]);
+        if (!alive) return;
         setSenders(unwrapArray(snd));
         setReceivers(unwrapArray(rcv));
       } catch (e) {
+        if (!alive) return;
         setMsg({
           text: e?.details?.message || e?.message || "Failed to load options.",
           variant: "error",
         });
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
+    return () => { alive = false; };
   }, [token, tokenBranchId]);
 
   /* ---------- keep form.branchId synced with profile/token ---------- */
@@ -222,33 +322,38 @@ export default function CreateCargo() {
     if (bid && String(form.branchId) !== bid) {
       setForm((f) => ({ ...f, branchId: bid }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile, tokenBranchId]);
+  }, [userProfile, tokenBranchId, form.branchId]);
+
+  /* ---------- role change helpers ---------- */
+  const loadOfficeStaff = useCallback(async () => {
+    const branchId = form.branchId || pickBranchId(userProfile) || tokenBranchId;
+    if (!branchId) {
+      setCollectedByOptions([]);
+      setMsg({ text: "Your profile has no branch; cannot load office staff.", variant: "error" });
+      return;
+    }
+    const res = await getBranchUsers(branchId);
+    setCollectedByOptions(unwrapArray(res));
+  }, [form.branchId, userProfile, tokenBranchId]);
 
   /* ---------- when Branch or Role is 'Office', keep people list in sync ---------- */
   useEffect(() => {
-    const load = async () => {
+    let alive = true;
+    (async () => {
       if (form.collectedByRoleName !== "Office") return;
-      const branchId = form.branchId || pickBranchId(userProfile) || tokenBranchId;
-      if (!branchId) {
-        setCollectedByOptions([]);
-        setMsg({ text: "Your profile has no branch; cannot load office staff.", variant: "error" });
-        return;
-      }
       try {
-        const res = await getBranchUsers(branchId);
-        setCollectedByOptions(unwrapArray(res));
+        await loadOfficeStaff();
       } catch {
+        if (!alive) return;
         setCollectedByOptions([]);
         setMsg({ text: "Failed to load office staff for the selected branch.", variant: "error" });
       }
-    };
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.branchId, form.collectedByRoleName]);
+    })();
+    return () => { alive = false; };
+  }, [form.branchId, form.collectedByRoleName, loadOfficeStaff]);
 
   /* ---------- role change -> populate collectedByOptions ---------- */
-  const onRoleChange = async (e) => {
+  const onRoleChange = useCallback(async (e) => {
     const roleId = e.target.value;
     const role = collectRoles.find((r) => String(r.id) === String(roleId));
     const roleName = role?.name || "";
@@ -265,14 +370,7 @@ export default function CreateCargo() {
         const res = await getActiveDrivers();
         setCollectedByOptions(unwrapArray(res));
       } else if (roleName === "Office") {
-        const branchId = form.branchId || pickBranchId(userProfile) || tokenBranchId;
-        if (!branchId) {
-          setCollectedByOptions([]);
-          setMsg({ text: "Your profile has no branch; cannot load office staff.", variant: "error" });
-          return;
-        }
-        const res = await getBranchUsers(branchId);
-        setCollectedByOptions(unwrapArray(res));
+        await loadOfficeStaff();
       } else {
         setCollectedByOptions([]);
       }
@@ -280,9 +378,9 @@ export default function CreateCargo() {
       setCollectedByOptions([]);
       setMsg({ text: "Failed to load list for the selected role.", variant: "error" });
     }
-  };
+  }, [collectRoles, loadOfficeStaff]);
 
-  /* ---------- party autofill (address/phone) ---------- */
+  /* ---------- selected parties ---------- */
   const selectedSender = useMemo(
     () => senders.find((s) => String(idOf(s)) === String(form.senderId)) || null,
     [senders, form.senderId]
@@ -291,6 +389,7 @@ export default function CreateCargo() {
     () => receivers.find((r) => String(idOf(r)) === String(form.receiverId)) || null,
     [receivers, form.receiverId]
   );
+
   useEffect(() => {
     setForm((f) => ({
       ...f,
@@ -298,6 +397,7 @@ export default function CreateCargo() {
       senderPhone: selectedSender?.contact_number ?? "",
     }));
   }, [selectedSender]);
+
   useEffect(() => {
     setForm((f) => ({
       ...f,
@@ -307,7 +407,7 @@ export default function CreateCargo() {
   }, [selectedReceiver]);
 
   /* ---------- items helpers ---------- */
-  const setItem = (idx, key, val) => {
+  const setItem = useCallback((idx, key, val) => {
     setItems((prev) => {
       const next = [...prev];
       if (key === "pieces") {
@@ -321,12 +421,19 @@ export default function CreateCargo() {
       }
       return next;
     });
-  };
-  const addRow = () => setItems((p) => [...p, { name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
-  const removeRow = (idx) => setItems((p) => p.filter((_, i) => i !== idx));
+  }, []);
+
+  const addRow = useCallback(
+    () => setItems((p) => [...p, { name: "", pieces: 1, unitPrice: 0, weight: 0 }]),
+    []
+  );
+
+  const removeRow = useCallback((idx) => {
+    setItems((p) => p.filter((_, i) => i !== idx));
+  }, []);
 
   /* ---------- validation ---------- */
-  const validateBeforeSubmit = () => {
+  const validateBeforeSubmit = useCallback(() => {
     const missing = [];
     if (!form.branchId) missing.push("Branch");
     if (!form.senderId) missing.push("Sender");
@@ -348,101 +455,141 @@ export default function CreateCargo() {
       missing.push("Each item needs weight > 0");
     }
     return missing;
-  };
+  }, [form, items]);
 
   /* ---------- submit ---------- */
-  const resetFormAfterSubmit = () => {
+  const resetFormAfterSubmit = useCallback(() => {
     const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
     setForm(buildInitialForm(nextBranchId));
     setItems([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
     setCollectedByOptions([]);
-  };
+  }, [userProfile, tokenBranchId]);
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const submit = useCallback(
+    async (e) => {
+      e.preventDefault();
 
-    const missing = validateBeforeSubmit();
-    if (missing.length) {
-      setMsg({ text: `Missing/invalid: ${missing.join(", ")}`, variant: "error" });
-      return;
-    }
+      const missing = validateBeforeSubmit();
+      if (missing.length) {
+        setMsg({ text: `Missing/invalid: ${missing.join(", ")}`, variant: "error" });
+        return;
+      }
 
-    const roleId = Number(form.collectedByRoleId);     // 1 (Driver) | 2 (Office)
-    const personId = Number(form.collectedByPersonId); // driver_id OR staff_id/user_id
-    if (!Number.isFinite(roleId) || roleId <= 0) {
-      setMsg({ text: "Choose a valid ‘Collected By’ role.", variant: "error" });
-      return;
-    }
-    if (!Number.isFinite(personId) || personId <= 0) {
-      setMsg({ text: "Choose a valid ‘Collected By’ person.", variant: "error" });
-      return;
-    }
+      const roleId = Number(form.collectedByRoleId);     // 1 (Driver) | 2 (Office)
+      const personId = Number(form.collectedByPersonId); // driver_id OR staff_id/user_id
+      if (!Number.isFinite(roleId) || roleId <= 0) {
+        setMsg({ text: "Choose a valid ‘Collected By’ role.", variant: "error" });
+        return;
+      }
+      if (!Number.isFinite(personId) || personId <= 0) {
+        setMsg({ text: "Choose a valid ‘Collected By’ person.", variant: "error" });
+        return;
+      }
 
-    const payload = {
-      branch_id: Number(form.branchId),
-      sender_id: Number(form.senderId),
-      receiver_id: Number(form.receiverId),
+      const payload = {
+        branch_id: Number(form.branchId),
+        sender_id: Number(form.senderId),
+        receiver_id: Number(form.receiverId),
 
-      shipping_method_id: Number(form.shippingMethodId),
-      payment_method_id: Number(form.paymentMethodId),
-      status_id: Number(form.statusId),
+        shipping_method_id: Number(form.shippingMethodId),
+        payment_method_id: Number(form.paymentMethodId),
+        status_id: Number(form.statusId),
 
-      date: form.date,
-      time: form.time,
+        date: form.date,
+        time: form.time,
 
-      collected_by: form.collectedByRoleName, // 'Driver' | 'Office'
-      collected_by_id: roleId,                // 1|2 (ROLE id)
-      name_id: personId,                      // PERSON id
+        collected_by: form.collectedByRoleName, // 'Driver' | 'Office'
+        collected_by_id: roleId,                // 1|2 (ROLE id)
+        name_id: personId,                      // PERSON id
 
-      lrl_tracking_code: form.lrlTrackingCode,
-      delivery_type_id: Number(form.deliveryTypeId),
-      special_remarks: form.specialRemarks,
+        lrl_tracking_code: form.lrlTrackingCode,
+        delivery_type_id: Number(form.deliveryTypeId),
+        special_remarks: form.specialRemarks,
 
-      total_cost: totalCost,
-      bill_charges: billCharges,
-      vat_percentage: vatPercentage,
-      vat_cost: vatCost,
-      net_total: netTotal,
-      total_weight: totalWeight,
+        total_cost: totalCost,
+        bill_charges: billCharges,
+        vat_percentage: vatPercentage,
+        vat_cost: vatCost,
+        net_total: netTotal,
+        total_weight: totalWeight,
 
-      items: items.map((it, i) => ({
-        slno: String(i + 1),
-        name: it.name || "",
-        piece_no: Number(it.pieces || 0),
-        unit_price: Number(it.unitPrice || 0),
-        total_price: Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)),
-        weight: Number(it.weight || 0),
-      })),
-    };
+        items: items.map((it, i) => ({
+          slno: String(i + 1),
+          name: it.name || "",
+          piece_no: Number(it.pieces || 0),
+          unit_price: Number(it.unitPrice || 0),
+          total_price: Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)),
+          weight: Number(it.weight || 0),
+        })),
+      };
 
-    try {
-      setLoading(true);
-      const created = await createCargo(payload);
-      const shipment = normalizeCargoToInvoice(created);
-      setInvoiceShipment(shipment);
-      setInvoiceOpen(true);
+      try {
+        setLoading(true);
+        const created = await createCargo(payload);
+        const normalized = normalizeCargoToInvoice(created);
 
-      // toast + reset form
-      showToast("Cargo created. Invoice ready.", "success");
-      resetFormAfterSubmit();
-      setMsg({ text: "", variant: "" }); // clear msg so it doesn't retrigger
-    } catch (e2) {
-      setMsg({
-        text: e2?.message || "Failed to create cargo.",
-        variant: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+        // non-blocking UI update for modal & title work
+        startTransition(() => {
+          setInvoiceShipment(normalized);
+          setInvoiceOpen(true);
+          showToast("Cargo created. Invoice ready.", "success");
+          resetFormAfterSubmit();
+          setMsg({ text: "", variant: "" });
+        });
+      } catch (e2) {
+        setMsg({
+          text: e2?.message || "Failed to create cargo.",
+          variant: "error",
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      billCharges,
+      items,
+      netTotal,
+      showToast,
+      totalCost,
+      totalWeight,
+      vatCost,
+      vatPercentage,
+      form,
+      validateBeforeSubmit,
+      resetFormAfterSubmit,
+    ]
+  );
 
-  const onResetClick = () => {
+  const onResetClick = useCallback(() => {
     const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
     setForm(buildInitialForm(nextBranchId));
     setItems([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
     setCollectedByOptions([]);
     showToast("Form reset.", "success");
-  };
+  }, [userProfile, tokenBranchId, showToast]);
+
+  /* ---------- IMPORTANT: title = booking_no while invoice is open ---------- */
+  useEffect(() => {
+    if (!invoiceOpen || !invoiceShipment?.booking_no) return;
+    const prev = document.title;
+    const safe = String(invoiceShipment.booking_no).replace(/[\\/:*?"<>|]/g, "-");
+    const restore = () => {
+      document.title = prev;
+      window.removeEventListener("afterprint", restore);
+    };
+    document.title = safe;
+    window.addEventListener("afterprint", restore);
+    return () => {
+      window.removeEventListener("afterprint", restore);
+      document.title = prev;
+    };
+  }, [invoiceOpen, invoiceShipment?.booking_no]);
+
+  /* ---------- memoized option lists ---------- */
+  const methodOptions = useMemo(() => methods.map((m) => ({ id: String(idOf(m)), label: labelOf(m) })), [methods]);
+  const statusOptions = useMemo(() => statuses.map((s) => ({ id: String(idOf(s)), label: labelOf(s) })), [statuses]);
+  const senderOptions = useMemo(() => senders.map((s) => ({ id: String(idOf(s)), label: labelOf(s) })), [senders]);
+  const receiverOptions = useMemo(() => receivers.map((r) => ({ id: String(idOf(r)), label: labelOf(r) })), [receivers]);
 
   /* ---------- UI ---------- */
   const branchNameFromProfile =
@@ -485,35 +632,33 @@ export default function CreateCargo() {
 
       <div className="min-h-screen bg-gray-50 flex items-start justify-center p-6">
         <div className="w-full max-w-6xl bg-white rounded-2xl p-8">
-         
-         <div className="add-cargo-header flex justify-between items-center">
-               <h2 className="header-cargo-heading flex items-center gap-2">
-            <span className="header-cargo-icon"><BsFillBoxSeamFill /></span>
-            Create Cargo
-          </h2>
-           <nav aria-label="Breadcrumb" className="">
-                    <ol className="flex items-center gap-2 text-sm">
-                      <li>
-                        <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">
-                          Home
-                        </Link>
-                      </li>
-                      <li className="text-gray-400">/</li>
-                      <li>
-                        <Link to="/cargo/allcargolist" className="text-gray-500 hover:text-gray-700 hover:underline">
-                          Cargos
-                        </Link>
-                      </li>
-                      <li className="text-gray-400">/</li>
-                      <li aria-current="page" className="text-gray-800 font-medium">
-                        Add Cargo
-                      </li>
-                    </ol>
-                  </nav>
-         </div>
+          <div className="add-cargo-header flex justify-between items-center">
+            <h2 className="header-cargo-heading flex items-center gap-2">
+              <span className="header-cargo-icon"><BsFillBoxSeamFill /></span>
+              Create Cargo
+            </h2>
+            <nav aria-label="Breadcrumb" className="">
+              <ol className="flex items-center gap-2 text-sm">
+                <li>
+                  <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">
+                    Home
+                  </Link>
+                </li>
+                <li className="text-gray-400">/</li>
+                <li>
+                  <Link to="/cargo/allcargolist" className="text-gray-500 hover:text-gray-700 hover:underline">
+                    Cargos
+                  </Link>
+                </li>
+                <li className="text-gray-400">/</li>
+                <li aria-current="page" className="text-gray-800 font-medium">
+                  Add Cargo
+                </li>
+              </ol>
+            </nav>
+          </div>
 
-          {/* inline banner removed; we use the toast above */}
-
+          {/* Form */}
           <form onSubmit={submit} className="space-y-6">
             {/* Branch (readonly NAME) + Collected By */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -578,23 +723,24 @@ export default function CreateCargo() {
                 <div>
                   <label className="block text-sm mb-1">Sender/Customer</label>
                   <div className="flex gap-2">
-                        <select
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={form.senderId}
-                    onChange={(e) => setForm((f) => ({ ...f, senderId: e.target.value }))}
-                    disabled={loading}
-                  >
-                    <option value="">Select a sender</option>
-                    {senders.map((s) => (
-                      <option key={String(idOf(s))} value={String(idOf(s))}>
-                        {labelOf(s)}
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={form.senderId}
+                      onChange={(e) => setForm((f) => ({ ...f, senderId: e.target.value }))}
+                      disabled={loading}
+                    >
+                      <option value="">Select a sender</option>
+                      {senderOptions.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
 
-                  <span className="add-customer border rounded-lg px-3 py-2"><Link to="/customers/create"><GoPlus/></Link></span>
+                    <span className="add-customer border rounded-lg px-3 py-2">
+                      <Link to="/customers/create"><GoPlus/></Link>
+                    </span>
                   </div>
-                
                 </div>
                 <div className="party-details w-full rounded-lg py-2">
                   <p className="w-full px-3 flex items-center gap-1">
@@ -612,21 +758,23 @@ export default function CreateCargo() {
                 <h3 className="font-semibold">Receiver Info</h3>
                 <div>
                   <label className="block text-sm mb-1">Receiver/Customer</label>
-                   <div className="flex gap-2">
-                  <select
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={form.receiverId}
-                    onChange={(e) => setForm((f) => ({ ...f, receiverId: e.target.value }))}
-                    disabled={loading}
-                  >
-                    <option value="">Select a receiver</option>
-                    {receivers.map((r) => (
-                      <option key={String(idOf(r))} value={String(idOf(r))}>
-                        {labelOf(r)}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="add-customer border rounded-lg px-3 py-2"><Link to="/customers/create"><GoPlus/></Link></span>
+                  <div className="flex gap-2">
+                    <select
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={form.receiverId}
+                      onChange={(e) => setForm((f) => ({ ...f, receiverId: e.target.value }))}
+                      disabled={loading}
+                    >
+                      <option value="">Select a receiver</option>
+                      {receiverOptions.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="add-customer border rounded-lg px-3 py-2">
+                      <Link to="/customers/create"><GoPlus/></Link>
+                    </span>
                   </div>
                 </div>
                 <div className="party-details w-full rounded-lg py-2">
@@ -653,9 +801,9 @@ export default function CreateCargo() {
                   disabled={loading}
                 >
                   <option value="">Select</option>
-                  {methods.map((m) => (
-                    <option key={String(idOf(m))} value={String(idOf(m))}>
-                      {labelOf(m)}
+                  {methodOptions.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
                     </option>
                   ))}
                 </select>
@@ -686,9 +834,9 @@ export default function CreateCargo() {
                   disabled={loading}
                 >
                   <option value="">Select</option>
-                  {statuses.map((s) => (
-                    <option key={String(idOf(s))} value={String(idOf(s))}>
-                      {labelOf(s)}
+                  {statusOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
                     </option>
                   ))}
                 </select>
@@ -793,63 +941,13 @@ export default function CreateCargo() {
                   </thead>
                   <tbody>
                     {items.map((it, i) => (
-                      <tr key={i} className={i % 2 ? "bg-white" : "bg-gray-50"}>
-                        <td className="px-3 py-2 text-center text-gray-500">{i + 1}</td>
-                        <td className="px-3 py-2">
-                          <input
-                            className={`w-full border rounded-lg px-3 py-2 ${!it.name?.trim() ? "border-rose-300" : ""}`}
-                            placeholder="Item name"
-                            value={it.name}
-                            onChange={(e) => setItem(i, "name", e.target.value)}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            className="w-full border rounded-lg px-3 py-2 text-right"
-                            placeholder="0"
-                            value={it.pieces}
-                            onChange={(e) => setItem(i, "pieces", e.target.value)}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            className="w-full border rounded-lg px-3 py-2 text-right"
-                            placeholder="0.00"
-                            value={it.unitPrice}
-                            onChange={(e) => setItem(i, "unitPrice", e.target.value)}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.001"
-                            className={`w-full border rounded-lg px-3 py-2 text-right ${Number(it.weight || 0) <= 0 ? "border-rose-300" : ""}`}
-                            placeholder="0.000"
-                            value={it.weight}
-                            onChange={(e) => setItem(i, "weight", e.target.value)}
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium">
-                          {rowTotal(it).toFixed(2)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => removeRow(i)}
-                              className="px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <ItemRow
+                        key={i}
+                        i={i}
+                        it={it}
+                        setItem={setItem}
+                        removeRow={removeRow}
+                      />
                     ))}
                   </tbody>
 

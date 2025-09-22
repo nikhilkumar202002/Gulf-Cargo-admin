@@ -1,5 +1,6 @@
 import axiosInstance from "./axiosInstance";
 
+/* ---------- error helper ---------- */
 function parseAxiosError(err) {
   const status = err?.response?.status;
   const data = err?.response?.data;
@@ -8,9 +9,7 @@ function parseAxiosError(err) {
 
   let msg = serverMsg || err?.message || `Request failed${status ? ` (${status})` : ""}`;
   if (fieldErrors) {
-    const flat = Object.entries(fieldErrors).map(
-      ([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`
-    );
+    const flat = Object.entries(fieldErrors).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
     msg += ` — ${flat.join(" | ")}`;
   }
   const e = new Error(msg);
@@ -24,7 +23,7 @@ const qs = (obj = {}) =>
     Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && String(v) !== "")
   ).toString();
 
-/** POST /cargo – create a cargo */
+/* ---------- POST /cargo ---------- */
 export async function createCargo(payload) {
   try {
     const { data } = await axiosInstance.post("/cargo", payload, { timeout: 15000 });
@@ -38,7 +37,7 @@ export async function createCargo(payload) {
   }
 }
 
-/** Optional: GET /cargos – list helper */
+/* ---------- GET /cargos (list) ---------- */
 export async function getCargos(params = {}) {
   try {
     const query = qs({
@@ -48,12 +47,10 @@ export async function getCargos(params = {}) {
       per_page: params.per_page ?? params.perPage ?? params.limit,
       status_id: params.status_id ?? params.statusId,
       search: params.search,
-      // NEW: server flag to hide cargos already placed in a shipment
-      is_in_cargo_shipment:
-        params.is_in_cargo_shipment ?? params.isInCargoShipment,
+      // hide cargos already placed in a shipment (if your API supports it)
+      is_in_cargo_shipment: params.is_in_cargo_shipment ?? params.isInCargoShipment,
     });
     const url = `/cargos${query ? `?${query}` : ""}`;
-
     const { data } = await axiosInstance.get(url, { timeout: 20000 });
     return data?.data ?? data ?? [];
   } catch (err) {
@@ -61,7 +58,7 @@ export async function getCargos(params = {}) {
   }
 }
 
-/** Normalize {success, cargo} to a consistent invoice-friendly object */
+/** Normalize { success, cargo } | cargo into an invoice-friendly object */
 export function normalizeCargoToInvoice(raw) {
   const src = raw?.data ?? raw?.cargo ?? raw ?? {};
   const num = (v, d = 0) => (v === null || v === undefined || v === "" ? d : Number(v));
@@ -86,7 +83,15 @@ export function normalizeCargoToInvoice(raw) {
     awb_number: src.booking_no ?? "",
     method: src.shipping_method ?? src.method ?? src.shipment_method ?? "",
     status: src.status?.name ?? src.status ?? "",
-    branch: src.branch_name ?? "",
+    // 🔧 FIX: robust branch mapping
+    branch:
+      src.branch_name ??
+      src.branch?.name ??
+      src.branch ??
+      src.branch_label ??
+      src.origin_branch_name ??
+      src.origin_branch ??
+      "",
     date: src.date ?? "",
     time: src.time ?? "",
     sender_id: src.sender_id ?? null,
@@ -112,7 +117,7 @@ export function normalizeCargoToInvoice(raw) {
   return shipment;
 }
 
-/* ---------- you probably already have this ---------- */
+/* ---------- GET /cargo/:id ---------- */
 export async function getCargoById(id) {
   try {
     const { data } = await axiosInstance.get(`/cargo/${id}`, { timeout: 15000 });
@@ -122,7 +127,7 @@ export async function getCargoById(id) {
   }
 }
 
-/* ---------- PATCH /cargo/:id with smart fallback ---------- */
+/* ---------- PATCH /cargo/:id ---------- */
 export async function updateCargo(id, payload, { retryWithoutItems = true } = {}) {
   // Drop only undefined (keep null/0/"")
   const compact = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined));
@@ -138,12 +143,7 @@ export async function updateCargo(id, payload, { retryWithoutItems = true } = {}
     const status = err?.response?.status;
 
     // If the API rejects 'items' on this endpoint, try once without items.
-    if (
-      status === 422 &&
-      retryWithoutItems &&
-      "items" in compact &&
-      Array.isArray(compact.items)
-    ) {
+    if (status === 422 && retryWithoutItems && "items" in compact && Array.isArray(compact.items)) {
       // eslint-disable-next-line no-console
       console.warn("422 on PATCH /cargo/%s — retrying without 'items'…", id, err?.response?.data);
       const { items, ...rest } = compact;
@@ -160,6 +160,7 @@ export async function updateCargo(id, payload, { retryWithoutItems = true } = {}
   }
 }
 
+/* ---------- bulk status ---------- */
 export async function bulkUpdateCargoStatus({ status_id, cargo_ids }) {
   const payload = {
     status_id: Number(status_id),
@@ -167,14 +168,13 @@ export async function bulkUpdateCargoStatus({ status_id, cargo_ids }) {
   };
 
   try {
-    const { data } = await axiosInstance.patch(
-      "/cargos/status",
-      payload,
-      { headers: { "Content-Type": "application/json" }, timeout: 20000 }
-    );
+    const { data } = await axiosInstance.patch("/cargos/status", payload, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 20000,
+    });
     return data?.data ?? data ?? {};
   } catch (err) {
-    // if your backend actually mounted the singular path, uncomment:
+    // if your backend mounted the singular path instead:
     // if (err?.response?.status === 404) {
     //   const { data } = await axiosInstance.patch("/cargo/status", payload);
     //   return data?.data ?? data ?? {};

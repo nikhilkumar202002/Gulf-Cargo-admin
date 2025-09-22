@@ -1,6 +1,5 @@
 // src/pages/Staffs/StaffCreate.jsx
 import React, { useEffect, useState, useRef } from "react";
-import { HiUserAdd } from "react-icons/hi";
 import { IoEye, IoEyeOff } from "react-icons/io5";
 import { useSelector } from "react-redux";
 import "../Styles.css";
@@ -11,6 +10,11 @@ import { getActiveVisaTypes } from "../../api/visaType";
 import { getAllRoles } from "../../api/rolesApi";
 import { getActiveDocumentTypes } from "../../api/documentTypeApi";
 import { staffRegister } from "../../api/accountApi";
+import { FaUserCheck } from "react-icons/fa";
+
+import { Link } from "react-router-dom";
+
+import "./StaffStyles.css";
 
 /* ---------- helpers ---------- */
 const toList = (res) => {
@@ -312,12 +316,31 @@ const handleSubmit = async (e) => {
   return (
     <div className="flex justify-center items-center w-full">
       <div className="w-full max-w-4xl bg-white rounded-2xl p-8">
-        <div className="staffcreate-header">
-          <h1 className="staffcreate-heading flex items-center gap-3">
-            <span className="staff-form-header-icon"><HiUserAdd /></span>
-            Staff Registration
-          </h1>
-        </div>
+          <div className="add-cargo-header flex justify-between items-center">
+            <h2 className="header-cargo-heading flex items-center gap-2">
+              <span className="header-cargo-icon"><FaUserCheck /></span>
+                Staff Registration
+            </h2>
+            <nav aria-label="Breadcrumb" className="">
+              <ol className="flex items-center gap-2 text-sm">
+                <li>
+                  <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">
+                    Home
+                  </Link>
+                </li>
+                <li className="text-gray-400">/</li>
+                <li>
+                  <Link to="/hr&staff/allstaffs" className="text-gray-500 hover:text-gray-700 hover:underline">
+                    Staffs
+                  </Link>
+                </li>
+                <li className="text-gray-400">/</li>
+                <li aria-current="page" className="text-gray-800 font-medium">
+                  Add Staff
+                </li>
+              </ol>
+            </nav>
+          </div>
 
         <form key={formKey} className="space-y-6" onSubmit={handleSubmit} noValidate>
           {/* Row 1 */}

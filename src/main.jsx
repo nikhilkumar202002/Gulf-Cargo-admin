@@ -8,6 +8,8 @@ import "@fontsource/inter";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/400-italic.css";
 
+import "./index.css";
+
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Provider  store={store}>
