@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
   useCallback,
-  memo,
   startTransition,
 } from "react";
 import { useSelector } from "react-redux";
@@ -19,7 +18,7 @@ import { getAllPaymentMethods } from "../../api/paymentMethod";
 import { getActiveDeliveryTypes } from "../../api/deliveryType";
 import { getActiveDrivers } from "../../api/driverApi";
 import { getProfile } from "../../api/accountApi";
-import { getActiveCollected } from "../../api/collectedByApi"; // Driver / Office
+import { getActiveCollected } from "../../api/collectedByApi";
 
 import InvoiceModal from "../../components/InvoiceModal";
 import { IoLocationSharp } from "react-icons/io5";
@@ -51,14 +50,44 @@ const idOf = (o) =>
 
 const labelOf = (o) =>
   o?.name ??
+  o?.company_name ??
+  o?.full_name ??
   o?.branch_name ??
   o?.title ??
   o?.label ??
-  o?.company_name ??
-  o?.full_name ??
   o?.username ??
   o?.email ??
   "-";
+
+/** Map assorted shapes to a numeric customer_type_id (1=Sender, 2=Receiver) */
+const typeIdOf = (o) => {
+  // direct numeric or numeric string
+  const raw =
+    o?.customer_type_id ??
+    o?.customerTypeId ??
+    o?.type_id ??
+    o?.typeId ??
+    o?.customer_type ??
+    o?.type ??
+    o?.role;
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string") {
+    const n = Number(raw);
+    if (!Number.isNaN(n)) return n;
+    if (/sender/i.test(raw)) return 1;
+    if (/receiver/i.test(raw)) return 2;
+  }
+  // object like { id: 1, name: 'Sender' }
+  const obj = (o?.customer_type && typeof o.customer_type === "object" ? o.customer_type : null) ||
+              (o?.type && typeof o.type === "object" ? o.type : null);
+  if (obj) {
+    const n = Number(obj.id ?? obj.value ?? obj.code);
+    if (!Number.isNaN(n)) return n;
+    if (/sender/i.test(String(obj.name ?? obj.title ?? obj.label ?? ""))) return 1;
+    if (/receiver/i.test(String(obj.name ?? obj.title ?? obj.label ?? ""))) return 2;
+  }
+  return null;
+};
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -84,7 +113,6 @@ const safeDecodeJwt = (jwt) => {
   }
 };
 
-/* Build initial form with an optional default branch id */
 const buildInitialForm = (branchId = "") => ({
   branchId: branchId ? String(branchId) : "",
   senderId: "",
@@ -98,9 +126,9 @@ const buildInitialForm = (branchId = "") => ({
   statusId: "",
   date: today(),
   time: "09:36",
-  collectedByRoleId: "",     // 1 | 2 from /collected
-  collectedByRoleName: "",   // 'Driver' | 'Office'
-  collectedByPersonId: "",   // numeric person id
+  collectedByRoleId: "",
+  collectedByRoleName: "",
+  collectedByPersonId: "",
   lrlTrackingCode: "",
   deliveryTypeId: "",
   specialRemarks: "",
@@ -108,79 +136,59 @@ const buildInitialForm = (branchId = "") => ({
   vatPercentage: 0,
 });
 
-/* ---------- Memoized row component to avoid whole-table re-renders ---------- */
-const ItemRow = memo(function ItemRow({ i, it, setItem, removeRow }) {
-  const onName = useCallback((e) => setItem(i, "name", e.target.value), [i, setItem]);
-  const onPieces = useCallback((e) => setItem(i, "pieces", e.target.value), [i, setItem]);
-  const onUnit = useCallback((e) => setItem(i, "unitPrice", e.target.value), [i, setItem]);
-  const onWeight = useCallback((e) => setItem(i, "weight", e.target.value), [i, setItem]);
+/* ---------------- Fetch ALL parties by numeric type (1 or 2) ---------------- */
+async function fetchAllPartiesByType(numericTypeId) {
+  const perPage = 500;
+  const maxPages = 100;
+  const out = [];
+  const seen = new Set();
 
-  const rowTotal = useMemo(() => {
-    const pieces = Number(it.pieces || 0);
-    const unit = Number(it.unitPrice || 0);
-    return Number((pieces * unit).toFixed(2));
-  }, [it.pieces, it.unitPrice]);
+  for (let page = 1; page <= maxPages; page++) {
+    // Send multiple compatible keys: your backend can pick what it expects
+    const params = {
+      per_page: perPage,
+      page,
+      customer_type_id: numericTypeId,
+      customer_type: numericTypeId,
+      type_id: numericTypeId,
+      // status: 'Active', // uncomment if your API needs it
+    };
+    const res = await getParties(params);
+    const batch = unwrapArray(res);
+    if (!batch.length) break;
 
-  return (
-    <tr className={i % 2 ? "bg-white" : "bg-gray-50"}>
-      <td className="px-3 py-2 text-center text-gray-500">{i + 1}</td>
-      <td className="px-3 py-2">
-        <input
-          className={`w-full border rounded-lg px-3 py-2 ${!it.name?.trim() ? "border-rose-300" : ""}`}
-          placeholder="Item name"
-          value={it.name}
-          onChange={onName}
-        />
-      </td>
-      <td className="px-3 py-2">
-        <input
-          type="number"
-          min="0"
-          className="w-full border rounded-lg px-3 py-2 text-right"
-          placeholder="0"
-          value={it.pieces}
-          onChange={onPieces}
-        />
-      </td>
-      <td className="px-3 py-2">
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          className="w-full border rounded-lg px-3 py-2 text-right"
-          placeholder="0.00"
-          value={it.unitPrice}
-          onChange={onUnit}
-        />
-      </td>
-      <td className="px-3 py-2">
-        <input
-          type="number"
-          min="0"
-          step="0.001"
-          className={`w-full border rounded-lg px-3 py-2 text-right ${Number(it.weight || 0) <= 0 ? "border-rose-300" : ""}`}
-          placeholder="0.000"
-          value={it.weight}
-          onChange={onWeight}
-        />
-      </td>
-      <td className="px-3 py-2 text-right font-medium">
-        {rowTotal.toFixed(2)}
-      </td>
-      <td className="px-3 py-2">
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => removeRow(i)}
-            className="px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
-          >
-            Remove
-          </button>
-        </div>
-      </td>
-    </tr>
+    for (const it of batch) {
+      // client-side safety filter in case API ignored the param
+      if (typeIdOf(it) !== numericTypeId) continue;
+
+      const key = String(idOf(it) ?? JSON.stringify(it));
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(it);
+    }
+
+    // stop on short page
+    if (batch.length < perPage) break;
+
+    // also honor meta/links if present
+    const meta = res?.meta || res?.data?.meta;
+    const cur = meta?.current_page ?? meta?.currentPage;
+    const last = meta?.last_page ?? meta?.lastPage;
+    if (cur && last && Number(cur) >= Number(last)) break;
+
+    const links = res?.links || res?.data?.links;
+    const noNext =
+      (links && (links.next === null || links.next === false)) ||
+      (links && (links.next_page_url === null || links.next_page_url === undefined));
+    if (noNext) break;
+  }
+
+  // stable alpha sort by label for better UX
+  out.sort((a, b) =>
+    (labelOf(a) || "").localeCompare(labelOf(b) || "", undefined, { sensitivity: "base" })
   );
-});
+  return out;
+}
 
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
@@ -192,7 +200,7 @@ export default function CreateCargo() {
   const [receivers, setReceivers] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [deliveryTypes, setDeliveryTypes] = useState([]);
-  const [collectRoles, setCollectRoles] = useState([]); // [{id:1,name:'Driver'},{id:2,name:'Office'}]
+  const [collectRoles, setCollectRoles] = useState([]); // [{id:1,name:'Driver'},{id:2,'Office'}]
   const [collectedByOptions, setCollectedByOptions] = useState([]); // drivers OR staff array
 
   // user/profile
@@ -200,11 +208,11 @@ export default function CreateCargo() {
 
   // UI
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState({ text: "", variant: "" }); // single source of truth
+  const [msg, setMsg] = useState({ text: "", variant: "" });
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceShipment, setInvoiceShipment] = useState(null);
 
-  // toast (top-right slide in)
+  // toast
   const [toast, setToast] = useState({ visible: false, text: "", variant: "success" });
   const toastTimer = useRef(null);
   const showToast = useCallback((text, variant = "success", duration = 3500) => {
@@ -219,48 +227,34 @@ export default function CreateCargo() {
     setToast((t) => ({ ...t, visible: false }));
   }, []);
 
-  // form
+  // form & items
   const [form, setForm] = useState(buildInitialForm());
-
-  // items
   const [items, setItems] = useState([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
 
-  // Derived totals (memoized)
+  // totals
   const subtotal = useMemo(() => {
     let s = 0;
     for (const it of items) {
-      const pieces = Number(it.pieces || 0);
-      const price = Number(it.unitPrice || 0);
-      s += pieces * price;
+      s += Number(it.pieces || 0) * Number(it.unitPrice || 0);
     }
     return Number(s.toFixed(2));
   }, [items]);
-
   const billCharges = useMemo(() => Number(form.billCharges || 0), [form.billCharges]);
   const vatPercentage = useMemo(() => Number(form.vatPercentage || 0), [form.vatPercentage]);
-
   const totalCost = subtotal;
-  const vatCost = useMemo(
-    () => Number(((totalCost * vatPercentage) / 100).toFixed(2)),
-    [totalCost, vatPercentage]
-  );
-  const netTotal = useMemo(
-    () => Number((totalCost + billCharges + vatCost).toFixed(2)),
-    [totalCost, billCharges, vatCost]
-  );
+  const vatCost = useMemo(() => Number(((totalCost * vatPercentage) / 100).toFixed(2)), [totalCost, vatPercentage]);
+  const netTotal = useMemo(() => Number((totalCost + billCharges + vatCost).toFixed(2)), [totalCost, billCharges, vatCost]);
   const totalWeight = useMemo(() => {
     let sum = 0;
-    for (const it of items) {
-      sum += Number(it.weight || 0) * Number(it.pieces || 0);
-    }
+    for (const it of items) sum += Number(it.weight || 0) * Number(it.pieces || 0);
     return Number(sum.toFixed(3));
   }, [items]);
 
-  /* ---------- preferred branch from token (fallback) ---------- */
+  /* preferred branch from token (fallback) */
   const tokenClaims = useMemo(() => safeDecodeJwt(token), [token]);
   const tokenBranchId = tokenClaims?.branch_id ?? tokenClaims?.branchId ?? null;
 
-  /* Toast on any msg change */
+  /* toast on msg change */
   useEffect(() => {
     if (msg.text) showToast(msg.text, msg.variant || "success");
   }, [msg.text, msg.variant, showToast]);
@@ -273,12 +267,12 @@ export default function CreateCargo() {
       setMsg({ text: "", variant: "" });
       try {
         const [me, m, st, pm, dt, roles] = await Promise.all([
-          getProfile(),                // must return user with branch info
+          getProfile(),
           getActiveShipmentMethods(),
           getActiveShipmentStatuses(),
           getAllPaymentMethods(),
           getActiveDeliveryTypes(),
-          getActiveCollected(),        // { success, data: [ {id, name} ] }
+          getActiveCollected(),
         ]);
         if (!alive) return;
 
@@ -291,23 +285,20 @@ export default function CreateCargo() {
         setDeliveryTypes(unwrapArray(dt));
         setCollectRoles(Array.isArray(roles?.data) ? roles.data : []);
 
-        // set branchId from profile (fallback to token)
         const preferredBranchId = pickBranchId(profile) ?? tokenBranchId ?? "";
-        setForm(buildInitialForm(preferredBranchId));
+        setForm((f) => buildInitialForm(preferredBranchId));
 
-        const [snd, rcv] = await Promise.all([
-          getParties({ customer_type: "Sender" }),
-          getParties({ customer_type: "Receiver" }),
+        // Fetch ALL: 1=Sender, 2=Receiver
+        const [allSenders, allReceivers] = await Promise.all([
+          fetchAllPartiesByType(1),
+          fetchAllPartiesByType(2),
         ]);
         if (!alive) return;
-        setSenders(unwrapArray(snd));
-        setReceivers(unwrapArray(rcv));
+        setSenders(allSenders);
+        setReceivers(allReceivers);
       } catch (e) {
         if (!alive) return;
-        setMsg({
-          text: e?.details?.message || e?.message || "Failed to load options.",
-          variant: "error",
-        });
+        setMsg({ text: e?.details?.message || e?.message || "Failed to load options.", variant: "error" });
       } finally {
         if (alive) setLoading(false);
       }
@@ -315,7 +306,7 @@ export default function CreateCargo() {
     return () => { alive = false; };
   }, [token, tokenBranchId]);
 
-  /* ---------- keep form.branchId synced with profile/token ---------- */
+  /* keep form.branchId synced */
   useEffect(() => {
     const bidRaw = pickBranchId(userProfile) ?? tokenBranchId ?? null;
     const bid = bidRaw != null ? String(bidRaw) : "";
@@ -324,7 +315,7 @@ export default function CreateCargo() {
     }
   }, [userProfile, tokenBranchId, form.branchId]);
 
-  /* ---------- role change helpers ---------- */
+  /* role change helpers */
   const loadOfficeStaff = useCallback(async () => {
     const branchId = form.branchId || pickBranchId(userProfile) || tokenBranchId;
     if (!branchId) {
@@ -336,7 +327,7 @@ export default function CreateCargo() {
     setCollectedByOptions(unwrapArray(res));
   }, [form.branchId, userProfile, tokenBranchId]);
 
-  /* ---------- when Branch or Role is 'Office', keep people list in sync ---------- */
+  /* when Branch or Role is 'Office', keep people list in sync */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -352,7 +343,7 @@ export default function CreateCargo() {
     return () => { alive = false; };
   }, [form.branchId, form.collectedByRoleName, loadOfficeStaff]);
 
-  /* ---------- role change -> populate collectedByOptions ---------- */
+  /* role change -> populate collectedByOptions */
   const onRoleChange = useCallback(async (e) => {
     const roleId = e.target.value;
     const role = collectRoles.find((r) => String(r.id) === String(roleId));
@@ -380,7 +371,7 @@ export default function CreateCargo() {
     }
   }, [collectRoles, loadOfficeStaff]);
 
-  /* ---------- selected parties ---------- */
+  /* party autofill (address/phone) */
   const selectedSender = useMemo(
     () => senders.find((s) => String(idOf(s)) === String(form.senderId)) || null,
     [senders, form.senderId]
@@ -389,7 +380,6 @@ export default function CreateCargo() {
     () => receivers.find((r) => String(idOf(r)) === String(form.receiverId)) || null,
     [receivers, form.receiverId]
   );
-
   useEffect(() => {
     setForm((f) => ({
       ...f,
@@ -397,7 +387,6 @@ export default function CreateCargo() {
       senderPhone: selectedSender?.contact_number ?? "",
     }));
   }, [selectedSender]);
-
   useEffect(() => {
     setForm((f) => ({
       ...f,
@@ -406,7 +395,7 @@ export default function CreateCargo() {
     }));
   }, [selectedReceiver]);
 
-  /* ---------- items helpers ---------- */
+  /* items helpers */
   const setItem = useCallback((idx, key, val) => {
     setItems((prev) => {
       const next = [...prev];
@@ -422,17 +411,15 @@ export default function CreateCargo() {
       return next;
     });
   }, []);
-
   const addRow = useCallback(
     () => setItems((p) => [...p, { name: "", pieces: 1, unitPrice: 0, weight: 0 }]),
     []
   );
-
   const removeRow = useCallback((idx) => {
     setItems((p) => p.filter((_, i) => i !== idx));
   }, []);
 
-  /* ---------- validation ---------- */
+  /* validation */
   const validateBeforeSubmit = useCallback(() => {
     const missing = [];
     if (!form.branchId) missing.push("Branch");
@@ -457,7 +444,7 @@ export default function CreateCargo() {
     return missing;
   }, [form, items]);
 
-  /* ---------- submit ---------- */
+  /* submit */
   const resetFormAfterSubmit = useCallback(() => {
     const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
     setForm(buildInitialForm(nextBranchId));
@@ -465,100 +452,94 @@ export default function CreateCargo() {
     setCollectedByOptions([]);
   }, [userProfile, tokenBranchId]);
 
-  const submit = useCallback(
-    async (e) => {
-      e.preventDefault();
+  const submit = useCallback(async (e) => {
+    e.preventDefault();
 
-      const missing = validateBeforeSubmit();
-      if (missing.length) {
-        setMsg({ text: `Missing/invalid: ${missing.join(", ")}`, variant: "error" });
-        return;
-      }
+    const missing = validateBeforeSubmit();
+    if (missing.length) {
+      setMsg({ text: `Missing/invalid: ${missing.join(", ")}`, variant: "error" });
+      return;
+    }
 
-      const roleId = Number(form.collectedByRoleId);     // 1 (Driver) | 2 (Office)
-      const personId = Number(form.collectedByPersonId); // driver_id OR staff_id/user_id
-      if (!Number.isFinite(roleId) || roleId <= 0) {
-        setMsg({ text: "Choose a valid ‘Collected By’ role.", variant: "error" });
-        return;
-      }
-      if (!Number.isFinite(personId) || personId <= 0) {
-        setMsg({ text: "Choose a valid ‘Collected By’ person.", variant: "error" });
-        return;
-      }
+    const roleId = Number(form.collectedByRoleId);
+    const personId = Number(form.collectedByPersonId);
+    if (!Number.isFinite(roleId) || roleId <= 0) {
+      setMsg({ text: "Choose a valid ‘Collected By’ role.", variant: "error" });
+      return;
+    }
+    if (!Number.isFinite(personId) || personId <= 0) {
+      setMsg({ text: "Choose a valid ‘Collected By’ person.", variant: "error" });
+      return;
+    }
 
-      const payload = {
-        branch_id: Number(form.branchId),
-        sender_id: Number(form.senderId),
-        receiver_id: Number(form.receiverId),
+    const payload = {
+      branch_id: Number(form.branchId),
+      sender_id: Number(form.senderId),
+      receiver_id: Number(form.receiverId),
 
-        shipping_method_id: Number(form.shippingMethodId),
-        payment_method_id: Number(form.paymentMethodId),
-        status_id: Number(form.statusId),
+      shipping_method_id: Number(form.shippingMethodId),
+      payment_method_id: Number(form.paymentMethodId),
+      status_id: Number(form.statusId),
 
-        date: form.date,
-        time: form.time,
+      date: form.date,
+      time: form.time,
 
-        collected_by: form.collectedByRoleName, // 'Driver' | 'Office'
-        collected_by_id: roleId,                // 1|2 (ROLE id)
-        name_id: personId,                      // PERSON id
+      collected_by: form.collectedByRoleName,
+      collected_by_id: roleId,
+      name_id: personId,
 
-        lrl_tracking_code: form.lrlTrackingCode,
-        delivery_type_id: Number(form.deliveryTypeId),
-        special_remarks: form.specialRemarks,
+      lrl_tracking_code: form.lrlTrackingCode,
+      delivery_type_id: Number(form.deliveryTypeId),
+      special_remarks: form.specialRemarks,
 
-        total_cost: totalCost,
-        bill_charges: billCharges,
-        vat_percentage: vatPercentage,
-        vat_cost: vatCost,
-        net_total: netTotal,
-        total_weight: totalWeight,
+      total_cost: totalCost,
+      bill_charges: billCharges,
+      vat_percentage: vatPercentage,
+      vat_cost: vatCost,
+      net_total: netTotal,
+      total_weight: totalWeight,
 
-        items: items.map((it, i) => ({
-          slno: String(i + 1),
-          name: it.name || "",
-          piece_no: Number(it.pieces || 0),
-          unit_price: Number(it.unitPrice || 0),
-          total_price: Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)),
-          weight: Number(it.weight || 0),
-        })),
-      };
+      items: items.map((it, i) => ({
+        slno: String(i + 1),
+        name: it.name || "",
+        piece_no: Number(it.pieces || 0),
+        unit_price: Number(it.unitPrice || 0),
+        total_price: Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)),
+        weight: Number(it.weight || 0),
+      })),
+    };
 
-      try {
-        setLoading(true);
-        const created = await createCargo(payload);
-        const normalized = normalizeCargoToInvoice(created);
+    try {
+      setLoading(true);
+      const created = await createCargo(payload);
+      const normalized = normalizeCargoToInvoice(created);
+      setInvoiceShipment(normalized);
 
-        // non-blocking UI update for modal & title work
-        startTransition(() => {
-          setInvoiceShipment(normalized);
-          setInvoiceOpen(true);
-          showToast("Cargo created. Invoice ready.", "success");
-          resetFormAfterSubmit();
-          setMsg({ text: "", variant: "" });
-        });
-      } catch (e2) {
-        setMsg({
-          text: e2?.message || "Failed to create cargo.",
-          variant: "error",
-        });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [
-      billCharges,
-      items,
-      netTotal,
-      showToast,
-      totalCost,
-      totalWeight,
-      vatCost,
-      vatPercentage,
-      form,
-      validateBeforeSubmit,
-      resetFormAfterSubmit,
-    ]
-  );
+      startTransition(() => {
+        setInvoiceShipment(normalized);
+        setInvoiceOpen(true);
+        showToast("Cargo created. Invoice ready.", "success");
+        resetFormAfterSubmit();
+        setMsg({ text: "", variant: "" });
+      });
+    } catch (e2) {
+      setMsg({ text: e2?.message || "Failed to create cargo.", variant: "error" });
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    billCharges,
+    items,
+    netTotal,
+    showToast,
+    totalCost,
+    totalWeight,
+    vatCost,
+    vatPercentage,
+    form,
+    validateBeforeSubmit,
+    resetFormAfterSubmit,
+  ]);
 
   const onResetClick = useCallback(() => {
     const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
@@ -568,7 +549,7 @@ export default function CreateCargo() {
     showToast("Form reset.", "success");
   }, [userProfile, tokenBranchId, showToast]);
 
-  /* ---------- IMPORTANT: title = booking_no while invoice is open ---------- */
+  /* title = booking_no while invoice is open */
   useEffect(() => {
     if (!invoiceOpen || !invoiceShipment?.booking_no) return;
     const prev = document.title;
@@ -585,13 +566,7 @@ export default function CreateCargo() {
     };
   }, [invoiceOpen, invoiceShipment?.booking_no]);
 
-  /* ---------- memoized option lists ---------- */
-  const methodOptions = useMemo(() => methods.map((m) => ({ id: String(idOf(m)), label: labelOf(m) })), [methods]);
-  const statusOptions = useMemo(() => statuses.map((s) => ({ id: String(idOf(s)), label: labelOf(s) })), [statuses]);
-  const senderOptions = useMemo(() => senders.map((s) => ({ id: String(idOf(s)), label: labelOf(s) })), [senders]);
-  const receiverOptions = useMemo(() => receivers.map((r) => ({ id: String(idOf(r)), label: labelOf(r) })), [receivers]);
-
-  /* ---------- UI ---------- */
+  /* UI derived */
   const branchNameFromProfile =
     userProfile?.user?.branch?.name ||
     userProfile?.branch?.name ||
@@ -601,7 +576,7 @@ export default function CreateCargo() {
 
   return (
     <>
-      {/* Top-right Toast */}
+      {/* Toast */}
       <div
         className="fixed top-4 right-4 z-50"
         style={{
@@ -637,7 +612,7 @@ export default function CreateCargo() {
               <span className="header-cargo-icon"><BsFillBoxSeamFill /></span>
               Create Cargo
             </h2>
-            <nav aria-label="Breadcrumb" className="">
+            <nav aria-label="Breadcrumb">
               <ol className="flex items-center gap-2 text-sm">
                 <li>
                   <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">
@@ -660,7 +635,7 @@ export default function CreateCargo() {
 
           {/* Form */}
           <form onSubmit={submit} className="space-y-6">
-            {/* Branch (readonly NAME) + Collected By */}
+            {/* Branch + Collected By */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Branch</label>
@@ -730,13 +705,12 @@ export default function CreateCargo() {
                       disabled={loading}
                     >
                       <option value="">Select a sender</option>
-                      {senderOptions.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.label}
+                      {senders.map((s) => (
+                        <option key={String(idOf(s))} value={String(idOf(s))}>
+                          {labelOf(s)}
                         </option>
                       ))}
                     </select>
-
                     <span className="add-customer border rounded-lg px-3 py-2">
                       <Link to="/customers/create"><GoPlus/></Link>
                     </span>
@@ -766,9 +740,9 @@ export default function CreateCargo() {
                       disabled={loading}
                     >
                       <option value="">Select a receiver</option>
-                      {receiverOptions.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.label}
+                      {receivers.map((r) => (
+                        <option key={String(idOf(r))} value={String(idOf(r))}>
+                          {labelOf(r)}
                         </option>
                       ))}
                     </select>
@@ -801,9 +775,9 @@ export default function CreateCargo() {
                   disabled={loading}
                 >
                   <option value="">Select</option>
-                  {methodOptions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
+                  {methods.map((m) => (
+                    <option key={String(idOf(m))} value={String(idOf(m))}>
+                      {labelOf(m)}
                     </option>
                   ))}
                 </select>
@@ -834,9 +808,9 @@ export default function CreateCargo() {
                   disabled={loading}
                 >
                   <option value="">Select</option>
-                  {statusOptions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
+                  {statuses.map((s) => (
+                    <option key={String(idOf(s))} value={String(idOf(s))}>
+                      {labelOf(s)}
                     </option>
                   ))}
                 </select>
@@ -918,7 +892,7 @@ export default function CreateCargo() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={addRow}
+                    onClick={() => setItems((p) => [...p, { name: "", pieces: 1, unitPrice: 0, weight: 0 }])}
                     className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
                   >
                     + Add Row
@@ -941,13 +915,89 @@ export default function CreateCargo() {
                   </thead>
                   <tbody>
                     {items.map((it, i) => (
-                      <ItemRow
-                        key={i}
-                        i={i}
-                        it={it}
-                        setItem={setItem}
-                        removeRow={removeRow}
-                      />
+                      <tr key={i} className={i % 2 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-3 py-2 text-center text-gray-500">{i + 1}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            className={`w-full border rounded-lg px-3 py-2 ${!it.name?.trim() ? "border-rose-300" : ""}`}
+                            placeholder="Item name"
+                            value={it.name}
+                            onChange={(e) =>
+                              setItems((prev) => {
+                                const next = [...prev];
+                                next[i].name = e.target.value;
+                                return next;
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            className="w-full border rounded-lg px-3 py-2 text-right"
+                            placeholder="0"
+                            value={it.pieces}
+                            onChange={(e) =>
+                              setItems((prev) => {
+                                const next = [...prev];
+                                next[i].pieces = Number.parseInt(e.target.value || 0, 10) || 0;
+                                return next;
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="w-full border rounded-lg px-3 py-2 text-right"
+                            placeholder="0.00"
+                            value={it.unitPrice}
+                            onChange={(e) =>
+                              setItems((prev) => {
+                                const next = [...prev];
+                                next[i].unitPrice = Number.parseFloat(e.target.value || 0) || 0;
+                                return next;
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.001"
+                            className={`w-full border rounded-lg px-3 py-2 text-right ${Number(it.weight || 0) <= 0 ? "border-rose-300" : ""}`}
+                            placeholder="0.000"
+                            value={it.weight}
+                            onChange={(e) =>
+                              setItems((prev) => {
+                                const next = [...prev];
+                                next[i].weight = Number.parseFloat(e.target.value || 0) || 0;
+                                return next;
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right font-medium">
+                          {(Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setItems((p) => p.filter((_, idx) => idx !== i))
+                              }
+                              className="px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
 

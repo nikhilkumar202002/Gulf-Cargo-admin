@@ -61,7 +61,35 @@ const parsePartyList = (res) => {
 };
 
 const joinAddress = (p) =>
-  [p?.address, p?.city, p?.district, p?.state, p?.country, p?.postal_code].filter(Boolean).join(", ");
+  [p?.address, p?.postal_code].filter(Boolean).join(", ");
+
+const sanitizeAddress = (addr, side, shipment) => {
+  if (!addr) return "";
+    const ban = [
+    // nested on side
+    (shipment?.[side]?.country),
+    (shipment?.[side]?.state),
+    (shipment?.[side]?.district),
+    (shipment?.[side]?.city),
+    // flat variants we often see
+    ...(side === "sender"
+      ? [shipment?.sender_country, shipment?.sender_state, shipment?.sender_district, shipment?.sender_city]
+      : [shipment?.receiver_country, shipment?.receiver_state, shipment?.receiver_district, shipment?.receiver_city]
+    ),
+  ]
+  .filter(Boolean)
+  .map(String)
+  .map(s => s.trim().toLowerCase());
+
+  if (ban.length === 0) return addr;
+
+  // Drop any comma-separated token that exactly equals a banned token (case-insensitive)
+  return addr
+    .split(",")
+    .map(s => s.trim())
+    .filter(part => part && !ban.includes(part.toLowerCase()))
+    .join(", ");
+};
 
 const formatPhones = (p) => {
   const a = [];
@@ -90,14 +118,6 @@ const matchByName = (name, list) => {
 const buildQrUrl = (data, size = 160) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(data)}`;
 
-/* =======================================================================
-   Component
-   - Accepts: (a) route param :id  -> GET /cargo/:id, or
-              (b) location.state.cargo or .shipment, or
-              (c) prop `shipment` containing { success, cargo } or cargo object
-   - Normalizes using normalizeCargoToInvoice
-   - Fetches Sender/Receiver from Parties by ID or name search
-   ======================================================================= */
 export default function InvoiceView({ shipment: injected = null, modal = false }) {
   const { id } = useParams();
   const location = useLocation();
@@ -148,10 +168,9 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
         ? [shipment.sender_id, shipment.shipper_id, shipment.sender_party_id]
         : [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id];
 
-      const name =
-        isSender
-          ? shipment.sender?.name || shipment.sender || shipment.shipper_name
-          : shipment.receiver?.name || shipment.receiver || shipment.consignee_name;
+      const name = isSender
+        ? shipment.sender?.name || shipment.sender || shipment.shipper_name
+        : shipment.receiver?.name || shipment.receiver || shipment.consignee_name;
 
       // 1) by ID
       for (const pid of idCandidates) {
@@ -173,7 +192,7 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
           const roleFiltered = list.filter((p) => {
             const typeId = Number(p.customer_type_id);
             const typeName = String(p.customer_type || "").toLowerCase();
-            return isSender ? (typeId === 1 || typeName.includes("sender")) : (typeId === 2 || typeName.includes("receiver"));
+            return isSender ? typeId === 1 || typeName.includes("sender") : typeId === 2 || typeName.includes("receiver");
           });
 
           const chosen =
@@ -215,6 +234,7 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
 
   /* ---------- normalized basics ---------- */
   const currency = pick(shipment, ["currency", "currency_code"], "INR");
+
   const items = useMemo(() => {
     const raw = Array.isArray(shipment?.items) ? shipment.items : [];
     return raw.map((it, i) => ({
@@ -227,21 +247,94 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
         it?.total_price ??
         it?.amount ??
         it?.line_total ??
-        (toNum(it?.unit_price ?? it?.price ?? it?.rate) * toNum(it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces)),
+        toNum(it?.unit_price ?? it?.price ?? it?.rate) *
+          toNum(it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces),
     }));
   }, [shipment]);
 
-  const subtotal = shipment?.subtotal ?? items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
-  const tax = shipment?.tax ?? shipment?.tax_amount ?? 0;
-  const bill = shipment?.bill_charges ?? 0;
-  const total = shipment?.grand_total ?? (Number(subtotal) + Number(bill) + Number(tax));
+const Field = ({ label, children }) => (
+  <div className="flex items-start gap-2 py-0.5">
+    <div className="w-24 shrink-0 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+      {label}
+    </div>
+    <div className="flex-1 text-[13px] leading-snug text-slate-900">
+      {children || "—"}
+    </div>
+  </div>
+);
+
+
+const getName = (p, side, shipment) =>
+  p?.name ||
+  shipment?.[side]?.name ||
+  shipment?.[side] ||
+  shipment?.[side === "sender" ? "shipper_name" : "consignee_name"] ||
+  "";
+  const getAddress = (p, side, shipment, pick) =>
+  p?.address ||
+  pick?.(shipment?.[side], ["address"], "") ||
+  pick?.(
+    shipment,
+    side === "sender"
+      ? ["sender_address", "shipper_address", "sender_addr"]
+      : ["receiver_address", "consignee_address", "receiver_addr"],
+    ""
+  );
+
+  const getPhone = (p, side, shipment, pick) =>
+  p?.phones ||
+  pick?.(shipment?.[side], ["contact_number", "whatsapp_number"], "") ||
+  pick?.(
+    shipment,
+    side === "sender"
+      ? ["sender_phone", "shipper_phone", "sender_mobile"]
+      : ["receiver_phone", "consignee_phone", "receiver_mobile"],
+    ""
+  );
+
+const getPincode = (p, side, shipment, pick) =>
+  p?.pincode ||
+  pick?.(shipment?.[side], ["pincode", "pin", "zip", "zipcode", "postal_code"], "") ||
+  pick?.(
+    shipment,
+    side === "sender"
+      ? [
+          "sender_pincode",
+        ]
+      : [
+          "receiver_pincode",
+        ],
+    ""
+  );
+
+  const ROWS_PER_COL = 6;
+
+  const computedSubtotal = items.reduce((s, it) => s + toNum(it.amount), 0);
+  const apiSubtotalNum = toNum(shipment?.subtotal);
+  const subtotal = apiSubtotalNum > 0 ? apiSubtotalNum : computedSubtotal;
+
+  const tax = toNum(shipment?.tax ?? shipment?.tax_amount ?? shipment?.vat_cost ?? 0);
+  const bill = toNum(shipment?.bill_charges ?? shipment?.bill ?? 0);
+
+  const total = toNum(
+    shipment?.total_cost ??
+      shipment?.net_total ??
+      (subtotal + bill + tax)
+  );
+
+  // Split items into two columns and pad with blanks so both columns align
+  const colA = items.slice(0, ROWS_PER_COL);
+  const colB = items.slice(ROWS_PER_COL, ROWS_PER_COL * 2);
+  while (colA.length < ROWS_PER_COL) colA.push(null);
+  while (colB.length < ROWS_PER_COL) colB.push(null);
+
+  // if there are more than 2*ROWS_PER_COL items, note it (we keep space for T&C)
+  const overflowCount = Math.max(0, items.length - ROWS_PER_COL * 2);
 
   const qrText = `INV|${shipment?.track_code || ""}|BOOK:${shipment?.booking_no || shipment?.invoice_no || ""}|TOTAL:${total}`;
 
   if (loading) {
-    return (
-      <div className="p-6 text-slate-600">Loading invoice…</div>
-    );
+    return <div className="p-6 text-slate-600">Loading invoice…</div>;
   }
   if (err) {
     return <div className="p-6 text-rose-700">{err}</div>;
@@ -253,24 +346,55 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
   return (
     <div className="min-h-screen bg-slate-50">
       {/* PRINT: only the invoice card */}
-      <style>{`
-        @media print {
-          @page { size: A4; margin: 12mm; }
-          body * { visibility: hidden !important; }
-          #invoice-sheet, #invoice-sheet * { visibility: visible !important; }
-          #invoice-sheet { position: absolute; inset: 0; margin: 0 !important; box-shadow: none !important; border: 0 !important; }
-        }
-      `}</style>
+   <style>{`
+  @media print {
+    @page { size: A4; margin: 12mm; }
+
+    /* Keep colors and gradients */
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    /* Show only the invoice sheet */
+    body * { visibility: hidden !important; }
+    #invoice-sheet, #invoice-sheet * { visibility: visible !important; }
+
+    /* Stable A4 content width (210mm - 2*12mm margin = 186mm) */
+    #invoice-sheet {
+      width: 186mm;
+      margin: 0 auto !important;
+      position: static !important;  /* don't absolutely position; avoids weird shifts */
+      box-shadow: none !important;
+      border: 0 !important;
+    }
+
+    /* Force grids to multi-column on print */
+    .print-grid-6 { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+    .print-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+
+    /* Avoid page breaks inside these blocks */
+    .avoid-break { break-inside: avoid; page-break-inside: avoid; }
+
+    /* Help table headers behave nicely on page breaks */
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    tr, td, th { break-inside: avoid; page-break-inside: avoid; }
+  }
+`}</style>
 
       {/* Top bar (won't print) */}
       {!modal && (
         <div className="sticky top-0 z-10 border-b bg-white print:hidden">
           <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-2">
-            <button onClick={() => window.history.back()} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+            <button
+              onClick={() => window.history.back()}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+            >
               ← Back
             </button>
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={() => window.print()} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700">
+              <button
+                onClick={() => window.print()}
+                className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700"
+              >
                 Print / Save PDF
               </button>
             </div>
@@ -282,37 +406,47 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
       <main className="mx-auto max-w-5xl p-4">
         <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           {/* ======= COMPANY HEADER ======= */}
-          <div className="px-6 pt-6">
-            <div className="flex justify-between items-center">
-              {/* Logo */}
-              <div className="invoice-logo flex items-center sm:justify-start justify-center">
-                <img src={InvoiceLogo} alt="Gulf Cargo" className="h-16 object-contain" />
-              </div>
+          <div className="px-1 pt-1">
+           <div className="grid grid-cols-3 items-start ">
+  {/* Logo */}
+  <div className="invoice-logo">
+    <img src={InvoiceLogo} alt="Gulf Cargo" className="h-16 object-contain" />
+     <div className="header-invoice-address mt-1 text-slate-700">
+      {COMPANY.addr}
+    </div>
+  </div>
 
-              {/* QR */}
-              <div className="invoice-qrcode flex items-center justify-center">
-                <img
-                  src={buildQrUrl(qrText, 160)}
-                  alt="Invoice QR"
-                  className="h-36 w-36 rounded bg-white p-1 ring-1 ring-slate-200"
-                />
-              </div>
+  {/* QR */}
+  <div className="invoice-qrcode flex items-center justify-center">
+    <img
+      src={buildQrUrl(qrText, 160)}
+      alt="Invoice QR"
+      className="h-36 w-36 rounded bg-white p-1 ring-1 ring-slate-200"
+    />
+  </div>
 
-              {/* Company text */}
-              <div className="text-center sm:text-right">
-                <div className="text-[18px] font-semibold leading-tight text-indigo-900">
-                  <div>{COMPANY.arHeadingLine1}</div>
-                  <div>{COMPANY.arHeadingLine2}</div>
-                </div>
-                <div className="mt-1 text-[18px] font-semibold text-rose-700">{COMPANY.nameEn}</div>
-                <div className="mt-1 text-xs text-slate-700">{COMPANY.addr}</div>
-                <div className="text-xs font-medium text-slate-800">{COMPANY.phones}</div>
-                <div className="text-xs text-slate-700">{COMPANY.email}</div>
-              </div>
-            </div>
+  {/* Company text */}
+  <div className="text-center sm:text-right">
+    <div className="text-[14px] font-semibold leading-tight text-indigo-900">
+      <div>{COMPANY.arHeadingLine1}</div>
+      <div>{COMPANY.arHeadingLine2}</div>
+    </div>
+    <div className="header-invoice-heading mt-1 font-semibold text-rose-700">
+      {COMPANY.nameEn}
+    </div>
+   
+    <p className="header-invoice-address text-xs mt-1 font-medium text-slate-800">
+      {COMPANY.phones}
+    </p>
+    <p className="header-invoice-address text-xs text-slate-700">
+      {COMPANY.email}
+    </p>
+  </div>
+</div>
+
 
             {/* Red ribbon */}
-            <div className="mt-3 grid grid-cols-1 items-center gap-2 rounded bg-rose-600 px-3 py-2 text-white sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 items-center gap-2 rounded bg-rose-600 px-2 py-1 text-white sm:grid-cols-3">
               <div className="text-xs">
                 <div className="font-semibold">VAT NO. : {COMPANY.vatNo}</div>
                 <div>SHIPMENT TYPE: {shipment?.method || COMPANY.defaultShipmentType}</div>
@@ -329,23 +463,23 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
           </div>
           {/* ======= END COMPANY HEADER ======= */}
 
-          {/* ======= META STRIP (your ask) ======= */}
-          <div className="grid grid-cols-1 gap-4 border-b border-slate-200 px-6 py-4 sm:grid-cols-2 lg:grid-cols-6">
+          {/* ======= META STRIP ======= */}
+          <div className="grid grid-cols-5 gap-4 border-b border-slate-200 px-2 py-3 sm:grid-cols-5 lg:grid-cols-5">
             <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Track No.</div>
-              <div className="mt-1 inline-flex items-center rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 px-2.5 py-1 font-mono text-xs font-semibold text-white">
+              <div className="mt-1 inline-flex items-center rounded-lg bg-gradient-to-r px-2.5 py-1 font-mono text-xs font-semibold text-white bg-black">
                 {shipment?.track_code || "—"}
               </div>
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Booking No</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">
+              <div className=" text-sm font-medium text-slate-900">
                 {shipment?.booking_no || shipment?.invoice_no || "—"}
               </div>
             </div>
-           <div>
+            <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Branch</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">
+              <div className=" text-sm font-medium text-slate-900">
                 {pick(
                   shipment,
                   ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"],
@@ -353,12 +487,12 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                 )}
               </div>
             </div>
-            <div>
+            {/* <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Status</div>
               <div className="mt-1 text-sm font-medium text-slate-900">
                 {shipment?.status?.name ?? shipment?.status ?? "—"}
               </div>
-            </div>
+            </div> */}
             <div>
               <div className="text-[11px] uppercase tracking-wide text-slate-500">Delivery Type</div>
               <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.delivery_type || "—"}</div>
@@ -370,117 +504,191 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
           </div>
 
           {/* ======= PARTIES ======= */}
-          <div className="grid grid-cols-1 gap-6 border-b border-slate-200 px-6 py-6 sm:grid-cols-2">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Shipper</div>
-              <div className="mt-1 text-sm font-semibold text-slate-900">
-                {senderParty?.name || shipment?.sender?.name || shipment?.sender || shipment?.shipper_name || "—"}
-              </div>
-              <div className="whitespace-pre-wrap text-sm text-slate-700">
-                {senderParty?.address ||
-                  pick(shipment?.sender, ["address"], "") ||
-                  pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")}
-              </div>
-              <div className="text-sm text-slate-700">
-                {senderParty?.phones ||
-                  pick(shipment?.sender, ["contact_number", "whatsapp_number"], "") ||
-                  pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")}
-              </div>
-              <div className="text-sm text-slate-700">
-                {senderParty?.email ||
-                  pick(shipment?.sender, ["email"], "") ||
-                  pick(shipment, ["sender_email", "shipper_email"], "")}
+           <div className="grid grid-cols-1 gap-6 border-b border-slate-200 px-3 py-3 sm:grid-cols-2">
+      {/* SHIPPER */}
+      <div>
+        <div className="invoice-parties-header text-xs font-medium uppercase tracking-wide text-slate-500">
+          Shipper
+        </div>
+        <div className="mt-1 invoice-parties-content">
+          <Field label="Name :">{getName(senderParty, "sender", shipment)}</Field>
+          <Field label="Address :">
+            <span className="whitespace-pre-wrap text-slate-700">
+              {getAddress(senderParty, "sender", shipment, pick)}
+            </span>
+          </Field>
+          <Field label="PIN Code :">
+            <span className="text-slate-700">
+              {getPincode(senderParty, "sender", shipment, pick)}
+            </span>
+          </Field>
+          <Field label="Phone :">
+            <span className="text-slate-700">
+              {getPhone(senderParty, "sender", shipment, pick)}
+            </span>
+          </Field>
+        </div>
+      </div>
+
+      {/* CONSIGNEE */}
+      <div>
+        <div className="invoice-parties-header text-xs font-medium tracking-wide text-slate-500">
+          Consignee
+        </div>
+        <div className="mt-1 invoice-parties-content">
+          <Field label="Name :">{getName(receiverParty, "receiver", shipment)}</Field>
+          <Field label="Address :">
+            <span className="whitespace-pre-wrap text-slate-700">
+              {getAddress(receiverParty, "receiver", shipment, pick)}
+            </span>
+          </Field>
+          <Field label="PIN Code :">
+            <span className="text-slate-700">
+              {getPincode(receiverParty, "receiver", shipment, pick)}
+            </span>
+          </Field>
+          <Field label="Phone">
+            <span className="text-slate-700">
+              {getPhone(receiverParty, "receiver", shipment, pick)}
+            </span>
+          </Field>
+        </div>
+      </div>
+    </div>
+
+          {/* ======= ITEMS (two columns like your PDF) ======= */}
+          <div className="px-1 py-2">
+            <div className="flex justify-between">
+              <div className="mb-3 text-sm font-semibold text-slate-900">Cargo Items</div>
+              {/* Weight highlight badge */}
+              <div className="inline-flex items-center gap-2 rounded-lg bg-black px-2 py-1 text-sm font-semibold text-white">
+                Total Weight: {pick(shipment, ["total_weight", "weight", "gross_weight"], "0")} kg
               </div>
             </div>
 
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Consignee</div>
-              <div className="mt-1 text-sm font-semibold text-slate-900">
-                {receiverParty?.name || shipment?.receiver?.name || shipment?.receiver || shipment?.consignee_name || "—"}
-              </div>
-              <div className="whitespace-pre-wrap text-sm text-slate-700">
-                {receiverParty?.address ||
-                  pick(shipment?.receiver, ["address"], "") ||
-                  pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "")}
-              </div>
-              <div className="text-sm text-slate-700">
-                {receiverParty?.phones ||
-                  pick(shipment?.receiver, ["contact_number", "whatsapp_number"], "") ||
-                  pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "")}
-              </div>
-              <div className="text-sm text-slate-700">
-                {receiverParty?.email ||
-                  pick(shipment?.receiver, ["email"], "") ||
-                  pick(shipment, ["receiver_email", "consignee_email"], "")}
-              </div>
-            </div>
-          </div>
-
-          {/* ======= ITEMS ======= */}
-          <div className="px-6 py-6">
-            <div className="mb-3 text-sm font-semibold text-slate-900">Cargo Items</div>
-
-            {partyLoading ? (
-              <div className="flex items-center gap-2 text-slate-600">
-                <svg className={cx("animate-spin", "h-5 w-5 text-indigo-600")} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-                <span>Loading parties…</span>
-              </div>
-            ) : !items.length ? (
-              <div className="text-sm text-slate-600">No items found.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">#</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Description</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Qty</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Weight (kg)</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Unit Price</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Amount</th>
+            <div className="grid grid-cols-2 gap-2  py-2 sm:grid-cols-2 lg:grid-cols-2 print-grid-2">
+              {/* Column A */}
+              <div className="lg:col-span-1">
+                <table className="min-w-full border-separate border-spacing-0 avoid-break">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="w-12 rounded-tl-lg border border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                        Sl.No
+                      </th>
+                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                        Items
+                      </th>
+                      <th className="rounded-tr-lg border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                        Qty
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {items.map((it) => (
-                      <tr key={it.idx} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 text-sm text-slate-700">{it.idx}</td>
-                        <td className="px-3 py-2 text-sm text-slate-800">{it.name}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{it.qty || "—"}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{it.weight || "—"}</td>
-                        <td className="px-3 py-2 text-right text-sm text-slate-700">
-                          {it.unitPrice ? fmtMoney(it.unitPrice, currency) : "—"}
+                  <tbody>
+                    {colA.map((it, idx) => (
+                      <tr key={`A-${idx}`} className="align-top">
+                        <td className="border-x border-b border-slate-200 px-1.5 py-1.5 text-sm text-slate-700">
+                          {it ? it.idx : ""}
                         </td>
-                        <td className="px-3 py-2 text-right text-sm font-medium text-slate-900">
-                          {it.amount ? fmtMoney(it.amount, currency) : "—"}
+                        <td className="border-b border-slate-200 px-1.5 py-1.5 text-sm text-slate-800">
+                          {it ? (
+                            <>
+                              {it.name || "—"}
+                              {/* Weight chip (row-level highlight) */}
+                              {/* {it.weight ? (
+                                <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 px-1.5 py-1.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">
+                                  {it.weight} kg
+                                </span>
+                              ) : null} */}
+                            </>
+                          ) : (
+                            <span className="opacity-0">pad</span>
+                          )}
+                        </td>
+                        <td className="border-x border-b border-slate-200 px-1.5 py-1.5 text-right text-sm text-slate-900">
+                          {it ? it.qty || "—" : ""}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            )}
 
-            {/* Totals */}
-            <div className="mt-6 flex flex-col items-end">
-              <div className="w-full max-w-sm">
-                <div className="flex justify-between text-sm text-slate-700">
-                  <div>Subtotal</div>
-                  <div className="font-medium text-slate-900">{fmtMoney(subtotal, currency)}</div>
-                </div>
-                <div className="mt-1 flex justify-between text-sm text-slate-700">
-                  <div>Bill Charges</div>
-                  <div className="font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
-                </div>
-                <div className="mt-1 flex justify-between text-sm text-slate-700">
-                  <div>Tax</div>
-                  <div className="font-medium text-slate-900">{fmtMoney(tax, currency)}</div>
-                </div>
-                <div className="mt-2 border-t border-slate-200 pt-2 flex justify-between text-base font-semibold text-slate-900">
-                  <div>Total</div>
-                  <div>{fmtMoney(total, currency)}</div>
+              {/* Column B */}
+              <div className="lg:col-span-1">
+                <table className="min-w-full border-separate border-spacing-0">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="w-12 rounded-tl-lg border border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                        S.No
+                      </th>
+                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                        Items
+                      </th>
+                      <th className="rounded-tr-lg border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                        Qty
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {colB.map((it, idx) => (
+                      <tr key={`B-${idx}`} className="align-top">
+                        <td className="border-x border-b border-slate-200 px-3 py-1.5 text-sm text-slate-700">
+                          {it ? it.idx : ""}
+                        </td>
+                        <td className="border-b border-slate-200 px-3 py-1.5 text-sm text-slate-800">
+                          {it ? (
+                            <>
+                              {it.name || "—"}
+                              {it.weight ? (
+                                <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">
+                                  {it.weight} kg
+                                </span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span className="opacity-0">pad</span>
+                          )}
+                        </td>
+                        <td className="border-x border-b border-slate-200 px-3 py-1.5 text-right text-sm text-slate-900">
+                          {it ? it.qty || "—" : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {overflowCount > 0 && (
+                  <div className="mt-2 text-[11px] text-slate-500">
+                    +{overflowCount} more item{overflowCount > 1 ? "s" : ""} (not shown to preserve space for terms)
+                  </div>
+                )}
+              </div>
+
+              {/* Totals card */}
+              <div className="lg:col-span-1 avoid-break">
+                <div className="mx-auto w-full rounded-xl border-slate-200 p-1 ">
+                  <div className="total-card-list flex justify-between text-sm text-slate-700">
+                    <div>Subtotal</div>
+                    <div className="font-medium text-slate-900">{fmtMoney(subtotal, currency)}</div>
+                  </div>
+                  <div className="total-card-list flex justify-between text-sm text-slate-700">
+                    <div>Bill Charges</div>
+                    <div className="total-card-list font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
+                  </div>
+                  <div className=" flex justify-between text-sm text-slate-700">
+                    <div>Tax</div>
+                    <div className="font-medium text-slate-900">{fmtMoney(tax, currency)}</div>
+                  </div>
+                  <div className="total-card-money mt-1 flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
+                    <div>Total</div>
+                    <div>{fmtMoney(shipment?.total_cost ?? shipment?.net_total ?? total, currency)}</div>
+                  </div>
+
+                  {/* Extra weight emphasis near totals */}
+                  {/* <div className="mt-3 flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                    <span>Weight</span>
+                    <span>{pick(shipment, ["total_weight", "weight", "gross_weight"], "0")} kg</span>
+                  </div> */}
                 </div>
               </div>
             </div>
@@ -488,17 +696,31 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
 
           {/* ======= FOOTER ======= */}
           <div className="border-t border-slate-200 px-6 py-4 text-xs text-slate-500">
-            Thank you for your business.
+            <div className="flex justify-between py-2 invoice-terms-conditions-header">
+              <div>TERMS AND CONDITIONS </div>
+              <div>Thank you for your business.</div>
+            </div>
+            
             <div className="invoice-terms-conditions-content">
               <h2>Accept the goods only after checking and confirming them on delivery.</h2>
-              <p>
+              <p lassName="mt-1">
                 NO GUARANTEE FOR GLASS/BREAKABLE ITEMS. COMPANY NOT RESPONSIBLE FOR ITEMS RECEIVED IN DAMAGED CONDITION.
                 COMPLAINTS WILL NOT BE ACCEPTED AFTER 2 DAYS FROM THE DATE OF DELIVERY. COMPANY NOT RESPONSIBLE FOR OCTROI
                 CHARGES OR ANY OTHER CHARGES LEVIED LOCALLY. IN CASE OF CLAIM (LOSS), PROOF OF DOCUMENTS SHOULD BE PRODUCED.
                 SETTLEMENT WILL BE MADE (20 SAR/KGS) PER COMPANY RULES. COMPANY WILL NOT TAKE RESPONSIBILITY FOR NATURAL
                 CALAMITY AND DELAY IN CUSTOMS CLEARANCE.
               </p>
-              
+              <p className="mt-1">الشروط: 1. لا توجد مطالب ضد الشركة الناشئة للخسائر الناتجة عن الحوادث الطبيعية أو تأخير التخليص الجمركي. 2. لا تتحمل الشركة مسؤولية أي خسارة ناتجة عن سوء الاستخدام أو الأضرار غير المسؤولة أو المسؤوليات المترتبة على أي رسوم ومعاملات تفرض من قبل السلطات الجمركية. 3. الشركة غير مسؤولة عن أي مسؤوليات قانونية ناشئة عن المستندات المفقودة أو التالفة. 4. يتحمل المستلم أو المشتري جميع الرسوم الإضافية، بما في ذلك رسوم التخزين والغرامات المفروضة من قبل الجمارك.</p>
+              <p lassName="mt-1">കമ്പനി നിയമങ്ങൾ പ്രകാരം തീർപ്പാക്കപ്പെടും. കമ്പനി പ്രകൃതി ദുരന്തത്തിനും കസ്റ്റംസ് ക്ലിയറൻസിലെ വൈകിപ്പിനും ഉത്തരവാദിയാവില്ല.</p>
+              <p lassName="mt-1">हिन्दी में समय समय पर कम्पनी नियमों के अनुसार भुगतान किया जायेगा। कम्पनी प्राकृतिक आपदा तथा कस्टम्स क्लियरेंस में देरी के लिए जिम्मेदार नहीं होगी। कम्पनी किसी भी नुकसान या हानि के लिए जिम्मेदार नहीं होगी जो असावधानी या अनुचित उपयोग के कारण हुआ हो। कस्टम्स द्वारा लगाए गए किसी भी अतिरिक्त शुल्क या दंड का भुगतान ग्राहक द्वारा किया जाएगा।</p>
+              <h2 lassName="mt-1">I AGREE TO THE ABOVE TERMS & CONDITIONS
+أوافق على الشروط والأحكام المذكورة أعلاه</h2>
+            </div>
+
+            <div className="flex justify-around py-2 invoice-terms-conditions-footer">
+              <div>Shipper Signature</div>
+              <div>Consignee Signature</div>
+              <div>Manager Signature</div>
             </div>
           </div>
         </div>

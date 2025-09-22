@@ -998,18 +998,7 @@ const SenderCreate = () => {
               />
               <ErrorMsg>{fieldErrors.address?.[0]}</ErrorMsg>
             </div>
-          </Section>
-
-          {/* Global submit error */}
-          {submitError && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {submitError}
-            </div>
-          )}
-
-          {/* Sticky footer actions */}
-          <div className="sticky bottom-0 z-10 -mx-4 border-t border-slate-200 bg-white/70 px-4 py-3 backdrop-blur">
-            <div className="mx-auto flex max-w-6xl items-center justify-end gap-3">
+              <div className="mx-auto flex max-w-6xl items-center justify-end gap-3 py-2">
               <button
                 type="button"
                 className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-slate-700 hover:bg-slate-50"
@@ -1028,7 +1017,14 @@ const SenderCreate = () => {
                 {submitLoading ? "Submitting…" : "Submit"}
               </button>
             </div>
-          </div>
+          </Section>
+
+          {/* Global submit error */}
+          {submitError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {submitError}
+            </div>
+          )}
         </form>
       </div>
 

@@ -78,7 +78,7 @@ export function normalizeCargoToInvoice(raw) {
   const shipment = {
     id: src.id,
     invoice_no: src.booking_no,
-    booking_no: src.booking_no,
+    booking_no: raw.booking_no || raw.booking_number || raw.id || "",
     track_code: src.lrl_tracking_code ?? src.tracking_code ?? src.track_code ?? "",
     awb_number: src.booking_no ?? "",
     method: src.shipping_method ?? src.method ?? src.shipment_method ?? "",

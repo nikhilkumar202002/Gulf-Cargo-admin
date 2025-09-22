@@ -7,9 +7,7 @@ import {
   ExternalLink,
   Clipboard,
   ClipboardCheck,
-  Download,
   Printer,
-  ChevronDown,
 } from "lucide-react";
 
 /* ----------------------- tiny utils ----------------------- */
@@ -42,7 +40,9 @@ const getDocs = (payload) => {
 const KV = ({ label, value }) => (
   <div className="flex flex-col gap-1 rounded-xl bg-slate-50/70 px-3 py-2">
     <dt className="text-[12px] font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-    <dd className="text-slate-900 break-words">{value === "" || value == null ? "—" : String(value)}</dd>
+    <dd className="text-slate-900 break-words">
+      {value === "" || value == null ? "—" : String(value)}
+    </dd>
   </div>
 );
 
@@ -61,7 +61,6 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
   const modalRef = useRef(null);
   const closeBtnRef = useRef(null);
   const [copied, setCopied] = useState(false);
-  const [rawOpen, setRawOpen] = useState(false);
 
   // prevent background scroll
   useEffect(() => {
@@ -109,7 +108,6 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
     };
 
     document.addEventListener("keydown", onKeyDown);
-    // initial focus
     (closeBtnRef.current || first)?.focus();
 
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -154,7 +152,7 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[100] flex items-center justify-center"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -171,18 +169,19 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
             aria-modal="true"
             aria-labelledby="crs-title"
             ref={modalRef}
-            className="relative z-[101] w-[92%] max-w-4xl"
+            className="relative z-[101] w-full max-w-4xl"
             initial={{ y: 20, scale: 0.98, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: 8, scale: 0.98, opacity: 0 }}
             transition={{ type: "spring", stiffness: 280, damping: 24 }}
           >
-            <div className="relative overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+            {/* Make panel a column; cap height; ensure min height; scroll body */}
+            <div className="relative flex max-h-[92vh] min-h-[50vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 sm:min-h-[60vh]">
               {/* Decorative gradient */}
               <div className="pointer-events-none absolute -inset-x-6 -top-8 h-24 bg-gradient-to-r from-emerald-400/20 via-blue-400/10 to-rose-400/20 blur-2xl" />
 
-              {/* Header */}
-              <div className="flex items-start justify-between gap-3 px-6 pt-6">
+              {/* Sticky Header */}
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-100 bg-white/90 px-4 pb-3 pt-4 backdrop-blur-sm sm:px-6 sm:pt-6 sm:pb-4">
                 <div className="flex items-center gap-3">
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 ring-8 ring-emerald-50">
                     <CheckCircle2 className="h-5 w-5" />
@@ -211,15 +210,10 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
                     onClick={copySummary}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    {copied ? <ClipboardCheck className="h-4 w-4 text-emerald-600" /> : <Clipboard className="h-4 w-4" />} 
+                    {copied ? <ClipboardCheck className="h-4 w-4 text-emerald-600" /> : <Clipboard className="h-4 w-4" />}
                     {copied ? "Copied" : "Copy summary"}
                   </button>
-                  <button
-                    onClick={downloadJson}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <Download className="h-4 w-4" /> Download JSON
-                  </button>
+            
                   <button
                     onClick={printView}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -237,9 +231,8 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
                 </div>
               </div>
 
-              {/* Body */}
-              <div className="px-6 pb-6 pt-4">
-                {/* Submitted Details */}
+              {/* Scrollable Body */}
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 sm:px-6 sm:pb-6">
                 {submittedRows.length > 0 ? (
                   <Section title="Submitted Details">
                     <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -252,7 +245,6 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
                   <p className="text-sm text-slate-500">No submitted details were provided.</p>
                 )}
 
-                {/* Documents */}
                 <Section title="Documents">
                   {docs.length > 0 ? (
                     <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-slate-50/30">
@@ -284,32 +276,7 @@ export default function CreateReceiverSenderModal({ open, onClose, data, details
                   )}
                 </Section>
 
-                {/* Raw debug (collapsible) */}
-                <Section title="Debug">
-                  <button
-                    type="button"
-                    onClick={() => setRawOpen((s) => !s)}
-                    className="group inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-                  >
-                    <ChevronDown
-                      className={`h-4 w-4 transition-transform ${rawOpen ? "rotate-180" : "rotate-0"}`}
-                    />
-                    {rawOpen ? "Hide raw response" : "Show raw response"}
-                  </button>
-
-                  <AnimatePresence initial={false}>
-                    {rawOpen && (
-                      <motion.pre
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="mt-3 max-h-[260px] overflow-auto rounded-lg bg-slate-900 p-3 text-[12px] leading-relaxed text-emerald-100"
-                      >
-                        {JSON.stringify(payload ?? {}, null, 2)}
-                      </motion.pre>
-                    )}
-                  </AnimatePresence>
-                </Section>
+            
               </div>
             </div>
           </motion.div>
