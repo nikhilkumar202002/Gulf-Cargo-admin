@@ -474,7 +474,7 @@ function pickByKeyword(label) {
     </Link>
 
     {/* Edit = Amber */}
-    <Link
+    {/* <Link
       to={`/cargo/${c.id}`}
       aria-label="Edit"
       title="Edit"
@@ -485,7 +485,7 @@ function pickByKeyword(label) {
                  transition"
     >
       <TbEdit className="h-3 w-3" />
-    </Link>
+    </Link> */}
 
     {/* Invoice = Emerald */}
     <button

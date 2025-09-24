@@ -65,7 +65,7 @@ const joinAddress = (p) =>
 
 const sanitizeAddress = (addr, side, shipment) => {
   if (!addr) return "";
-    const ban = [
+  const ban = [
     // nested on side
     (shipment?.[side]?.country),
     (shipment?.[side]?.state),
@@ -77,9 +77,9 @@ const sanitizeAddress = (addr, side, shipment) => {
       : [shipment?.receiver_country, shipment?.receiver_state, shipment?.receiver_district, shipment?.receiver_city]
     ),
   ]
-  .filter(Boolean)
-  .map(String)
-  .map(s => s.trim().toLowerCase());
+    .filter(Boolean)
+    .map(String)
+    .map(s => s.trim().toLowerCase());
 
   if (ban.length === 0) return addr;
 
@@ -179,7 +179,7 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
           const res = await getPartyById(pid);
           const data = res?.party || res?.data || res;
           if (data?.id) return extractParty(data);
-        } catch (_) {}
+        } catch (_) { }
       }
 
       // 2) by name (broad search), then filter by role when possible
@@ -203,7 +203,7 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
             null;
 
           if (chosen) return extractParty(chosen);
-        } catch (_) {}
+        } catch (_) { }
       }
 
       // 3) ultimate fallback: use whatever is on shipment
@@ -248,64 +248,64 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
         it?.amount ??
         it?.line_total ??
         toNum(it?.unit_price ?? it?.price ?? it?.rate) *
-          toNum(it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces),
+        toNum(it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces),
     }));
   }, [shipment]);
 
-const Field = ({ label, children }) => (
-  <div className="flex items-start gap-2 py-0.5">
-    <div className="w-24 shrink-0 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-      {label}
+  const Field = ({ label, children }) => (
+    <div className="flex items-start gap-2 py-0.5">
+      <div className="w-24 shrink-0 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className="flex-1 text-[13px] leading-snug text-slate-900">
+        {children || "—"}
+      </div>
     </div>
-    <div className="flex-1 text-[13px] leading-snug text-slate-900">
-      {children || "—"}
-    </div>
-  </div>
-);
-
-
-const getName = (p, side, shipment) =>
-  p?.name ||
-  shipment?.[side]?.name ||
-  shipment?.[side] ||
-  shipment?.[side === "sender" ? "shipper_name" : "consignee_name"] ||
-  "";
-  const getAddress = (p, side, shipment, pick) =>
-  p?.address ||
-  pick?.(shipment?.[side], ["address"], "") ||
-  pick?.(
-    shipment,
-    side === "sender"
-      ? ["sender_address", "shipper_address", "sender_addr"]
-      : ["receiver_address", "consignee_address", "receiver_addr"],
-    ""
   );
+
+
+  const getName = (p, side, shipment) =>
+    p?.name ||
+    shipment?.[side]?.name ||
+    shipment?.[side] ||
+    shipment?.[side === "sender" ? "shipper_name" : "consignee_name"] ||
+    "";
+  const getAddress = (p, side, shipment, pick) =>
+    p?.address ||
+    pick?.(shipment?.[side], ["address"], "") ||
+    pick?.(
+      shipment,
+      side === "sender"
+        ? ["sender_address", "shipper_address", "sender_addr"]
+        : ["receiver_address", "consignee_address", "receiver_addr"],
+      ""
+    );
 
   const getPhone = (p, side, shipment, pick) =>
-  p?.phones ||
-  pick?.(shipment?.[side], ["contact_number", "whatsapp_number"], "") ||
-  pick?.(
-    shipment,
-    side === "sender"
-      ? ["sender_phone", "shipper_phone", "sender_mobile"]
-      : ["receiver_phone", "consignee_phone", "receiver_mobile"],
-    ""
-  );
+    p?.phones ||
+    pick?.(shipment?.[side], ["contact_number", "whatsapp_number"], "") ||
+    pick?.(
+      shipment,
+      side === "sender"
+        ? ["sender_phone", "shipper_phone", "sender_mobile"]
+        : ["receiver_phone", "consignee_phone", "receiver_mobile"],
+      ""
+    );
 
-const getPincode = (p, side, shipment, pick) =>
-  p?.pincode ||
-  pick?.(shipment?.[side], ["pincode", "pin", "zip", "zipcode", "postal_code"], "") ||
-  pick?.(
-    shipment,
-    side === "sender"
-      ? [
+  const getPincode = (p, side, shipment, pick) =>
+    p?.pincode ||
+    pick?.(shipment?.[side], ["pincode", "pin", "zip", "zipcode", "postal_code"], "") ||
+    pick?.(
+      shipment,
+      side === "sender"
+        ? [
           "sender_pincode",
         ]
-      : [
+        : [
           "receiver_pincode",
         ],
-    ""
-  );
+      ""
+    );
 
   const ROWS_PER_COL = 6;
 
@@ -318,8 +318,8 @@ const getPincode = (p, side, shipment, pick) =>
 
   const total = toNum(
     shipment?.total_cost ??
-      shipment?.net_total ??
-      (subtotal + bill + tax)
+    shipment?.net_total ??
+    (subtotal + bill + tax)
   );
 
   // Split items into two columns and pad with blanks so both columns align
@@ -346,7 +346,7 @@ const getPincode = (p, side, shipment, pick) =>
   return (
     <div className="min-h-screen bg-slate-50">
       {/* PRINT: only the invoice card */}
-   <style>{`
+      <style>{`
   @media print {
     @page { size: A4; margin: 12mm; }
 
@@ -404,45 +404,45 @@ const getPincode = (p, side, shipment, pick) =>
 
       {/* Invoice card */}
       <main className="mx-auto max-w-5xl p-4">
-        <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm uppercase">
           {/* ======= COMPANY HEADER ======= */}
           <div className="px-1 pt-1">
-           <div className="grid grid-cols-3 items-start ">
-  {/* Logo */}
-  <div className="invoice-logo">
-    <img src={InvoiceLogo} alt="Gulf Cargo" className="h-16 object-contain" />
-     <div className="header-invoice-address mt-1 text-slate-700">
-      {COMPANY.addr}
-    </div>
-  </div>
+            <div className="grid grid-cols-3 items-start ">
+              {/* Logo */}
+              <div className="invoice-logo">
+                <img src={InvoiceLogo} alt="Gulf Cargo" className="h-16 object-contain" />
+                <div className="header-invoice-address mt-1 text-slate-700">
+                  {COMPANY.addr}
+                </div>
+              </div>
 
-  {/* QR */}
-  <div className="invoice-qrcode flex items-center justify-center">
-    <img
-      src={buildQrUrl(qrText, 160)}
-      alt="Invoice QR"
-      className="h-36 w-36 rounded bg-white p-1 ring-1 ring-slate-200"
-    />
-  </div>
+              {/* QR */}
+              <div className="invoice-qrcode flex items-center justify-center">
+                <img
+                  src={buildQrUrl(qrText, 160)}
+                  alt="Invoice QR"
+                  className="h-36 w-36 rounded bg-white p-1 ring-1 ring-slate-200"
+                />
+              </div>
 
-  {/* Company text */}
-  <div className="text-center sm:text-right">
-    <div className="text-[14px] font-semibold leading-tight text-indigo-900">
-      <div>{COMPANY.arHeadingLine1}</div>
-      <div>{COMPANY.arHeadingLine2}</div>
-    </div>
-    <div className="header-invoice-heading mt-1 font-semibold text-rose-700">
-      {COMPANY.nameEn}
-    </div>
-   
-    <p className="header-invoice-address text-xs mt-1 font-medium text-slate-800">
-      {COMPANY.phones}
-    </p>
-    <p className="header-invoice-address text-xs text-slate-700">
-      {COMPANY.email}
-    </p>
-  </div>
-</div>
+              {/* Company text */}
+              <div className="text-center sm:text-right">
+                <div className="text-[14px] font-semibold leading-tight text-indigo-900">
+                  <div>{COMPANY.arHeadingLine1}</div>
+                  <div>{COMPANY.arHeadingLine2}</div>
+                </div>
+                <div className="header-invoice-heading mt-1 font-semibold text-rose-700">
+                  {COMPANY.nameEn}
+                </div>
+
+                <p className="header-invoice-address text-xs mt-1 font-medium text-slate-800">
+                  {COMPANY.phones}
+                </p>
+                <p className="header-invoice-address text-xs text-slate-700">
+                  {COMPANY.email}
+                </p>
+              </div>
+            </div>
 
 
             {/* Red ribbon */}
@@ -504,57 +504,57 @@ const getPincode = (p, side, shipment, pick) =>
           </div>
 
           {/* ======= PARTIES ======= */}
-           <div className="grid grid-cols-1 gap-6 border-b border-slate-200 px-3 py-3 sm:grid-cols-2">
-      {/* SHIPPER */}
-      <div>
-        <div className="invoice-parties-header text-xs font-medium uppercase tracking-wide text-slate-500">
-          Shipper
-        </div>
-        <div className="mt-1 invoice-parties-content">
-          <Field label="Name :">{getName(senderParty, "sender", shipment)}</Field>
-          <Field label="Address :">
-            <span className="whitespace-pre-wrap text-slate-700">
-              {getAddress(senderParty, "sender", shipment, pick)}
-            </span>
-          </Field>
-          <Field label="PIN Code :">
-            <span className="text-slate-700">
-              {getPincode(senderParty, "sender", shipment, pick)}
-            </span>
-          </Field>
-          <Field label="Phone :">
-            <span className="text-slate-700">
-              {getPhone(senderParty, "sender", shipment, pick)}
-            </span>
-          </Field>
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-6 border-b border-slate-200 px-3 py-3 sm:grid-cols-2">
+            {/* SHIPPER */}
+            <div>
+              <div className="invoice-parties-header text-xs font-medium uppercase tracking-wide text-slate-500">
+                Shipper
+              </div>
+              <div className="mt-1 invoice-parties-content">
+                <Field label="Name :">{getName(senderParty, "sender", shipment)}</Field>
+                <Field label="Address :">
+                  <span className="whitespace-pre-wrap text-slate-700">
+                    {getAddress(senderParty, "sender", shipment, pick)}
+                  </span>
+                </Field>
+                <Field label="PIN Code :">
+                  <span className="text-slate-700">
+                    {getPincode(senderParty, "sender", shipment, pick)}
+                  </span>
+                </Field>
+                <Field label="Phone :">
+                  <span className="text-slate-700">
+                    {getPhone(senderParty, "sender", shipment, pick)}
+                  </span>
+                </Field>
+              </div>
+            </div>
 
-      {/* CONSIGNEE */}
-      <div>
-        <div className="invoice-parties-header text-xs font-medium tracking-wide text-slate-500">
-          Consignee
-        </div>
-        <div className="mt-1 invoice-parties-content">
-          <Field label="Name :">{getName(receiverParty, "receiver", shipment)}</Field>
-          <Field label="Address :">
-            <span className="whitespace-pre-wrap text-slate-700">
-              {getAddress(receiverParty, "receiver", shipment, pick)}
-            </span>
-          </Field>
-          <Field label="PIN Code :">
-            <span className="text-slate-700">
-              {getPincode(receiverParty, "receiver", shipment, pick)}
-            </span>
-          </Field>
-          <Field label="Phone">
-            <span className="text-slate-700">
-              {getPhone(receiverParty, "receiver", shipment, pick)}
-            </span>
-          </Field>
-        </div>
-      </div>
-    </div>
+            {/* CONSIGNEE */}
+            <div>
+              <div className="invoice-parties-header text-xs font-medium tracking-wide text-slate-500">
+                Consignee
+              </div>
+              <div className="mt-1 invoice-parties-content">
+                <Field label="Name :">{getName(receiverParty, "receiver", shipment)}</Field>
+                <Field label="Address :">
+                  <span className="whitespace-pre-wrap text-slate-700">
+                    {getAddress(receiverParty, "receiver", shipment, pick)}
+                  </span>
+                </Field>
+                <Field label="PIN Code :">
+                  <span className="text-slate-700">
+                    {getPincode(receiverParty, "receiver", shipment, pick)}
+                  </span>
+                </Field>
+                <Field label="Phone">
+                  <span className="text-slate-700">
+                    {getPhone(receiverParty, "receiver", shipment, pick)}
+                  </span>
+                </Field>
+              </div>
+            </div>
+          </div>
 
           {/* ======= ITEMS (two columns like your PDF) ======= */}
           <div className="px-1 py-2">
@@ -700,7 +700,7 @@ const getPincode = (p, side, shipment, pick) =>
               <div>TERMS AND CONDITIONS </div>
               <div>Thank you for your business.</div>
             </div>
-            
+
             <div className="invoice-terms-conditions-content">
               <h2>Accept the goods only after checking and confirming them on delivery.</h2>
               <p lassName="mt-1">
@@ -714,7 +714,7 @@ const getPincode = (p, side, shipment, pick) =>
               <p lassName="mt-1">കമ്പനി നിയമങ്ങൾ പ്രകാരം തീർപ്പാക്കപ്പെടും. കമ്പനി പ്രകൃതി ദുരന്തത്തിനും കസ്റ്റംസ് ക്ലിയറൻസിലെ വൈകിപ്പിനും ഉത്തരവാദിയാവില്ല.</p>
               <p lassName="mt-1">हिन्दी में समय समय पर कम्पनी नियमों के अनुसार भुगतान किया जायेगा। कम्पनी प्राकृतिक आपदा तथा कस्टम्स क्लियरेंस में देरी के लिए जिम्मेदार नहीं होगी। कम्पनी किसी भी नुकसान या हानि के लिए जिम्मेदार नहीं होगी जो असावधानी या अनुचित उपयोग के कारण हुआ हो। कस्टम्स द्वारा लगाए गए किसी भी अतिरिक्त शुल्क या दंड का भुगतान ग्राहक द्वारा किया जाएगा।</p>
               <h2 lassName="mt-1">I AGREE TO THE ABOVE TERMS & CONDITIONS
-أوافق على الشروط والأحكام المذكورة أعلاه</h2>
+                أوافق على الشروط والأحكام المذكورة أعلاه</h2>
             </div>
 
             <div className="flex justify-around py-2 invoice-terms-conditions-footer">

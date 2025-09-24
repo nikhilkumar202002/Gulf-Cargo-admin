@@ -19,12 +19,19 @@ export default function InvoiceModal({ open, onClose, shipment }) {
               ✕ Close
             </button>
             <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={() => window.print()}
+             <button
+                onClick={() => {
+                  if (shipment?.booking_no) {
+                    const safe = String(shipment.booking_no).replace(/[\\/:*?"<>|]/g, "-");
+                    document.title = safe; // this makes the default filename = bill no
+                  }
+                  window.print();
+                }}
                 className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700"
               >
                 Print / Save PDF
               </button>
+
             </div>
           </div>
 

@@ -183,7 +183,7 @@ export default function ViewCargo() {
                 <div className="mt-2 space-y-1 text-sm text-gray-700">
                   <p className="flex items-center gap-1">
                     <IoLocationSharp className="text-red-500" />
-                    {cargo?.sender?.address ?? cargo?.sender_address ?? "—"}
+                    {cargo?.sender?.address ?? cargo?.address ?? "—"}
                   </p>
                   <p className="flex items-center gap-1">
                     <MdAddIcCall className="text-emerald-600" />
@@ -198,7 +198,7 @@ export default function ViewCargo() {
                 <div className="mt-2 space-y-1 text-sm text-gray-700">
                   <p className="flex items-center gap-1">
                     <IoLocationSharp className="text-red-500" />
-                    {cargo?.receiver?.address ?? cargo?.receiver_address ?? "—"}
+                    {cargo?.receiver?.address ?? cargo?.address ?? "—"}
                   </p>
                   <p className="flex items-center gap-1">
                     <MdAddIcCall className="text-emerald-600" />

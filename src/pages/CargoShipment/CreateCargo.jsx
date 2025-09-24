@@ -7,8 +7,9 @@ import React, {
   useCallback,
   startTransition,
 } from "react";
+import ReactDOM from "react-dom";
 import { useSelector } from "react-redux";
-
+import Autosuggest from "react-autosuggest";
 import { createCargo, normalizeCargoToInvoice } from "../../api/createCargoApi";
 import { getActiveShipmentMethods } from "../../api/shipmentMethodApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
@@ -26,6 +27,7 @@ import { MdAddIcCall } from "react-icons/md";
 import { BsFillBoxSeamFill } from "react-icons/bs";
 import { GoPlus } from "react-icons/go";
 import { Link } from "react-router-dom";
+import { FiPlus } from "react-icons/fi";
 
 import "./ShipmentStyles.css";
 
@@ -59,7 +61,6 @@ const labelOf = (o) =>
   o?.email ??
   "-";
 
-/** Map assorted shapes to a numeric customer_type_id (1=Sender, 2=Receiver) */
 const typeIdOf = (o) => {
   // direct numeric or numeric string
   const raw =
@@ -79,7 +80,7 @@ const typeIdOf = (o) => {
   }
   // object like { id: 1, name: 'Sender' }
   const obj = (o?.customer_type && typeof o.customer_type === "object" ? o.customer_type : null) ||
-              (o?.type && typeof o.type === "object" ? o.type : null);
+    (o?.type && typeof o.type === "object" ? o.type : null);
   if (obj) {
     const n = Number(obj.id ?? obj.value ?? obj.code);
     if (!Number.isNaN(n)) return n;
@@ -123,7 +124,7 @@ const buildInitialForm = (branchId = "") => ({
   receiverPhone: "",
   shippingMethodId: "",
   paymentMethodId: "",
-  statusId: "",
+  statusId: 13,
   date: today(),
   time: "09:36",
   collectedByRoleId: "",
@@ -190,6 +191,44 @@ async function fetchAllPartiesByType(numericTypeId) {
   return out;
 }
 
+const options = [
+  "Dates",
+  "Almonds",
+  "Cashew Nuts",
+  "Walnuts",
+  "Pistachios",
+  "Raisins",
+  "Dry Figs",
+  "Peanuts",
+  "Chocolates",
+  "Biscuits",
+  "Rice Bags",
+  "Wheat Flour",
+  "Sugar",
+  "Cooking Oil",
+  "Tea Powder",
+  "Coffee Powder",
+  "Spices (Cardamom, Cloves, Cinnamon)",
+  "Soap",
+  "Detergent Powder",
+  "Shampoo Bottles",
+  "Toothpaste",
+  "Perfume Bottles",
+  "Clothing",
+  "Shoes",
+  "Bags",
+  "Blankets",
+  "Towels",
+  "Utensils",
+  "Cookware",
+  "Electronics (Mobile Phones, Tablets)",
+  "Small Appliances (Mixers, Irons)",
+  "Toys",
+  "Stationery",
+  "Books",
+];
+
+
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
 
@@ -205,31 +244,62 @@ export default function CreateCargo() {
 
   // user/profile
   const [userProfile, setUserProfile] = useState(null);
-
+  const [x, setX] = useState('');
+  const [s, setS] = useState([]);
+  const [y, setY] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   // UI
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState({ text: "", variant: "" });
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceShipment, setInvoiceShipment] = useState(null);
 
+  const [boxes, setBoxes] = useState([{ items: [{ name: "", pieces: 1, unitPrice: 0, weight: 0 }] }]);
+
   // toast
   const [toast, setToast] = useState({ visible: false, text: "", variant: "success" });
   const toastTimer = useRef(null);
+
   const showToast = useCallback((text, variant = "success", duration = 3500) => {
-    try { clearTimeout(toastTimer.current); } catch {}
+    try { clearTimeout(toastTimer.current); } catch { }
     setToast({ visible: true, text, variant });
     toastTimer.current = setTimeout(() => {
       setToast((t) => ({ ...t, visible: false }));
     }, duration);
   }, []);
   const hideToast = useCallback(() => {
-    try { clearTimeout(toastTimer.current); } catch {}
+    try { clearTimeout(toastTimer.current); } catch { }
     setToast((t) => ({ ...t, visible: false }));
   }, []);
 
   // form & items
   const [form, setForm] = useState(buildInitialForm());
   const [items, setItems] = useState([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
+
+
+  const onChange = (event, { newValue }) => {
+    setX(newValue);
+  };
+
+  const getSuggestions = (value) => {
+    return options.filter((item) =>
+      item.toLowerCase().includes(value.toLowerCase())
+    );
+  };
+
+  const renderSuggestion = (text) => {
+    return (
+      <div
+        className={`px-4 py-2 cursor-pointer ${selectedIndex === options.indexOf(text) ? 'bg-blue-200' : ''}`}
+        onClick={() => {
+          setX(text); // Update the input value when the suggestion is clicked
+          setY(false); // Hide suggestions
+        }}
+      >
+        {text}
+      </div>
+    );
+  };
 
   // totals
   const subtotal = useMemo(() => {
@@ -452,6 +522,25 @@ export default function CreateCargo() {
     setCollectedByOptions([]);
   }, [userProfile, tokenBranchId]);
 
+  const addBox = useCallback(() => {
+    setBoxes((prevBoxes) => [
+      ...prevBoxes,
+      { items: [{ name: "", pieces: 1, unitPrice: 0, weight: 0 }] }
+    ]);
+  }, []);
+
+  const addItemToBox = (boxIndex) => {
+    const newBoxes = [...boxes];
+    newBoxes[boxIndex].items.push({ name: "", pieces: 1, unitPrice: 0, weight: 0 });
+    setBoxes(newBoxes);
+  };
+
+  const removeItemFromBox = (boxIndex, itemIndex) => {
+    const newBoxes = [...boxes];
+    newBoxes[boxIndex].items = newBoxes[boxIndex].items.filter((_, index) => index !== itemIndex);
+    setBoxes(newBoxes);
+  };
+
   const submit = useCallback(async (e) => {
     e.preventDefault();
 
@@ -585,11 +674,10 @@ export default function CreateCargo() {
         }}
       >
         <div
-          className={`min-w-[260px] max-w-[360px] rounded-xl border px-4 py-3 shadow ${
-            toast.variant === "error"
+          className={`min-w-[260px] max-w-[360px] rounded-xl border px-4 py-3 shadow ${toast.variant === "error"
               ? "border-rose-200 bg-rose-50 text-rose-800"
               : "border-emerald-200 bg-emerald-50 text-emerald-800"
-          }`}
+            }`}
         >
           <div className="flex items-start gap-3">
             <div className="flex-1 text-sm">{toast.text}</div>
@@ -712,7 +800,7 @@ export default function CreateCargo() {
                       ))}
                     </select>
                     <span className="add-customer border rounded-lg px-3 py-2">
-                      <Link to="/customers/create"><GoPlus/></Link>
+                      <Link to="/customers/create"><GoPlus /></Link>
                     </span>
                   </div>
                 </div>
@@ -747,7 +835,7 @@ export default function CreateCargo() {
                       ))}
                     </select>
                     <span className="add-customer border rounded-lg px-3 py-2">
-                      <Link to="/customers/create"><GoPlus/></Link>
+                      <Link to="/customers/create"><GoPlus /></Link>
                     </span>
                   </div>
                 </div>
@@ -805,7 +893,7 @@ export default function CreateCargo() {
                   className="w-full border rounded-lg px-3 py-2"
                   value={form.statusId}
                   onChange={(e) => setForm((f) => ({ ...f, statusId: e.target.value }))}
-                  disabled={loading}
+                  disabled
                 >
                   <option value="">Select</option>
                   {statuses.map((s) => (
@@ -886,135 +974,152 @@ export default function CreateCargo() {
             </div>
 
             {/* Items */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Items</h3>
-                <div className="flex gap-2">
+            <div className="cargo-add-box-btn">
+              <button
+                type="button"
+                onClick={addBox}
+              >
+                <FiPlus/>Add Box
+              </button>
+            </div>
+
+            {/* Render Boxes with Items */}
+            {boxes.map((box, boxIndex) => (
+              <div key={boxIndex} className="border p-4 rounded-lg mb-4">
+                
+                <h3 className="text-lg font-semibold text-primary-color mb-4">Box {boxIndex + 1}</h3>
+
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr className="text-left text-gray-600">
+                        <th className="px-3 py-2 w-12 text-center">Slno</th>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2 w-32 text-right">Pieces</th>
+                        <th className="px-3 py-2 w-36 text-right">Unit Price</th>
+                        <th className="px-3 py-2 w-32 text-right">Weight (kg)</th>
+                        <th className="px-3 py-2 w-36 text-right">Total Price</th>
+                        <th className="px-3 py-2 w-28 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {box.items.map((it, itemIndex) => (
+                        <tr key={itemIndex} className={itemIndex % 2 ? "bg-white" : "bg-gray-50"}>
+                          <td className="px-3 py-2 text-center text-gray-500">{itemIndex + 1}</td>
+                          <td className="px-3 py-2 relative overflow-visible">
+
+<Autosuggest
+  inputProps={{
+    value: x,
+    onChange,
+    onFocus: () => setY(true),
+    onBlur: () => setY(false),
+    className: "w-full px-3 py-2 border rounded-md",
+  }}
+  suggestions={s}
+  onSuggestionsFetchRequested={({ value }) => {
+    const filteredSuggestions = getSuggestions(value);
+    setS(filteredSuggestions);
+    setSelectedIndex(0);
+  }}
+  onSuggestionsClearRequested={() => setS([])}
+  renderSuggestion={renderSuggestion}
+  getSuggestionValue={(a) => a}
+  alwaysRenderSuggestions={y}
+  renderSuggestionsContainer={({ containerProps, children }) => {
+    // Find the currently focused input
+    const input = document.activeElement;
+    if (!input || input.tagName !== "INPUT") return null;
+
+    const rect = input.getBoundingClientRect();
+
+    return ReactDOM.createPortal(
+      <div
+        {...containerProps}
+        className="absolute bg-white border mt-1 rounded-md shadow-lg z-[9999] max-h-60 overflow-auto"
+        style={{
+          top: rect.bottom + window.scrollY,
+          left: rect.left + window.scrollX,
+          width: rect.width,
+        }}
+      >
+        {children}
+      </div>,
+      document.body
+    );
+  }}
+/>
+
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              className="w-full border rounded-lg px-3 py-2 text-right"
+                              placeholder="0"
+                              value={it.pieces}
+                              onChange={(e) =>
+                                setItem(boxIndex, itemIndex, "pieces", Number.parseInt(e.target.value || 0, 10) || 0)
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="w-full border rounded-lg px-3 py-2 text-right"
+                              placeholder="0.00"
+                              value={it.unitPrice}
+                              onChange={(e) =>
+                                setItem(boxIndex, itemIndex, "unitPrice", Number.parseFloat(e.target.value || 0) || 0)
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              className={`w-full border rounded-lg px-3 py-2 text-right ${Number(it.weight || 0) <= 0 ? "border-rose-300" : ""}`}
+                              placeholder="0.000"
+                              value={it.weight}
+                              onChange={(e) =>
+                                setItem(boxIndex, itemIndex, "weight", Number.parseFloat(e.target.value || 0) || 0)
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium">
+                            {(Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => removeItemFromBox(boxIndex, itemIndex)}
+                                className="px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-end mt-4">
                   <button
                     type="button"
-                    onClick={() => setItems((p) => [...p, { name: "", pieces: 1, unitPrice: 0, weight: 0 }])}
-                    className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+                    onClick={() => addItemToBox(boxIndex)}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
                   >
-                    + Add Row
+                    Add Item
                   </button>
                 </div>
               </div>
-
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="min-w-[780px] w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr className="text-left text-gray-600">
-                      <th className="px-3 py-2 w-12 text-center">Slno</th>
-                      <th className="px-3 py-2">Name</th>
-                      <th className="px-3 py-2 w-32 text-right">Pieces</th>
-                      <th className="px-3 py-2 w-36 text-right">Unit Price</th>
-                      <th className="px-3 py-2 w-32 text-right">Weight (kg)</th>
-                      <th className="px-3 py-2 w-36 text-right">Total Price</th>
-                      <th className="px-3 py-2 w-28 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((it, i) => (
-                      <tr key={i} className={i % 2 ? "bg-white" : "bg-gray-50"}>
-                        <td className="px-3 py-2 text-center text-gray-500">{i + 1}</td>
-                        <td className="px-3 py-2">
-                          <input
-                            className={`w-full border rounded-lg px-3 py-2 ${!it.name?.trim() ? "border-rose-300" : ""}`}
-                            placeholder="Item name"
-                            value={it.name}
-                            onChange={(e) =>
-                              setItems((prev) => {
-                                const next = [...prev];
-                                next[i].name = e.target.value;
-                                return next;
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            className="w-full border rounded-lg px-3 py-2 text-right"
-                            placeholder="0"
-                            value={it.pieces}
-                            onChange={(e) =>
-                              setItems((prev) => {
-                                const next = [...prev];
-                                next[i].pieces = Number.parseInt(e.target.value || 0, 10) || 0;
-                                return next;
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            className="w-full border rounded-lg px-3 py-2 text-right"
-                            placeholder="0.00"
-                            value={it.unitPrice}
-                            onChange={(e) =>
-                              setItems((prev) => {
-                                const next = [...prev];
-                                next[i].unitPrice = Number.parseFloat(e.target.value || 0) || 0;
-                                return next;
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.001"
-                            className={`w-full border rounded-lg px-3 py-2 text-right ${Number(it.weight || 0) <= 0 ? "border-rose-300" : ""}`}
-                            placeholder="0.000"
-                            value={it.weight}
-                            onChange={(e) =>
-                              setItems((prev) => {
-                                const next = [...prev];
-                                next[i].weight = Number.parseFloat(e.target.value || 0) || 0;
-                                return next;
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium">
-                          {(Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setItems((p) => p.filter((_, idx) => idx !== i))
-                              }
-                              className="px-2 py-1 rounded bg-red-500 text-white hover:bg-red-600"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-
-                  <tfoot className="bg-gray-100">
-                    <tr>
-                      <td className="px-3 py-2 text-right text-gray-500" colSpan={5}>
-                        Subtotal:
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold">
-                        {subtotal.toFixed(2)}
-                      </td>
-                      <td className="px-3 py-2" />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
+            ))}
 
             {/* Controls */}
             <div className="flex items-center justify-end gap-3">

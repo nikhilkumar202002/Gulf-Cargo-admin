@@ -44,3 +44,29 @@
     border: 1px solid #d4d4d4;
     cursor: pointer;
 }
+input.react-autosuggest__input {
+    padding: 10px 12px;
+    border: 1px solid #e7e7e7;
+    border-radius: 5px;
+}
+.cargo-add-box-btn{
+    position: absolute;
+    top: 45%;
+    right: 0;
+    button{
+        padding: 10px 20px;
+        background-color: var(--secondary-color);
+        border-radius: 10px;
+        color: white;
+        font-family: "Inter";
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        font-weight: 600;
+        box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;
+    }
+    button:hover{
+        background-color: var(--primary-color);
+        transition: 400ms;
+    }
+}
