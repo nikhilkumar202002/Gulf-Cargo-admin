@@ -1,172 +1,207 @@
+// createCargoApi.js
+// API helpers for cargos: create, read, update, delete, normalize.
+// Exports both named and default for compatibility with different import styles.
+
 import axiosInstance from "./axiosInstance";
 
-/* ---------- error helper ---------- */
-function parseAxiosError(err) {
+/* ---------- small helpers ---------- */
+const safeString = (v, def = "") => (v === null || v === undefined ? def : String(v));
+const safeNumStr = (v, decimals = 2) => {
+  const n = Number(String(v ?? 0).replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) ? n.toFixed(decimals) : Number(0).toFixed(decimals);
+};
+const safeWeightStr = (v) => {
+  const n = Number(String(v ?? 0).replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) ? n.toFixed(3) : "0.000";
+};
+
+function buildErrorFromAxios(err) {
   const status = err?.response?.status;
   const data = err?.response?.data;
-  const serverMsg = data?.message || data?.error;
-  const fieldErrors = data?.errors && typeof data.errors === "object" ? data.errors : null;
+  const serverMsg = data?.message || data?.msg || data?.error || null;
+  let message = `Request failed${status ? ` (${status})` : ""}`;
+  if (serverMsg) message += ` - ${serverMsg}`;
 
-  let msg = serverMsg || err?.message || `Request failed${status ? ` (${status})` : ""}`;
-  if (fieldErrors) {
-    const flat = Object.entries(fieldErrors).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
-    msg += ` — ${flat.join(" | ")}`;
-  }
-  const e = new Error(msg);
-  e.status = status;
-  e.details = data;
-  throw e;
-}
-
-const qs = (obj = {}) =>
-  new URLSearchParams(
-    Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && String(v) !== "")
-  ).toString();
-
-/* ---------- POST /cargo ---------- */
-export async function createCargo(payload) {
-  try {
-    const { data } = await axiosInstance.post("/cargo", payload, { timeout: 15000 });
-    // API returns { success: true, cargo: {...} }
-    if (data?.success && data?.cargo) {
-      return { data: data.cargo }; // normalize shape for downstream use
-    }
-    return data?.data ?? data ?? {};
-  } catch (err) {
-    parseAxiosError(err);
-  }
-}
-
-/* ---------- GET /cargos (list) ---------- */
-export async function getCargos(params = {}) {
-  try {
-    const query = qs({
-      from_date: params.from_date ?? params.fromDate,
-      to_date: params.to_date ?? params.toDate,
-      page: params.page,
-      per_page: params.per_page ?? params.perPage ?? params.limit,
-      status_id: params.status_id ?? params.statusId,
-      search: params.search,
-      // hide cargos already placed in a shipment (if your API supports it)
-      is_in_cargo_shipment: params.is_in_cargo_shipment ?? params.isInCargoShipment,
-    });
-    const url = `/cargos${query ? `?${query}` : ""}`;
-    const { data } = await axiosInstance.get(url, { timeout: 20000 });
-    return data?.data ?? data ?? [];
-  } catch (err) {
-    parseAxiosError(err);
-  }
-}
-
-/** Normalize { success, cargo } | cargo into an invoice-friendly object */
-export function normalizeCargoToInvoice(raw) {
-  const src = raw?.data ?? raw?.cargo ?? raw ?? {};
-  const num = (v, d = 0) => (v === null || v === undefined || v === "" ? d : Number(v));
-
-  const items = Array.isArray(src.items)
-    ? src.items.map((it, i) => ({
-        slno: it.slno ?? String(i + 1),
-        description: it.description ?? it.name ?? "",
-        name: it.name ?? it.description ?? "",
-        qty: num(it.qty ?? it.quantity ?? it.piece_no ?? it.pieces, 0),
-        unit_price: num(it.unit_price ?? it.unitPrice ?? it.price, 0),
-        total_price: num(it.total_price ?? it.amount ?? it.total, 0),
-        weight: it.weight ?? "",
-      }))
-    : [];
-
-  const shipment = {
-    id: src.id,
-    invoice_no: src.booking_no,
-    booking_no: raw.booking_no || raw.booking_number || raw.id || "",
-    track_code: src.lrl_tracking_code ?? src.tracking_code ?? src.track_code ?? "",
-    awb_number: src.booking_no ?? "",
-    method: src.shipping_method ?? src.method ?? src.shipment_method ?? "",
-    status: src.status?.name ?? src.status ?? "",
-    // 🔧 FIX: robust branch mapping
-    branch:
-      src.branch_name ??
-      src.branch?.name ??
-      src.branch ??
-      src.branch_label ??
-      src.origin_branch_name ??
-      src.origin_branch ??
-      "",
-    date: src.date ?? "",
-    time: src.time ?? "",
-    sender_id: src.sender_id ?? null,
-    receiver_id: src.receiver_id ?? null,
-    sender: src.sender ?? src.sender_name ?? src.shipper_name ?? "",
-    receiver: src.receiver ?? src.receiver_name ?? src.consignee_name ?? "",
-    payment_method: src.payment_method ?? "",
-    delivery_type: src.delivery_type ?? "",
-    remarks: src.special_remarks ?? src.remarks ?? "",
-    items,
-    subtotal: num(src.total_cost),
-    bill_charges: num(src.bill_charges),
-    tax_percentage: num(src.vat_percentage),
-    tax: num(src.vat_cost),
-    total_weight: src.total_weight ?? "",
-    grand_total: num(src.net_total),
-  };
-
-  if (shipment.date || shipment.time) {
-    const t = shipment.time || "00:00:00";
-    shipment.created_at = `${shipment.date}T${t}`;
-  }
-  return shipment;
-}
-
-/* ---------- GET /cargo/:id ---------- */
-export async function getCargoById(id) {
-  try {
-    const { data } = await axiosInstance.get(`/cargo/${id}`, { timeout: 15000 });
-    return data?.cargo ?? data?.data ?? data ?? {};
-  } catch (err) {
-    parseAxiosError(err);
-  }
-}
-
-/* ---------- PATCH /cargo/:id ---------- */
-export async function updateCargo(id, payload, { retryWithoutItems = true } = {}) {
-  // Drop only undefined (keep null/0/"")
-  const compact = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined));
-
-  // helpful logs when debugging 422
-  // eslint-disable-next-line no-console
-  console.debug("PATCH /cargo/%s payload:", id, compact);
-
-  try {
-    const { data } = await axiosInstance.patch(`/cargo/${id}`, compact, { timeout: 20000 });
-    return data?.cargo ?? data?.data ?? data ?? {};
-  } catch (err) {
-    const status = err?.response?.status;
-
-    // If the API rejects 'items' on this endpoint, try once without items.
-    if (status === 422 && retryWithoutItems && "items" in compact && Array.isArray(compact.items)) {
-      // eslint-disable-next-line no-console
-      console.warn("422 on PATCH /cargo/%s — retrying without 'items'…", id, err?.response?.data);
-      const { items, ...rest } = compact;
+  if (data && typeof data === "object") {
+    const errs = data.errors ?? data;
+    if (errs && typeof errs === "object") {
       try {
-        const { data } = await axiosInstance.patch(`/cargo/${id}`, rest, { timeout: 20000 });
-        return data?.cargo ?? data?.data ?? data ?? {};
-      } catch (err2) {
-        parseAxiosError(err2);
+        const flat = Object.entries(errs)
+          .map(([k, v]) => (Array.isArray(v) ? `${k}: ${v.join(", ")}` : `${k}: ${JSON.stringify(v)}`))
+          .slice(0, 10)
+          .join(" | ");
+        if (flat) message += ` — ${flat}`;
+      } catch (e) {
+        /* ignore */
       }
     }
+  }
 
-    // surface server validation (field) errors
-    parseAxiosError(err);
+  const out = new Error(message);
+  out.status = status;
+  out.response = err?.response;
+  return out;
+}
+
+/* ---------- flatten grouped boxes -> items ---------- */
+function flattenBoxesToItems(boxesObj = {}) {
+  if (!boxesObj || typeof boxesObj !== "object") return [];
+  const items = [];
+  Object.keys(boxesObj)
+    .sort((a, b) => Number(a) - Number(b))
+    .forEach((boxKey) => {
+      const arr = Array.isArray(boxesObj[boxKey]?.items) ? boxesObj[boxKey].items : [];
+      arr.forEach((it, i) => {
+        const pieces = Number(it.piece_no ?? it.pieces ?? it.qty ?? 0) || 0;
+        const unit = Number(it.unit_price ?? it.unitPrice ?? it.price ?? 0) || 0;
+        const weight = Number(it.weight ?? 0) || 0;
+        items.push({
+          name: safeString(it.name),
+          piece_no: String(pieces),
+          qty: String(pieces),
+          pieces: String(pieces),
+          unit_price: safeNumStr(unit, 2),
+          unitPrice: safeNumStr(unit, 2),
+          price: safeNumStr(unit, 2),
+          total_price: safeNumStr(pieces * unit, 2),
+          total: safeNumStr(pieces * unit, 2),
+          amount: safeNumStr(pieces * unit, 2),
+          weight: safeWeightStr(weight),
+          box_number: safeString(it.box_number ?? boxKey),
+          slno: safeString(it.slno ?? i + 1),
+        });
+      });
+    });
+  return items;
+}
+
+/* ---------- build request body ---------- */
+function buildRequestBody(payload = {}) {
+  const body = { ...payload };
+
+  if (payload.boxes && Object.keys(payload.boxes).length > 0) {
+    body.items = flattenBoxesToItems(payload.boxes);
+  }
+
+  if (typeof body.total_cost !== "undefined") body.total_cost = safeNumStr(body.total_cost, 2);
+  if (typeof body.bill_charges !== "undefined") body.bill_charges = safeNumStr(body.bill_charges, 2);
+  if (typeof body.vat_percentage !== "undefined") body.vat_percentage = safeNumStr(body.vat_percentage, 2);
+  if (typeof body.vat_cost !== "undefined") body.vat_cost = safeNumStr(body.vat_cost, 2);
+  if (typeof body.net_total !== "undefined") body.net_total = safeNumStr(body.net_total, 2);
+  if (typeof body.total_weight !== "undefined") body.total_weight = safeWeightStr(body.total_weight);
+
+  Object.keys(body).forEach((k) => body[k] === undefined && delete body[k]);
+  return body;
+}
+
+/* ---------- CRUD API functions ---------- */
+
+/**
+ * createCargo(payload)
+ * - Accepts payload (can include boxes grouped or a flat items array).
+ * - Returns server response data or throws Error with details.
+ */
+async function createCargo(payload = {}) {
+  const body = buildRequestBody(payload);
+  // diagnostic log (remove in production if desired)
+  // eslint-disable-next-line no-console
+  console.info("[createCargo] payload:", JSON.stringify(body, null, 2));
+
+  const endpoints = ["/cargo", "/cargos", "/public/api/cargo", "/public/api/cargos"];
+  let lastErr = null;
+  for (const ep of endpoints) {
+    try {
+      // eslint-disable-next-line no-console
+      console.info(`[createCargo] POST ${ep}`);
+      const { data } = await axiosInstance.post(ep, body, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 20000,
+      });
+      return data?.data ?? data ?? {};
+    } catch (err) {
+      lastErr = err;
+      const status = err?.response?.status;
+      if (status === 422) {
+        // eslint-disable-next-line no-console
+        console.error("[createCargo] 422:", err.response?.data);
+        throw buildErrorFromAxios(err);
+      }
+      // eslint-disable-next-line no-console
+      console.warn(`[createCargo] POST ${ep} failed:`, err?.message || err);
+    }
+  }
+  if (lastErr) throw buildErrorFromAxios(lastErr);
+  throw new Error("createCargo failed (no response)");
+}
+
+/**
+ * getCargoById(id)
+ * - GET /cargos/:id (tries a couple of likely endpoints)
+ */
+async function getCargoById(id) {
+  if (!id) throw new Error("getCargoById requires id");
+  const endpoints = [`/cargos/${id}`, `/cargo/${id}`, `/public/api/cargo/${id}`, `/public/api/cargos/${id}`];
+  let lastErr = null;
+  for (const ep of endpoints) {
+    try {
+      // eslint-disable-next-line no-console
+      console.info(`[getCargoById] GET ${ep}`);
+      const { data } = await axiosInstance.get(ep, { timeout: 15000 });
+      return data?.data ?? data ?? {};
+    } catch (err) {
+      lastErr = err;
+      // try next
+    }
+  }
+  if (lastErr) throw buildErrorFromAxios(lastErr);
+  throw new Error("getCargoById failed (no response)");
+}
+
+/**
+ * listCargos(params) - GET /cargos
+ */
+async function listCargos(params = {}) {
+  try {
+    const { data } = await axiosInstance.get("/cargos", { params, timeout: 20000 });
+    return data?.data ?? data ?? {};
+  } catch (err) {
+    throw buildErrorFromAxios(err);
   }
 }
 
-/* ---------- bulk status ---------- */
-export async function bulkUpdateCargoStatus({ status_id, cargo_ids }) {
-  const payload = {
-    status_id: Number(status_id),
-    cargo_ids: Array.isArray(cargo_ids) ? cargo_ids.map(Number) : [],
-  };
+/**
+ * updateCargo(id, body) - PATCH /cargos/:id
+ */
+async function updateCargo(id, body = {}) {
+  if (!id) throw new Error("updateCargo requires id");
+  try {
+    const { data } = await axiosInstance.patch(`/cargos/${id}`, body, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 20000,
+    });
+    return data?.data ?? data ?? {};
+  } catch (err) {
+    throw buildErrorFromAxios(err);
+  }
+}
 
+/**
+ * deleteCargo(id) - DELETE /cargos/:id
+ */
+async function deleteCargo(id) {
+  if (!id) throw new Error("deleteCargo requires id");
+  try {
+    const { data } = await axiosInstance.delete(`/cargos/${id}`, { timeout: 15000 });
+    return data?.data ?? data ?? {};
+  } catch (err) {
+    throw buildErrorFromAxios(err);
+  }
+}
+
+/**
+ * updateCargoStatus(payload) - PATCH /cargos/status
+ */
+async function updateCargoStatus(payload = {}) {
   try {
     const { data } = await axiosInstance.patch("/cargos/status", payload, {
       headers: { "Content-Type": "application/json" },
@@ -174,11 +209,154 @@ export async function bulkUpdateCargoStatus({ status_id, cargo_ids }) {
     });
     return data?.data ?? data ?? {};
   } catch (err) {
-    // if your backend mounted the singular path instead:
-    // if (err?.response?.status === 404) {
-    //   const { data } = await axiosInstance.patch("/cargo/status", payload);
-    //   return data?.data ?? data ?? {};
-    // }
-    parseAxiosError(err);
+    throw buildErrorFromAxios(err);
   }
 }
+
+function normalizeCargoToInvoice(raw) {
+  const cargo = (raw && raw.cargo) ? raw.cargo : raw || {};
+
+  const normalized = {
+    id: cargo.id ?? cargo._id ?? cargo.cargo_id ?? null,
+    booking_no:
+      cargo.booking_no ??
+      cargo.invoice_no ??
+      cargo.bookingNo ??
+      cargo.booking_number ??
+      cargo.invoice_number ??
+      "",
+    track_code:
+      cargo.track_code ??
+      cargo.lrl_tracking_code ??
+      cargo.tracking_code ??
+      cargo.trackCode ??
+      "",
+    total_cost: cargo.total_cost ?? cargo.net_total ?? cargo.total ?? 0,
+    bill_charges: cargo.bill_charges ?? cargo.bill ?? 0,
+    vat_cost: cargo.vat_cost ?? cargo.tax ?? cargo.vat ?? 0,
+    net_total: cargo.net_total ?? cargo.total_cost ?? cargo.total ?? 0,
+    total_weight: cargo.total_weight ?? cargo.weight ?? cargo.gross_weight ?? 0,
+
+    // payment / delivery / branch
+    payment_method: cargo.payment_method ?? cargo.payment_method_id ?? cargo.paymentMethod ?? "",
+    delivery_type: cargo.delivery_type ?? cargo.delivery_type_id ?? cargo.deliveryType ?? "",
+    branch: cargo.branch ?? cargo.branch_name ?? cargo.branchLabel ?? "",
+
+    // Sender (many common aliases)
+    sender: cargo.sender ?? cargo.sender_name ?? cargo.shipper_name ?? cargo.shipper ?? null,
+    sender_id: cargo.sender_id ?? cargo.senderId ?? cargo.shipper_id ?? cargo.shipperId ?? null,
+    sender_party_id: cargo.sender_party_id ?? cargo.senderPartyId ?? null,
+    sender_address: cargo.sender_address ?? cargo.shipper_address ?? cargo.senderAddress ?? cargo.shipperAddress ?? "",
+    sender_phone: cargo.sender_phone ?? cargo.sender_mobile ?? cargo.shipper_phone ?? cargo.senderPhone ?? cargo.shipperPhone ?? "",
+    sender_email: cargo.sender_email ?? cargo.senderEmail ?? cargo.shipper_email ?? "",
+
+    // Receiver / Consignee (many aliases)
+    receiver:
+      cargo.receiver ??
+      cargo.consignee_name ??
+      cargo.receiver_name ??
+      cargo.consignee ??
+      cargo.consigneeName ??
+      null,
+    receiver_id: cargo.receiver_id ?? cargo.receiverId ?? cargo.consignee_id ?? cargo.consigneeId ?? null,
+    receiver_party_id: cargo.receiver_party_id ?? cargo.receiverPartyId ?? null,
+    receiver_address:
+      cargo.receiver_address ??
+      cargo.consignee_address ??
+      cargo.receiverAddress ??
+      cargo.consigneeAddress ??
+      "",
+    receiver_phone:
+      cargo.receiver_phone ??
+      cargo.consignee_phone ??
+      cargo.receiver_mobile ??
+      cargo.receiverPhone ??
+      cargo.consigneePhone ??
+      "",
+    receiver_email:
+      cargo.receiver_email ??
+      cargo.consignee_email ??
+      cargo.receiverEmail ??
+      cargo.consigneeEmail ??
+      "",
+    receiver_pincode:
+      cargo.receiver_pincode ??
+      cargo.consignee_pincode ??
+      cargo.receiver_pincode ??
+      cargo.postal_code ??
+      cargo.zip ??
+      cargo.postalCode ??
+      "",
+
+    // keep raw original for debugging if needed
+    _raw: cargo,
+  };
+
+  // convert boxes -> items (handles both object keyed boxes and array)
+  const items = [];
+  if (cargo.items && Array.isArray(cargo.items)) {
+    // API already returned items array
+    cargo.items.forEach(it => items.push(it));
+  } else if (cargo.boxes && typeof cargo.boxes === "object") {
+    Object.keys(cargo.boxes).forEach(boxNum => {
+      const box = cargo.boxes[boxNum];
+      const boxItems = (box && box.items) || [];
+      boxItems.forEach(it => {
+        // normalize field names used by InvoiceView
+        items.push({
+          description: it.name || it.description || "",
+          qty: it.piece_no ?? it.pieces ?? it.qty ?? "",
+          unit_price: it.unit_price ?? it.unitPrice ?? it.rate ?? "",
+          total_price: it.total_price ?? it.amount ?? "",
+          weight: it.weight ?? "",
+          box_number: it.box_number ?? boxNum,
+        });
+      });
+    });
+  } else if (cargo.boxes && Array.isArray(cargo.boxes)) {
+    cargo.boxes.forEach(box => {
+      (box.items || []).forEach(it => items.push({
+        description: it.name || it.description || "",
+        qty: it.piece_no ?? it.pieces ?? it.qty ?? "",
+        unit_price: it.unit_price ?? it.unitPrice ?? it.rate ?? "",
+        total_price: it.total_price ?? it.amount ?? "",
+        weight: it.weight ?? "",
+        box_number: it.box_number ?? "",
+      }));
+    });
+  }
+
+  normalized.items = items;
+
+  return normalized;
+}
+
+// bulk status update
+
+const bulkUpdateCargoStatus = updateCargoStatus;
+
+
+/* ---------- exports ---------- */
+const defaultExport = {
+  createCargo,
+  getCargoById,
+  listCargos,
+  updateCargo,
+  deleteCargo,
+  updateCargoStatus,
+  normalizeCargoToInvoice,
+  bulkUpdateCargoStatus
+};
+
+export default defaultExport;
+
+export {
+  createCargo,
+  getCargoById,
+  listCargos,
+  updateCargo,
+  deleteCargo,
+  updateCargoStatus,
+  normalizeCargoToInvoice,
+  bulkUpdateCargoStatus
+};

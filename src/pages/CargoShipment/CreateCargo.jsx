@@ -1,11 +1,10 @@
-// src/pages/CreateCargo.jsx
+// CreateCargo.jsx
 import React, {
   useEffect,
   useMemo,
   useRef,
   useState,
   useCallback,
-  startTransition,
 } from "react";
 import ReactDOM from "react-dom";
 import { useSelector } from "react-redux";
@@ -28,6 +27,8 @@ import { BsFillBoxSeamFill } from "react-icons/bs";
 import { GoPlus } from "react-icons/go";
 import { Link } from "react-router-dom";
 import { FiPlus } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
+
 
 import "./ShipmentStyles.css";
 
@@ -62,7 +63,6 @@ const labelOf = (o) =>
   "-";
 
 const typeIdOf = (o) => {
-  // direct numeric or numeric string
   const raw =
     o?.customer_type_id ??
     o?.customerTypeId ??
@@ -78,7 +78,6 @@ const typeIdOf = (o) => {
     if (/sender/i.test(raw)) return 1;
     if (/receiver/i.test(raw)) return 2;
   }
-  // object like { id: 1, name: 'Sender' }
   const obj = (o?.customer_type && typeof o.customer_type === "object" ? o.customer_type : null) ||
     (o?.type && typeof o.type === "object" ? o.type : null);
   if (obj) {
@@ -92,7 +91,6 @@ const typeIdOf = (o) => {
 
 const today = () => new Date().toISOString().split("T")[0];
 
-/** Robust branch id picker across common API shapes */
 const pickBranchId = (profileLike) => {
   const x = profileLike?.data ?? profileLike ?? null;
   const user = x?.user ?? x ?? null;
@@ -137,7 +135,7 @@ const buildInitialForm = (branchId = "") => ({
   vatPercentage: 0,
 });
 
-/* ---------------- Fetch ALL parties by numeric type (1 or 2) ---------------- */
+/* fetch helper for parties */
 async function fetchAllPartiesByType(numericTypeId) {
   const perPage = 500;
   const maxPages = 100;
@@ -145,33 +143,27 @@ async function fetchAllPartiesByType(numericTypeId) {
   const seen = new Set();
 
   for (let page = 1; page <= maxPages; page++) {
-    // Send multiple compatible keys: your backend can pick what it expects
     const params = {
       per_page: perPage,
       page,
       customer_type_id: numericTypeId,
       customer_type: numericTypeId,
       type_id: numericTypeId,
-      // status: 'Active', // uncomment if your API needs it
     };
     const res = await getParties(params);
     const batch = unwrapArray(res);
     if (!batch.length) break;
 
     for (const it of batch) {
-      // client-side safety filter in case API ignored the param
       if (typeIdOf(it) !== numericTypeId) continue;
-
       const key = String(idOf(it) ?? JSON.stringify(it));
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(it);
     }
 
-    // stop on short page
     if (batch.length < perPage) break;
 
-    // also honor meta/links if present
     const meta = res?.meta || res?.data?.meta;
     const cur = meta?.current_page ?? meta?.currentPage;
     const last = meta?.last_page ?? meta?.lastPage;
@@ -184,7 +176,6 @@ async function fetchAllPartiesByType(numericTypeId) {
     if (noNext) break;
   }
 
-  // stable alpha sort by label for better UX
   out.sort((a, b) =>
     (labelOf(a) || "").localeCompare(labelOf(b) || "", undefined, { sensitivity: "base" })
   );
@@ -228,6 +219,57 @@ const options = [
   "Books",
 ];
 
+function ItemAutosuggest({ value, onChange }) {
+  const [localValue, setLocalValue] = useState(value || "");
+  const [localSuggestions, setLocalSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setLocalValue(value || ""); }, [value]);
+
+  const fetchSuggestions = ({ value: q }) => {
+    const filtered = options.filter((item) => item.toLowerCase().includes((q || "").toLowerCase()));
+    setLocalSuggestions(filtered);
+  };
+
+  return (
+    <Autosuggest
+      inputProps={{
+        value: localValue,
+        onChange: (e, { newValue }) => { setLocalValue(newValue); onChange(newValue); },
+        onFocus: () => setOpen(true),
+        onBlur: () => setTimeout(() => setOpen(false), 150),
+        className: "w-full px-3 py-2 border rounded-md",
+      }}
+      suggestions={localSuggestions}
+      onSuggestionsFetchRequested={fetchSuggestions}
+      onSuggestionsClearRequested={() => setLocalSuggestions([])}
+      renderSuggestion={(text) => (
+        <div className="px-4 py-2 cursor-pointer">{text}</div>
+      )}
+      getSuggestionValue={(a) => a}
+      onSuggestionSelected={(e, { suggestionValue }) => { setLocalValue(suggestionValue); onChange(suggestionValue); }}
+      highlightFirstSuggestion={true}
+      renderSuggestionsContainer={({ containerProps, children }) => {
+        if (!open) return null;
+        const input = document.activeElement;
+        if (!input || input.tagName !== "INPUT") return null;
+        const rect = input.getBoundingClientRect();
+        return ReactDOM.createPortal(
+          <div
+            {...containerProps}
+            className="absolute bg-white border mt-1 rounded-md shadow-lg z-[9999] max-h-60 overflow-auto"
+            style={{ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: rect.width }}
+          >
+            {children}
+          </div>,
+          document.body
+        );
+      }}
+    />
+  );
+}
+
+
 
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
@@ -239,8 +281,8 @@ export default function CreateCargo() {
   const [receivers, setReceivers] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [deliveryTypes, setDeliveryTypes] = useState([]);
-  const [collectRoles, setCollectRoles] = useState([]); // [{id:1,name:'Driver'},{id:2,'Office'}]
-  const [collectedByOptions, setCollectedByOptions] = useState([]); // drivers OR staff array
+  const [collectRoles, setCollectRoles] = useState([]);
+  const [collectedByOptions, setCollectedByOptions] = useState([]);
 
   // user/profile
   const [userProfile, setUserProfile] = useState(null);
@@ -254,7 +296,12 @@ export default function CreateCargo() {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceShipment, setInvoiceShipment] = useState(null);
 
-  const [boxes, setBoxes] = useState([{ items: [{ name: "", pieces: 1, unitPrice: 0, weight: 0 }] }]);
+  const navigate = useNavigate();
+
+  // Boxes: each box has box_number and items; each item defaults to parent's box_number
+  const [boxes, setBoxes] = useState([
+    { box_number: "1", items: [{ name: "", pieces: 1, unitPrice: 0, weight: 0, box_number: "1" }] }
+  ]);
 
   // toast
   const [toast, setToast] = useState({ visible: false, text: "", variant: "success" });
@@ -276,7 +323,6 @@ export default function CreateCargo() {
   const [form, setForm] = useState(buildInitialForm());
   const [items, setItems] = useState([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
 
-
   const onChange = (event, { newValue }) => {
     setX(newValue);
   };
@@ -292,8 +338,8 @@ export default function CreateCargo() {
       <div
         className={`px-4 py-2 cursor-pointer ${selectedIndex === options.indexOf(text) ? 'bg-blue-200' : ''}`}
         onClick={() => {
-          setX(text); // Update the input value when the suggestion is clicked
-          setY(false); // Hide suggestions
+          setX(text);
+          setY(false);
         }}
       >
         {text}
@@ -301,14 +347,16 @@ export default function CreateCargo() {
     );
   };
 
-  // totals
+  /* totals computed from boxes so UI and payload match */
   const subtotal = useMemo(() => {
     let s = 0;
-    for (const it of items) {
-      s += Number(it.pieces || 0) * Number(it.unitPrice || 0);
+    for (const b of boxes) {
+      for (const it of b.items) {
+        s += Number(it.pieces || 0) * Number(it.unitPrice || 0);
+      }
     }
     return Number(s.toFixed(2));
-  }, [items]);
+  }, [boxes]);
   const billCharges = useMemo(() => Number(form.billCharges || 0), [form.billCharges]);
   const vatPercentage = useMemo(() => Number(form.vatPercentage || 0), [form.vatPercentage]);
   const totalCost = subtotal;
@@ -316,20 +364,19 @@ export default function CreateCargo() {
   const netTotal = useMemo(() => Number((totalCost + billCharges + vatCost).toFixed(2)), [totalCost, billCharges, vatCost]);
   const totalWeight = useMemo(() => {
     let sum = 0;
-    for (const it of items) sum += Number(it.weight || 0) * Number(it.pieces || 0);
+    for (const b of boxes) for (const it of b.items) sum += Number(it.weight || 0) * Number(it.pieces || 0);
     return Number(sum.toFixed(3));
-  }, [items]);
+  }, [boxes]);
 
-  /* preferred branch from token (fallback) */
+  /* token branch */
   const tokenClaims = useMemo(() => safeDecodeJwt(token), [token]);
   const tokenBranchId = tokenClaims?.branch_id ?? tokenClaims?.branchId ?? null;
 
-  /* toast on msg change */
   useEffect(() => {
     if (msg.text) showToast(msg.text, msg.variant || "success");
   }, [msg.text, msg.variant, showToast]);
 
-  /* ---------- initial load ---------- */
+  /* initial load */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -358,7 +405,6 @@ export default function CreateCargo() {
         const preferredBranchId = pickBranchId(profile) ?? tokenBranchId ?? "";
         setForm((f) => buildInitialForm(preferredBranchId));
 
-        // Fetch ALL: 1=Sender, 2=Receiver
         const [allSenders, allReceivers] = await Promise.all([
           fetchAllPartiesByType(1),
           fetchAllPartiesByType(2),
@@ -385,7 +431,6 @@ export default function CreateCargo() {
     }
   }, [userProfile, tokenBranchId, form.branchId]);
 
-  /* role change helpers */
   const loadOfficeStaff = useCallback(async () => {
     const branchId = form.branchId || pickBranchId(userProfile) || tokenBranchId;
     if (!branchId) {
@@ -397,7 +442,6 @@ export default function CreateCargo() {
     setCollectedByOptions(unwrapArray(res));
   }, [form.branchId, userProfile, tokenBranchId]);
 
-  /* when Branch or Role is 'Office', keep people list in sync */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -413,7 +457,6 @@ export default function CreateCargo() {
     return () => { alive = false; };
   }, [form.branchId, form.collectedByRoleName, loadOfficeStaff]);
 
-  /* role change -> populate collectedByOptions */
   const onRoleChange = useCallback(async (e) => {
     const roleId = e.target.value;
     const role = collectRoles.find((r) => String(r.id) === String(roleId));
@@ -441,7 +484,6 @@ export default function CreateCargo() {
     }
   }, [collectRoles, loadOfficeStaff]);
 
-  /* party autofill (address/phone) */
   const selectedSender = useMemo(
     () => senders.find((s) => String(idOf(s)) === String(form.senderId)) || null,
     [senders, form.senderId]
@@ -465,28 +507,49 @@ export default function CreateCargo() {
     }));
   }, [selectedReceiver]);
 
-  /* items helpers */
-  const setItem = useCallback((idx, key, val) => {
-    setItems((prev) => {
-      const next = [...prev];
+  /* boxes helpers */
+  const addItemToBox = (boxIndex) => {
+    setBoxes((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const currentBoxNumber = String(next[boxIndex]?.box_number ?? (boxIndex + 1));
+      next[boxIndex].items.push({
+        name: "",
+        pieces: 1,
+        unitPrice: 0,
+        weight: 0,
+        box_number: currentBoxNumber,
+      });
+      return next;
+    });
+  };
+
+  const removeItemFromBox = (boxIndex, itemIndex) => {
+    setBoxes((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      if (!next[boxIndex]) return prev;
+      next[boxIndex].items = next[boxIndex].items.filter((_, index) => index !== itemIndex);
+      return next;
+    });
+  };
+
+  const setBoxItem = useCallback((boxIdx, itemIdx, key, val) => {
+    setBoxes((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const it = next[boxIdx]?.items?.[itemIdx];
+      if (!it) return prev;
       if (key === "pieces") {
         const n = Number.parseInt(val || 0, 10);
-        next[idx][key] = Number.isNaN(n) ? 0 : n;
+        it[key] = Number.isNaN(n) ? 0 : n;
       } else if (key === "unitPrice" || key === "weight") {
         const n = Number.parseFloat(val || 0);
-        next[idx][key] = Number.isNaN(n) ? 0 : n;
+        it[key] = Number.isNaN(n) ? 0 : n;
+      } else if (key === "box_number") {
+        it.box_number = String(val || "");
       } else {
-        next[idx][key] = val;
+        it[key] = val;
       }
       return next;
     });
-  }, []);
-  const addRow = useCallback(
-    () => setItems((p) => [...p, { name: "", pieces: 1, unitPrice: 0, weight: 0 }]),
-    []
-  );
-  const removeRow = useCallback((idx) => {
-    setItems((p) => p.filter((_, i) => i !== idx));
   }, []);
 
   /* validation */
@@ -505,42 +568,26 @@ export default function CreateCargo() {
     if (!form.lrlTrackingCode) missing.push("LRL Tracking Code");
     if (!form.specialRemarks) missing.push("Special Remarks");
 
-    if (!items.some((it) => (it.name?.trim() || "") && Number(it.pieces || 0) > 0)) {
+    // ensure at least one item and weights > 0
+    const allItems = boxes.flatMap((b) => b.items);
+    if (!allItems.some((it) => (it.name?.trim() || "") && Number(it.pieces || 0) > 0)) {
       missing.push("At least one item (name + pieces)");
     }
-    if (items.some((it) => Number(it.weight || 0) <= 0)) {
+    if (allItems.some((it) => Number(it.weight || 0) <= 0)) {
       missing.push("Each item needs weight > 0");
     }
     return missing;
-  }, [form, items]);
+  }, [form, boxes]);
 
-  /* submit */
   const resetFormAfterSubmit = useCallback(() => {
     const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
     setForm(buildInitialForm(nextBranchId));
     setItems([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
     setCollectedByOptions([]);
+    setBoxes([{ box_number: "1", items: [{ name: "", pieces: 1, unitPrice: 0, weight: 0, box_number: "1" }] }]);
   }, [userProfile, tokenBranchId]);
 
-  const addBox = useCallback(() => {
-    setBoxes((prevBoxes) => [
-      ...prevBoxes,
-      { items: [{ name: "", pieces: 1, unitPrice: 0, weight: 0 }] }
-    ]);
-  }, []);
-
-  const addItemToBox = (boxIndex) => {
-    const newBoxes = [...boxes];
-    newBoxes[boxIndex].items.push({ name: "", pieces: 1, unitPrice: 0, weight: 0 });
-    setBoxes(newBoxes);
-  };
-
-  const removeItemFromBox = (boxIndex, itemIndex) => {
-    const newBoxes = [...boxes];
-    newBoxes[boxIndex].items = newBoxes[boxIndex].items.filter((_, index) => index !== itemIndex);
-    setBoxes(newBoxes);
-  };
-
+  /* submit - GROUP BY item.box_number -> boxes object matching your API sample */
   const submit = useCallback(async (e) => {
     e.preventDefault();
 
@@ -560,6 +607,32 @@ export default function CreateCargo() {
       setMsg({ text: "Choose a valid ‘Collected By’ person.", variant: "error" });
       return;
     }
+
+    // Build boxes object grouped by item-level box_number (fallback to parent)
+    const grouped = {};
+    boxes.forEach((box, bIdx) => {
+      (box.items || []).forEach((it, i) => {
+        const bn = String(it.box_number ?? box.box_number ?? (bIdx + 1));
+        if (!grouped[bn]) grouped[bn] = { items: [] };
+
+        // push sanitized item with string formatting to match sample
+        grouped[bn].items.push({
+          slno: String(grouped[bn].items.length + 1),
+          box_number: String(bn),
+          name: it.name || "",
+          piece_no: String(Number(it.pieces || 0)),
+          unit_price: Number(it.unitPrice || 0).toFixed(2),
+          total_price: (Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2),
+          weight: Number(it.weight || 0).toFixed(3),
+        });
+      });
+    });
+
+    // order keys numerically
+    const ordered = {};
+    Object.keys(grouped)
+      .sort((a, b) => Number(a) - Number(b))
+      .forEach((k) => { ordered[k] = grouped[k]; });
 
     const payload = {
       branch_id: Number(form.branchId),
@@ -581,64 +654,51 @@ export default function CreateCargo() {
       delivery_type_id: Number(form.deliveryTypeId),
       special_remarks: form.specialRemarks,
 
-      total_cost: totalCost,
-      bill_charges: billCharges,
-      vat_percentage: vatPercentage,
-      vat_cost: vatCost,
-      net_total: netTotal,
-      total_weight: totalWeight,
+      total_cost: totalCost.toFixed(2),
+      bill_charges: Number(form.billCharges || 0).toFixed(2),
+      vat_percentage: Number(form.vatPercentage || 0).toFixed(2),
+      vat_cost: vatCost.toFixed(2),
+      net_total: netTotal.toFixed(2),
+      total_weight: totalWeight.toFixed(3),
 
-      items: items.map((it, i) => ({
-        slno: String(i + 1),
-        name: it.name || "",
-        piece_no: Number(it.pieces || 0),
-        unit_price: Number(it.unitPrice || 0),
-        total_price: Number((Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)),
-        weight: Number(it.weight || 0),
-      })),
+      // <-- send boxes grouped by box_number (matches the API example you provided)
+      boxes: ordered,
     };
 
     try {
-      setLoading(true);
-      const created = await createCargo(payload);
-      const normalized = normalizeCargoToInvoice(created);
-      setInvoiceShipment(normalized);
-
-      startTransition(() => {
-        setInvoiceShipment(normalized);
-        setInvoiceOpen(true);
-        showToast("Cargo created. Invoice ready.", "success");
-        resetFormAfterSubmit();
-        setMsg({ text: "", variant: "" });
-      });
-    } catch (e2) {
-      setMsg({ text: e2?.message || "Failed to create cargo.", variant: "error" });
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  const created = await createCargo(payload);
+  const normalized = normalizeCargoToInvoice(created);
+  // ensure booking_no fallback from boxes (if absent)
+  if ((!normalized.booking_no || String(normalized.booking_no).trim() === "") && normalized.boxes) {
+    const keys = Object.keys(normalized.boxes).filter(k => String(k).trim() !== "");
+    if (keys.length) {
+      keys.sort((a,b) => (Number(a) - Number(b)) || String(a).localeCompare(b));
+      normalized.booking_no = keys.join("-");
     }
-  }, [
-    billCharges,
-    items,
-    netTotal,
-    showToast,
-    totalCost,
-    totalWeight,
-    vatCost,
-    vatPercentage,
-    form,
-    validateBeforeSubmit,
-    resetFormAfterSubmit,
-  ]);
+  }
+  // set into modal state and open it
+  setInvoiceShipment(normalized);
+  setInvoiceOpen(true);
+  showToast("Cargo created. Invoice ready.", "success");
+  resetFormAfterSubmit();
+} catch (e2) {
+  setMsg({ text: e2?.message || "Failed to create cargo.", variant: "error" });
+} finally {
+  setLoading(false);
+}
+  }, [billCharges, netTotal, showToast, totalCost, totalWeight, vatCost, vatPercentage, form, validateBeforeSubmit, resetFormAfterSubmit, boxes]);
 
   const onResetClick = useCallback(() => {
     const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
     setForm(buildInitialForm(nextBranchId));
     setItems([{ name: "", pieces: 1, unitPrice: 0, weight: 0 }]);
     setCollectedByOptions([]);
+    // reset boxes must include box_number on the box and on its items
+    setBoxes([{ box_number: "1", items: [{ name: "", pieces: 1, unitPrice: 0, weight: 0, box_number: "1" }] }]);
     showToast("Form reset.", "success");
   }, [userProfile, tokenBranchId, showToast]);
 
-  /* title = booking_no while invoice is open */
   useEffect(() => {
     if (!invoiceOpen || !invoiceShipment?.booking_no) return;
     const prev = document.title;
@@ -655,7 +715,6 @@ export default function CreateCargo() {
     };
   }, [invoiceOpen, invoiceShipment?.booking_no]);
 
-  /* UI derived */
   const branchNameFromProfile =
     userProfile?.user?.branch?.name ||
     userProfile?.branch?.name ||
@@ -721,9 +780,7 @@ export default function CreateCargo() {
             </nav>
           </div>
 
-          {/* Form */}
           <form onSubmit={submit} className="space-y-6">
-            {/* Branch + Collected By */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Branch</label>
@@ -973,21 +1030,12 @@ export default function CreateCargo() {
               </div>
             </div>
 
-            {/* Items */}
-            <div className="cargo-add-box-btn">
-              <button
-                type="button"
-                onClick={addBox}
-              >
-                <FiPlus/>Add Box
-              </button>
-            </div>
-
             {/* Render Boxes with Items */}
             {boxes.map((box, boxIndex) => (
               <div key={boxIndex} className="border p-4 rounded-lg mb-4">
-                
-                <h3 className="text-lg font-semibold text-primary-color mb-4">Box {boxIndex + 1}</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-primary-color">Items</h3>
+                </div>
 
                 <div className="overflow-x-auto rounded-xl border border-gray-200">
                   <table className="min-w-full text-sm">
@@ -998,6 +1046,7 @@ export default function CreateCargo() {
                         <th className="px-3 py-2 w-32 text-right">Pieces</th>
                         <th className="px-3 py-2 w-36 text-right">Unit Price</th>
                         <th className="px-3 py-2 w-32 text-right">Weight (kg)</th>
+                        <th className="px-3 py-2 w-24 text-right">Box No</th>
                         <th className="px-3 py-2 w-36 text-right">Total Price</th>
                         <th className="px-3 py-2 w-28 text-right">Actions</th>
                       </tr>
@@ -1006,50 +1055,12 @@ export default function CreateCargo() {
                       {box.items.map((it, itemIndex) => (
                         <tr key={itemIndex} className={itemIndex % 2 ? "bg-white" : "bg-gray-50"}>
                           <td className="px-3 py-2 text-center text-gray-500">{itemIndex + 1}</td>
+
                           <td className="px-3 py-2 relative overflow-visible">
-
-<Autosuggest
-  inputProps={{
-    value: x,
-    onChange,
-    onFocus: () => setY(true),
-    onBlur: () => setY(false),
-    className: "w-full px-3 py-2 border rounded-md",
-  }}
-  suggestions={s}
-  onSuggestionsFetchRequested={({ value }) => {
-    const filteredSuggestions = getSuggestions(value);
-    setS(filteredSuggestions);
-    setSelectedIndex(0);
-  }}
-  onSuggestionsClearRequested={() => setS([])}
-  renderSuggestion={renderSuggestion}
-  getSuggestionValue={(a) => a}
-  alwaysRenderSuggestions={y}
-  renderSuggestionsContainer={({ containerProps, children }) => {
-    // Find the currently focused input
-    const input = document.activeElement;
-    if (!input || input.tagName !== "INPUT") return null;
-
-    const rect = input.getBoundingClientRect();
-
-    return ReactDOM.createPortal(
-      <div
-        {...containerProps}
-        className="absolute bg-white border mt-1 rounded-md shadow-lg z-[9999] max-h-60 overflow-auto"
-        style={{
-          top: rect.bottom + window.scrollY,
-          left: rect.left + window.scrollX,
-          width: rect.width,
-        }}
-      >
-        {children}
-      </div>,
-      document.body
-    );
-  }}
-/>
-
+                            <ItemAutosuggest
+                              value={it.name}
+                              onChange={(v) => setBoxItem(boxIndex, itemIndex, "name", v)}
+                            />
                           </td>
                           <td className="px-3 py-2">
                             <input
@@ -1059,7 +1070,7 @@ export default function CreateCargo() {
                               placeholder="0"
                               value={it.pieces}
                               onChange={(e) =>
-                                setItem(boxIndex, itemIndex, "pieces", Number.parseInt(e.target.value || 0, 10) || 0)
+                                setBoxItem(boxIndex, itemIndex, "pieces", Number.parseInt(e.target.value || 0, 10) || 0)
                               }
                             />
                           </td>
@@ -1072,7 +1083,7 @@ export default function CreateCargo() {
                               placeholder="0.00"
                               value={it.unitPrice}
                               onChange={(e) =>
-                                setItem(boxIndex, itemIndex, "unitPrice", Number.parseFloat(e.target.value || 0) || 0)
+                                setBoxItem(boxIndex, itemIndex, "unitPrice", Number.parseFloat(e.target.value || 0) || 0)
                               }
                             />
                           </td>
@@ -1085,10 +1096,22 @@ export default function CreateCargo() {
                               placeholder="0.000"
                               value={it.weight}
                               onChange={(e) =>
-                                setItem(boxIndex, itemIndex, "weight", Number.parseFloat(e.target.value || 0) || 0)
+                                setBoxItem(boxIndex, itemIndex, "weight", Number.parseFloat(e.target.value || 0) || 0)
                               }
                             />
                           </td>
+
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              className="w-20 border rounded-lg px-2 py-1 text-right"
+                              value={it.box_number || (box.box_number || String(boxIndex + 1))}
+                              onChange={(e) => {
+                                setBoxItem(boxIndex, itemIndex, "box_number", e.target.value);
+                              }}
+                            />
+                          </td>
+
                           <td className="px-3 py-2 text-right font-medium">
                             {(Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)}
                           </td>
@@ -1121,7 +1144,6 @@ export default function CreateCargo() {
               </div>
             ))}
 
-            {/* Controls */}
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -1142,7 +1164,6 @@ export default function CreateCargo() {
         </div>
       </div>
 
-      {/* Invoice Modal */}
       <InvoiceModal
         open={invoiceOpen}
         onClose={() => setInvoiceOpen(false)}

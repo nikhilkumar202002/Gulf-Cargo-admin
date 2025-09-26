@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { GiCargoCrate } from "react-icons/gi";
 import { IoIosSearch } from "react-icons/io";
 
-import { getCargos, bulkUpdateCargoStatus } from "../../api/createCargoApi";
+import { listCargos, bulkUpdateCargoStatus } from "../../api/createCargoApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 
 import { SlEye } from "react-icons/sl";
@@ -139,12 +139,15 @@ function pickByKeyword(label) {
     setError("");
     setSelectedIds([]);
     try {
-      const rows = await getCargos({
+      const rows = await listCargos({
         from_date: filter.fromDate || undefined,
         to_date: filter.tillDate || undefined,
         status_id: filter.status || undefined,
       });
-      const arr = Array.isArray(rows?.data) ? rows.data : Array.isArray(rows) ? rows : [];
+      const arr =
+          Array.isArray(rows?.data) ? rows.data :
+          Array.isArray(rows?.items) ? rows.items :
+          Array.isArray(rows) ? rows : [];
       setAllCargos(arr);
       setPage(1);
     } catch (e) {
@@ -155,6 +158,32 @@ function pickByKeyword(label) {
       setLoading(false);
     }
   };
+
+  const getBoxCount = (c = {}) => {
+  // 1) explicit count
+  if (Number.isFinite(c.box_count)) return Number(c.box_count);
+
+  // 2) boxes as object: { "1": {...}, "2": {...} }
+  if (c.boxes && !Array.isArray(c.boxes) && typeof c.boxes === "object") {
+    return Object.keys(c.boxes).length;
+  }
+
+  // 3) boxes as array: [ {items:[...]}, ... ]
+  if (Array.isArray(c.boxes)) return c.boxes.length;
+
+  // 4) only items present: count unique box_number
+  if (Array.isArray(c.items)) {
+    const uniq = new Set(
+      c.items
+        .map((it) => it?.box_number ?? it?.boxNumber ?? it?.boxNo ?? it?.box)
+        .filter(Boolean)
+    );
+    return uniq.size || 0;
+  }
+
+  return 0;
+};
+
 
   useEffect(() => {
     fetchCargos();
@@ -232,6 +261,7 @@ function pickByKeyword(label) {
       Time: c.time,
       "Shipping Method": c.shipping_method,
       "Payment Method": c.payment_method,
+      "Box Count": getBoxCount(c),
       Status: c.status?.name || c.status || "",
       "Delivery Type": c.delivery_type,
       "Total Weight (kg)": c.total_weight,
@@ -433,6 +463,7 @@ function pickByKeyword(label) {
           <th className="px-3 py-3">Time</th>
           <th className="px-3 py-3">Method</th>
           <th className="px-3 py-3">Payment</th>
+          <th className="px-3 py-3">Boxes</th>
           <th className="px-3 py-3">Weight (kg)</th>
           <th className="px-3 py-3">Status</th>
         </tr>
@@ -513,6 +544,7 @@ function pickByKeyword(label) {
             <td className="px-3 py-2 align-top tabular-nums">{c.time || "—"}</td>
             <td className="px-3 py-2 align-top">{c.shipping_method || "—"}</td>
             <td className="px-3 py-2 align-top">{c.payment_method || "—"}</td>
+            <td className="px-3 py-2 align-top tabular-nums">{getBoxCount(c)}</td>
             <td className="px-3 py-2 align-top">{c.total_weight ?? "—"}</td>
 
             <td className="px-3 py-2 align-top">

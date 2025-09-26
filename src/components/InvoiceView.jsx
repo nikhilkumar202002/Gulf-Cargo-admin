@@ -60,8 +60,17 @@ const parsePartyList = (res) => {
   return [];
 };
 
-const joinAddress = (p) =>
-  [p?.address, p?.postal_code].filter(Boolean).join(", ");
+// replace joinAddress
+const joinAddress = (p) => {
+  const parts = [
+    p?.address, p?.address_line1, p?.address_line2,
+    p?.street, p?.locality, p?.area, p?.district, p?.city, p?.state,
+    p?.country, p?.postal_code ?? p?.pincode ?? p?.zip,
+  ].filter(Boolean);
+  // collapse to comma-separated once; sanitizeAddress will drop duplicates later
+  return parts.join(", ");
+};
+
 
 const sanitizeAddress = (addr, side, shipment) => {
   if (!addr) return "";
@@ -91,12 +100,19 @@ const sanitizeAddress = (addr, side, shipment) => {
     .join(", ");
 };
 
+// replace formatPhones
 const formatPhones = (p) => {
+  const vals = [
+    p?.contact_number, p?.phone, p?.mobile, p?.mobile_number, p?.contact,
+  ].filter(Boolean);
+  const whats = p?.whatsapp_number ?? p?.whatsapp ?? null;
+
   const a = [];
-  if (p?.contact_number) a.push(`Call: ${p.contact_number}`);
-  if (p?.whatsapp_number) a.push(`WhatsApp: ${p.whatsapp_number}`);
+  if (vals.length) a.push(`Call: ${vals.join(" / ")}`);
+  if (whats) a.push(`WhatsApp: ${whats}`);
   return a.join("  •  ");
 };
+
 
 const extractParty = (p) => ({
   id: p?.id ?? null,
@@ -164,9 +180,8 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
 
     const fetchParty = async (role) => {
       const isSender = role === "sender";
-      const idCandidates = isSender
-        ? [shipment.sender_id, shipment.shipper_id, shipment.sender_party_id]
-        : [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id];
+      // inside fetchParty('receiver') ID candidates:
+const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id, shipment.consignee_party_id];
 
       const name = isSender
         ? shipment.sender?.name || shipment.sender || shipment.shipper_name
@@ -457,7 +472,8 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
               </div>
               <div className="text-right text-xs">
                 <div className="font-semibold">{COMPANY.branchLabel}</div>
-                <div className="mt-1 inline-block rounded bg-black px-2 py-0.5 font-semibold">SL: {COMPANY.slCode}</div>
+                <div className="mt-1 inline-block rounded bg-black px-2 py-0.5 font-semibold">{shipment?.booking_no || shipment?.invoice_no || "—"}
+                </div>
               </div>
             </div>
           </div>
@@ -472,8 +488,8 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
               </div>
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Booking No</div>
-              <div className=" text-sm font-medium text-slate-900">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Box No.</div>
+              <div className="text-[13px] inline-block rounded bg-black px-2 py-0.5 font-semibold text-white">
                 {shipment?.booking_no || shipment?.invoice_no || "—"}
               </div>
             </div>
@@ -562,7 +578,7 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
               <div className="mb-3 text-sm font-semibold text-slate-900">Cargo Items</div>
               {/* Weight highlight badge */}
               <div className="inline-flex items-center gap-2 rounded-lg bg-black px-2 py-1 text-sm font-semibold text-white">
-                Total Weight: {pick(shipment, ["total_weight", "weight", "gross_weight"], "0")} kg
+                Total Weight: {Math.trunc(parseFloat(pick(shipment, ["total_weight","weight","gross_weight"], 0)) || 0)} kg
               </div>
             </div>
 
