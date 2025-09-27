@@ -51,8 +51,7 @@ const DocumentTypeCreate = () => {
         setError(response.message || "Failed to create document type.");
       }
     } catch (err) {
-      console.error("Error creating document type:", err.response?.data || err.message);
-
+    
       if (err.response?.status === 422) {
         setError(
           err.response?.data?.message ||

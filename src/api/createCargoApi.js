@@ -103,16 +103,10 @@ function buildRequestBody(payload = {}) {
  */
 async function createCargo(payload = {}) {
   const body = buildRequestBody(payload);
-  // diagnostic log (remove in production if desired)
-  // eslint-disable-next-line no-console
-  console.info("[createCargo] payload:", JSON.stringify(body, null, 2));
-
   const endpoints = ["/cargo", "/cargos", "/public/api/cargo", "/public/api/cargos"];
   let lastErr = null;
   for (const ep of endpoints) {
     try {
-      // eslint-disable-next-line no-console
-      console.info(`[createCargo] POST ${ep}`);
       const { data } = await axiosInstance.post(ep, body, {
         headers: { "Content-Type": "application/json" },
         timeout: 20000,
@@ -122,12 +116,8 @@ async function createCargo(payload = {}) {
       lastErr = err;
       const status = err?.response?.status;
       if (status === 422) {
-        // eslint-disable-next-line no-console
-        console.error("[createCargo] 422:", err.response?.data);
         throw buildErrorFromAxios(err);
       }
-      // eslint-disable-next-line no-console
-      console.warn(`[createCargo] POST ${ep} failed:`, err?.message || err);
     }
   }
   if (lastErr) throw buildErrorFromAxios(lastErr);
@@ -144,8 +134,6 @@ async function getCargoById(id) {
   let lastErr = null;
   for (const ep of endpoints) {
     try {
-      // eslint-disable-next-line no-console
-      console.info(`[getCargoById] GET ${ep}`);
       const { data } = await axiosInstance.get(ep, { timeout: 15000 });
       return data?.data ?? data ?? {};
     } catch (err) {
@@ -334,7 +322,6 @@ function normalizeCargoToInvoice(raw) {
 // bulk status update
 
 const bulkUpdateCargoStatus = updateCargoStatus;
-
 
 /* ---------- exports ---------- */
 const defaultExport = {

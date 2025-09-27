@@ -70,7 +70,6 @@ export const staffRegister = async (payload, token, axiosOpts = {}) => {
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       Accept: "application/json",
-      // no 'Content-Type' here—axios will set multipart boundary automatically
     },
     ...axiosOpts,
   });

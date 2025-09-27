@@ -1,20 +1,36 @@
 // src/pages/ShipmentView.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getCargoShipment } from "../../api/shipmentCargo"; // uses your existing API wrapper
+import { getCargoShipment } from "../../api/shipmentCargo";
 
 /* -------------------------- tiny UI/format helpers -------------------------- */
 const cx = (...c) => c.filter(Boolean).join(" ");
 const formatDate = (iso) => {
   if (!iso) return "—";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso; // show raw if it's already "YYYY-MM-DD"
+  if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 const formatNum = (v, digits = 2) => {
   const n = Number(v);
   return Number.isFinite(n) ? n.toFixed(digits) : String(v ?? "—");
 };
+
+// lightweight skeletons
+const Skel = ({ w = "100%", h = 14, rounded = 8, className = "" }) => (
+  <span
+    className={cx("inline-block bg-slate-200 animate-pulse", className)}
+    style={{
+      width: typeof w === "number" ? `${w}px` : w,
+      height: typeof h === "number" ? `${h}px` : h,
+      borderRadius: rounded,
+    }}
+    aria-hidden="true"
+  />
+);
+const SkelLine = (w) => <Skel w={w} h={12} />;
+const SkelChip = () => <Skel w={90} h={22} rounded={999} />;
+
 const Badge = ({ text, color = "indigo" }) => (
   <span
     className={{
@@ -42,17 +58,20 @@ const statusColor = (s = "") => {
   return "indigo";
 };
 
-const Box = ({ label, value }) => (
-  <div className="rounded-xl border border-slate-200 bg-white p-4">
-    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-    <div className="mt-1 text-sm font-semibold text-slate-900 break-all">{value ?? "—"}</div>
+const Box = ({ label, value, loading }) => (
+ <div className="rounded-xl border border-slate-200 bg-white p-4">
+  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+  <div className="mt-1 text-sm font-semibold text-slate-900 break-all">
+    {loading ? <SkelLine w="70%" /> : (value ?? "—")}
   </div>
+</div>
+
 );
 
 /* ---------------------------------- page ----------------------------------- */
 export default function ShipmentView() {
   const { id } = useParams();
-  const [data, setData] = useState(null);        // raw API "data" (shipment)
+  const [data, setData] = useState(null); // raw shipment
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -63,7 +82,6 @@ export default function ShipmentView() {
       setErr("");
       try {
         const res = await getCargoShipment(id);
-        // API returns: { success, data: {...shipment...} }
         const record = res?.data ?? res;
         if (alive) setData(record || null);
       } catch (e) {
@@ -100,7 +118,9 @@ export default function ShipmentView() {
       <div className="mx-auto max-w-6xl px-4 py-6">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-slate-900">Shipment Details</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">
+            {loading ? <Skel w={200} h={24} /> : "Shipment Details"}
+          </h1>
           <button
             onClick={() => window.history.back()}
             className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -112,13 +132,40 @@ export default function ShipmentView() {
         {/* Status / top card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           {loading ? (
-            <div className="flex items-center gap-2 text-slate-600">
-              <svg className="h-5 w-5 animate-spin text-indigo-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-              </svg>
-              <span>Loading shipment…</span>
-            </div>
+            <>
+              {/* Top line skeletons */}
+              <div className="flex flex-wrap items-center gap-3">
+                <Skel w={150} h={28} className="shadow-sm" />
+                <Skel w={180} h={16} />
+                <div className="ml-auto">
+                  <SkelChip />
+                </div>
+              </div>
+
+              {/* Meta grid skeleton */}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <Skel w={90} h={10} />
+                    <div className="mt-2">
+                      <Skel w="70%" h={14} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Totals skeleton */}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <Skel w={110} h={10} />
+                    <div className="mt-2">
+                      <Skel w="40%" h={16} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           ) : err ? (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">{err}</div>
           ) : !data ? (
@@ -165,9 +212,29 @@ export default function ShipmentView() {
         {/* Cargo list with nested items */}
         <div className="mt-6 space-y-6">
           {loading ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-600">Loading cargos…</div>
+            // Skeleton cards for cargos
+            Array.from({ length: 2 }).map((_, i) => (
+              <div key={`skel-cargo-${i}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <SkelChip />
+                    <Skel w={180} h={16} />
+                  </div>
+                  <Skel w={80} h={12} />
+                </div>
+                <div className="p-5">
+                  <div className="space-y-2">
+                    {Array.from({ length: 3 }).map((__, r) => (
+                      <Skel key={r} w="100%" h={14} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))
           ) : cargos.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">No cargos found.</div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+              No cargos found.
+            </div>
           ) : (
             cargos.map((cargo, idx) => {
               const items = Array.isArray(cargo.items) ? cargo.items : [];

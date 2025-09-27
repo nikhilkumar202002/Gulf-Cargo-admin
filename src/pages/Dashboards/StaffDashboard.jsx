@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+// src/pages/StaffDashboard.jsx
+import React, { useEffect, useState } from "react";
 import {
   FaUsers,
   FaClock,
@@ -14,19 +15,59 @@ import {
 } from "react-icons/fa";
 import "../Styles.css"; // Reuse the same styles
 
-const Card = ({ data }) => (
-  <div className="dashboard-card flex items-center gap-3 bg-white rounded-2xl shadow-sm">
+/* ---------------- Skeleton helpers ---------------- */
+const Skel = ({ w = 100, h = 14, rounded = 8, className = "" }) => (
+  <span
+    className={`skel ${className}`}
+    style={{
+      display: "inline-block",
+      width: typeof w === "number" ? `${w}px` : w,
+      height: typeof h === "number" ? `${h}px` : h,
+      borderRadius: rounded,
+    }}
+    aria-hidden="true"
+  />
+);
+const SkelCircle = ({ size = 48, className = "" }) => (
+  <span
+    className={`skel ${className}`}
+    style={{
+      display: "inline-block",
+      width: size,
+      height: size,
+      borderRadius: 9999,
+    }}
+    aria-hidden="true"
+  />
+);
+
+/* ---------------- UI bits ---------------- */
+const Card = ({ data, loading }) => (
+  <div className="dashboard-card flex items-center gap-3 bg-white rounded-2xl shadow-sm p-4">
     <div className="card-icon flex items-center justify-center w-12 h-12 rounded-xl bg-gray-100 text-xl text-blue-600">
-      {data.icon}
+      {loading ? <SkelCircle size={32} /> : data.icon}
     </div>
     <div className="flex flex-col">
-      <h1 className="text-xl font-semibold">{data.value}</h1>
-      <p className="text-sm text-gray-500">{data.title}</p>
+      <h1 className="text-xl font-semibold">
+        {loading ? <Skel w={50} h={20} /> : data.value}
+      </h1>
+      <p className="text-sm text-gray-500">
+        {loading ? <Skel w={120} h={12} /> : data.title}
+      </p>
     </div>
   </div>
 );
 
 const StaffDashboard = () => {
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+
+  // Simulate loading; replace with your real fetch
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 800);
+    return () => clearTimeout(t);
+  }, []);
+
   // Staff-specific summary cards
   const staffCards = [
     { title: "Today's Tasks", value: 15, icon: <FaInbox /> },
@@ -71,27 +112,29 @@ const StaffDashboard = () => {
     },
   ];
 
-  const [page, setPage] = useState(1);
-
   return (
     <section className="dashboard min-h-screen bg-gray-50">
       <div className="dashboard-container max-w-7xl mx-auto py-8">
         {/* Staff-specific cards */}
         <div className="dashboard-row grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          {staffCards.map((card, index) => (
-            <Card key={index} data={card} />
+          {(loading ? Array.from({ length: 4 }) : staffCards).map((card, index) => (
+            <Card key={index} data={card || {}} loading={loading} />
           ))}
         </div>
 
         {/* Staff Attendance Overview */}
         <div className="dashboard-row">
           <div className="dashboard-row-heading mb-4">
-            <h1 className="dashboard-overview text-xl font-bold">Staff Overview</h1>
+            <h1 className="dashboard-overview text-xl font-bold">
+              {loading ? <Skel w={180} h={20} /> : "Staff Overview"}
+            </h1>
           </div>
 
           <div className="dashboard-table-wrapper flex gap-3 flex-col md:flex-row">
             <div className="staff-attendance bg-white rounded-2xl shadow-md p-6 flex-1">
-              <h2 className="text-lg font-semibold mb-5">Attendance</h2>
+              <h2 className="text-lg font-semibold mb-5">
+                {loading ? <Skel w={120} h={18} /> : "Attendance"}
+              </h2>
               <table className="w-full">
                 <thead>
                   <tr className="text-gray-400 text-left font-semibold text-xs">
@@ -100,15 +143,19 @@ const StaffDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {staffData.map((row) => (
-                    <tr key={row.label} className="border-b last:border-b-0">
+                  {(loading ? Array.from({ length: 4 }) : staffData).map((row, i) => (
+                    <tr key={row?.label ?? i} className="border-b last:border-b-0">
                       <td className="flex items-center gap-3 py-3">
                         <span className="p-2 rounded-lg bg-gray-100">
-                          {row.icon}
+                          {loading ? <SkelCircle size={20} /> : row.icon}
                         </span>
-                        <span className="font-medium">{row.label}</span>
+                        <span className="font-medium">
+                          {loading ? <Skel w={100} h={14} /> : row.label}
+                        </span>
                       </td>
-                      <td className="text-right font-semibold text-gray-700 pr-2">{row.value}</td>
+                      <td className="text-right font-semibold text-gray-700 pr-2">
+                        {loading ? <Skel w={24} h={14} /> : row.value}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -120,7 +167,9 @@ const StaffDashboard = () => {
         {/* Staff Assigned Cargo Table */}
         <div className="dashboard-cargo-list mt-10">
           <div className="dashboard-cargo-list-heading mb-3">
-            <h1 className="text-lg font-bold">Assigned Shipments</h1>
+            <h1 className="text-lg font-bold">
+              {loading ? <Skel w={190} h={18} /> : "Assigned Shipments"}
+            </h1>
           </div>
 
           <div className="dashboard-cargo-table rounded-2xl shadow-md bg-white px-6 py-8">
@@ -135,19 +184,23 @@ const StaffDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {assignedCargo.map((item) => (
-                  <tr key={item.shipmentId} className="border-t last:border-b-0 hover:bg-gray-50 transition">
-                    <td className="py-2">{item.date}</td>
-                    <td className="py-2 font-medium">{item.shipmentId}</td>
-                    <td className="py-2">{item.destination}</td>
+                {(loading ? Array.from({ length: 3 }) : assignedCargo).map((item, i) => (
+                  <tr key={item?.shipmentId ?? i} className="border-t last:border-b-0 hover:bg-gray-50 transition">
+                    <td className="py-2">{loading ? <Skel w={70} /> : item.date}</td>
+                    <td className="py-2 font-medium">{loading ? <Skel w={140} /> : item.shipmentId}</td>
+                    <td className="py-2">{loading ? <Skel w={160} /> : item.destination}</td>
                     <td className="py-2">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white ${item.statusColor}`}
-                      >
-                        <FaCircle className="w-2 h-2" /> {item.status}
-                      </span>
+                      {loading ? (
+                        <Skel w={120} h={20} rounded={999} />
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white ${item.statusColor}`}
+                        >
+                          <FaCircle className="w-2 h-2" /> {item.status}
+                        </span>
+                      )}
                     </td>
-                    <td className="py-2">{item.type}</td>
+                    <td className="py-2">{loading ? <Skel w={90} /> : item.type}</td>
                   </tr>
                 ))}
               </tbody>
@@ -156,17 +209,19 @@ const StaffDashboard = () => {
             {/* Pagination */}
             <div className="flex justify-between items-center mt-6">
               <button
-                className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm text-gray-500 bg-gray-100 hover:bg-gray-200"
-                disabled={page === 1}
+                className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm text-gray-500 bg-gray-100 hover:bg-gray-200 disabled:opacity-60"
+                disabled={page === 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
                 <FaChevronLeft className="w-3 h-3" /> Prev
               </button>
               <span className="text-gray-600 text-sm">
-                Page {page} of 1
+                {loading ? <Skel w={70} /> : `Page ${page} of 1`}
               </span>
               <button
-                className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm text-gray-500 bg-gray-100 hover:bg-gray-200"
-                disabled={true}
+                className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm text-gray-500 bg-gray-100 hover:bg-gray-200 disabled:opacity-60"
+                disabled={true || loading}
+                onClick={() => setPage((p) => p + 1)}
               >
                 Next <FaChevronRight className="w-3 h-3" />
               </button>
@@ -174,6 +229,31 @@ const StaffDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Tiny shimmer CSS; move to a global file if you prefer */}
+      <style>{`
+        .skel {
+          background: #e5e7eb; /* gray-200 */
+          position: relative;
+          overflow: hidden;
+        }
+        .skel::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          transform: translateX(-100%);
+          background: linear-gradient(
+            90deg,
+            rgba(229,231,235,0) 0%,
+            rgba(255,255,255,0.75) 50%,
+            rgba(229,231,235,0) 100%
+          );
+          animation: skel-shimmer 1.2s infinite;
+        }
+        @keyframes skel-shimmer {
+          100% { transform: translateX(100%); }
+        }
+      `}</style>
     </section>
   );
 };

@@ -102,15 +102,10 @@ export async function createCargoShipment(raw) {
   if (payload.origin_port_id != null) payload.origin_port_id = Number(payload.origin_port_id);
   if (payload.destination_port_id != null) payload.destination_port_id = Number(payload.destination_port_id);
 
-  // eslint-disable-next-line no-console
-  console.info("[createCargoShipment] POST /cargo-shipment", payload);
-
   try {
     const { data } = await axiosInstance.post("/cargo-shipment", payload);
     return data;
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("[createCargoShipment] failed:", err?.response?.data || err);
     throw parseAxiosError(err);
   }
 }

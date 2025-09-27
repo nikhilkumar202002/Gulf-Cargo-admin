@@ -93,7 +93,6 @@ export const AuthProvider = ({ children }) => {
           logout(true);
           return;
         }
-        console.error("Profile fetch failed:", err);
       } finally {
         setLoading(false);
       }

@@ -51,7 +51,7 @@ const VisaTypeCreate = () => {
         setError(response?.message || "Failed to create visa type.");
       }
     } catch (err) {
-      console.error("Error creating visa type:", err?.response?.data || err?.message);
+     
       const status = err?.response?.status;
 
       if (status === 422) {

@@ -44,7 +44,7 @@ function Register() {
         setError(response.data.message || "Registration failed!");
       }
     } catch (err) {
-      console.error("Registration Error:", err);
+  
       setError(
         err.response?.data?.message || "Something went wrong. Please try again."
       );

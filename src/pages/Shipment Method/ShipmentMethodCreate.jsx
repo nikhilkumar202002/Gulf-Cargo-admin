@@ -62,7 +62,7 @@ export default function ShipmentMethodCreate() {
           (details ? ` ${details}` : ""),
         variant: "error",
       });
-      console.error("Create shipment method failed", err?.response || err);
+      
     } finally {
       setSubmitting(false);
     }

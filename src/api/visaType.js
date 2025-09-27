@@ -10,8 +10,7 @@ export const createVisaType = async (data) => {
     });
     return response.data;
   } catch (error) {
-    console.error('Error creating visa type:', error);
-    throw error; // To handle this in the component
+    throw error; 
   }
 };
 
@@ -25,8 +24,7 @@ export const getVisaTypes = async () => {
     });
     return response.data;
   } catch (error) {
-    console.error('Error fetching visa types:', error);
-    throw error; // To handle this in the component
+    throw error; 
   }
 };
 
@@ -39,10 +37,8 @@ export const getActiveVisaTypes = async (token) => {
         Authorization: `Bearer ${token}`, // Ensure token is correctly included here
       },
     });
-    console.log("Visa types response:", response.data); // Log response for debugging
     return response.data;
   } catch (error) {
-    console.error("Error fetching active visa types:", error);
     throw error; // Handle error properly
   }
 };
@@ -57,7 +53,7 @@ export const getInactiveVisaTypes = async () => {
     });
     return response.data;
   } catch (error) {
-    console.error('Error fetching inactive visa types:', error);
+    
     throw error; // To handle this in the component
   }
 };
@@ -72,7 +68,6 @@ export const updateVisaType = async (id, data) => {
     });
     return response.data;
   } catch (error) {
-    console.error(`Error updating visa type with ID ${id}:`, error);
     throw error; // To handle this in the component
   }
 };

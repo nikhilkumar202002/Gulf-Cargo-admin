@@ -26,7 +26,7 @@ const fetchDocumentTypes = async () => {
     const list = Array.isArray(res) ? res : (res?.data ?? []);
     setDocumentTypes(list);
   } catch (err) {
-    console.error("Error fetching document types:", err?.response?.data || err.message);
+    
     setError(err?.response?.data?.message || "Failed to load document types");
   } finally {
     setLoading(false);

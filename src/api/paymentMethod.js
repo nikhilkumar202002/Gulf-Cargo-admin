@@ -6,8 +6,7 @@ export const createPaymentMethod = async (data) => {
     const response = await axiosInstance.post("/payment-method", data); // Base URL is already handled in axiosInstance
     return response.data; // Return the response data from API
   } catch (error) {
-    console.error("Error creating payment method:", error);
-    throw error; // Rethrow error to handle in the component
+    throw error; 
   }
 };
 
@@ -17,7 +16,6 @@ export const getAllPaymentMethods = async () => {
     const response = await axiosInstance.get("/payment-methods");
     return response.data; // Return the response data from API
   } catch (error) {
-    console.error("Error fetching payment methods:", error);
     throw error;
   }
 };
@@ -28,7 +26,6 @@ export const getActivePaymentMethods = async () => {
     const response = await axiosInstance.get("/payment-methods?status=1");
     return response.data; // Return the response data from API
   } catch (error) {
-    console.error("Error fetching active payment methods:", error);
     throw error;
   }
 };
@@ -39,7 +36,6 @@ export const getInactivePaymentMethods = async () => {
     const response = await axiosInstance.get("/payment-methods?status=0");
     return response.data; // Return the response data from API
   } catch (error) {
-    console.error("Error fetching inactive payment methods:", error);
     throw error;
   }
 };

@@ -1,21 +1,27 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { LiaUsersSolid } from "react-icons/lia";
 import { FiSearch, FiPlus } from "react-icons/fi";
 import { getAllDrivers } from "../../api/driverApi";
-import { Link } from "react-router-dom";
 
 function ViewAllDriver() {
-
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
+  // skeleton loading added
   const [error, setError] = useState("");
 
   // Minimal filters like the screenshot
   const [searchTerm, setSearchTerm] = useState("");
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(1);
-  
+
+  // simple skeleton atom
+  const Skel = ({ className = "", h = 40, w = "100%" }) => (
+    <div
+      className={`animate-pulse rounded-md bg-gray-200 ${className}`}
+      style={{ height: h, width: w }}
+    />
+  );
 
   // --- helpers ---
   const normalizeDrivers = (res) => {
@@ -35,7 +41,6 @@ function ViewAllDriver() {
       setDrivers(normalizeDrivers(res));
       setPage(1);
     } catch (err) {
-      console.error("Failed to fetch drivers:", err?.response?.data || err?.message);
       setError("Failed to load drivers.");
     } finally {
       setLoading(false);
@@ -90,54 +95,67 @@ function ViewAllDriver() {
     );
   };
 
-
   return (
     <div className="min-h-screen bg-[#f7f7fb] p-4 md:p-6">
       {/* Top bar (search left, Rows + Add button right) */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div className="relative w-full md:max-w-xl">
-          <span className="absolute inset-y-0 left-0 pl-3 flex items-center">
-            <FiSearch className="text-gray-400" />
-          </span>
-          <input
-            type="text"
-            placeholder="Search driver..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setPage(1);
-            }}
-            className="w-full pl-10 pr-3 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
-          />
+          {loading ? (
+            <Skel h={44} />
+          ) : (
+            <>
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center">
+                <FiSearch className="text-gray-400" />
+              </span>
+              <input
+                type="text"
+                placeholder="Search driver..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full pl-10 pr-3 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
+              />
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-700">Rows:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
-              className="px-3 py-2 rounded-md border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {[5, 10, 25, 50].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
+          {loading ? (
+            <>
+              <Skel h={40} w={110} />
+              <Skel h={44} w={180} />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">Rows:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="px-3 py-2 rounded-md border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {[5, 10, 25, 50].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <Link
-              to="/drivers/addnewdriver"
-              className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg shadow-sm"
-            >
-              <FiPlus className="text-lg" />
-              Add New Driver
-            </Link>
-
+                to="/drivers/addnewdriver"
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg shadow-sm"
+              >
+                <FiPlus className="text-lg" />
+                Add New Driver
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -145,12 +163,16 @@ function ViewAllDriver() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {/* Heading (icon + title) */}
         <div className="px-6 pt-5 pb-2">
-          <h2 className="flex items-center gap-3 text-lg font-semibold text-gray-900">
-            <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-indigo-50 text-indigo-700">
-              <LiaUsersSolid className="text-xl" />
-            </span>
-            All Drivers
-          </h2>
+          {loading ? (
+            <Skel h={28} w={160} />
+          ) : (
+            <h2 className="flex items-center gap-3 text-lg font-semibold text-gray-900">
+              <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-indigo-50 text-indigo-700">
+                <LiaUsersSolid className="text-xl" />
+              </span>
+              All Drivers
+            </h2>
+          )}
         </div>
 
         {/* Table */}
@@ -276,7 +298,6 @@ function ViewAllDriver() {
                         className="w-8 h-8 inline-flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-600"
                         title="Actions"
                       >
-                        {/* Vertical dots like screenshot */}
                         <span className="text-xl leading-none">⋮</span>
                       </button>
                     </td>
@@ -287,7 +308,7 @@ function ViewAllDriver() {
           </table>
         </div>
 
-        {/* Simple footer (like your screenshot, no full pager UI) */}
+        {/* Simple footer */}
         {!loading && !error && (
           <div className="px-6 py-4 text-sm text-gray-600 border-t bg-white">
             Showing {paged.length} of {filtered.length} drivers

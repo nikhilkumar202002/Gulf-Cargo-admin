@@ -8,10 +8,8 @@ export default class ErrorBoundary extends React.Component {
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
-  componentDidCatch(error, info) {
-    // Optional: send to your logger
-    // console.error("Modal error:", error, info);
-  }
+  // componentDidCatch(error, info) {
+  // }
   render() {
     if (!this.state.hasError) return this.props.children;
     return (

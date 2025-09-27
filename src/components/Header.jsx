@@ -11,6 +11,22 @@ import { setBranch as setBranchGlobal, clearBranch } from "../store/slices/branc
 import { logout as apiLogout, getProfile } from "../api/accountApi";
 import axiosInstance from "../api/axiosInstance";
 
+/* ---------------- tiny skeleton helpers ---------------- */
+const SkeletonLine = ({ w = 120, h = 16, className = "" }) => (
+  <span
+    className={`skel skel-line ${className}`}
+    style={{ width: typeof w === "number" ? `${w}px` : w, height: typeof h === "number" ? `${h}px` : h }}
+    aria-hidden="true"
+  />
+);
+const SkeletonCircle = ({ size = 32, className = "" }) => (
+  <span
+    className={`skel skel-circle ${className}`}
+    style={{ width: size, height: size }}
+    aria-hidden="true"
+  />
+);
+
 const resolveAssetUrl = (u) => {
   if (!u) return null;
   if (/^(https?:)?\/\//i.test(u) || u.startsWith("data:") || u.startsWith("blob:")) return u;
@@ -49,7 +65,7 @@ export default function Header() {
     const onUnauthorized = () => handleLogout();
     window.addEventListener("auth:unauthorized", onUnauthorized);
     return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
-  }, []);
+  }, []); // eslint-disable-line
 
   // Fetch profile → extract user/branch → push to Redux → render
   useEffect(() => {
@@ -57,7 +73,7 @@ export default function Header() {
     (async () => {
       setLoadingProfile(true);
       try {
-        const payload = await getProfile(); // expects { success, user: {...} }
+        const payload = await getProfile(); // expects { success, user: {...} } or similar
         const profile = payload?.user ?? payload?.data?.user ?? payload;
 
         const nm = typeof profile?.name === "string" ? profile.name : "User";
@@ -80,13 +96,10 @@ export default function Header() {
           setBranchName(String(bName));
           setBranchId(bId);
 
-          // make it available app-wide
           dispatch(setBranchGlobal({ branchId: bId, branchName: String(bName) }));
-          // optional global for non-Redux consumers:
-          // window.__branch = { id: bId, name: String(bName) };
         }
       } catch (e) {
-        console.error("getProfile failed:", e?.response?.data || e?.message);
+        // keep defaults; optionally log
       } finally {
         if (!cancelled) setLoadingProfile(false);
       }
@@ -122,35 +135,45 @@ export default function Header() {
   const openSidebar = () => window.dispatchEvent(new CustomEvent("toggle-sidebar"));
 
   return (
-    <header className="header flex justify-between items-center">
+    <header className="header flex justify-between items-center" aria-busy={loadingProfile}>
       <div className="flex items-center gap-3">
         <button type="button" className="icon-btn lg:hidden" aria-label="Open menu" onClick={openSidebar}>
           <FiMenu size={22} />
         </button>
 
         <span>
-          <h1>
-            Welcome Back{" "}
+          <h1 className="flex items-center gap-2">
+            <span>Welcome Back</span>
             <span className="header-username">
-              {loadingProfile ? "…" : `${userName}!`}
+              {loadingProfile ? (
+                <SkeletonLine w={120} h={20} />
+              ) : (
+                `${userName}!`
+              )}
             </span>
           </h1>
 
-          {/* show branch only if we have a string */}
-          {!loadingProfile && branchName && (
+          {/* Branch */}
+          <div className="mt-0.5 h-5">
+            {loadingProfile ? (
+              <SkeletonLine w={160} h={14} />
+            ) : (
+              branchName && (
                 <h2 className="header-branch-name">
                   {branchName}
-                  {/* If you also want to show the id: */}
-                  {/* {branchId != null && <span className="ml-2 text-xs text-xs text-gray-500">#{branchId}</span>} */}
+                  {/* {branchId != null && <span className="ml-2 text-xs text-gray-500">#{branchId}</span>} */}
                 </h2>
-              )}
+              )
+            )}
+          </div>
         </span>
       </div>
 
       <div className="header-right flex gap-3 items-center">
+        {/* Notifications */}
         <div
-          className="relative header-notification cursor-pointer"
-          onClick={() => setShowNotifications((prev) => !prev)}
+          className={`relative header-notification cursor-pointer ${loadingProfile ? "pointer-events-none opacity-70" : ""}`}
+          onClick={() => !loadingProfile && setShowNotifications((prev) => !prev)}
         >
           <IoNotifications size={22} />
           {notifications.length > 0 && (
@@ -176,23 +199,35 @@ export default function Header() {
           )}
         </div>
 
+        {/* User / Avatar */}
         <div style={{ position: "relative" }} className="header-user">
-          <div className="acount-avatar flex items-center gap-2 cursor-pointer" onClick={() => setShowSettings((s) => !s)}>
-            <img
-              src={avatarUrl}
-              alt="User"
-              className="w-8 h-8 rounded-full object-cover"
-              onError={(e) => {
-                if (!e.currentTarget.src.includes("/avatar.png")) {
-                  e.currentTarget.src = "/avatar.png";
-                }
-              }}
-            />
+          <div
+            className={`acount-avatar flex items-center gap-2 ${loadingProfile ? "pointer-events-none" : "cursor-pointer"}`}
+            onClick={() => !loadingProfile && setShowSettings((s) => !s)}
+          >
+            {loadingProfile ? (
+              <SkeletonCircle size={32} />
+            ) : (
+              <img
+                src={avatarUrl}
+                alt="User"
+                className="w-8 h-8 rounded-full object-cover"
+                onError={(e) => {
+                  if (!e.currentTarget.src.includes("/avatar.png")) {
+                    e.currentTarget.src = "/avatar.png";
+                  }
+                }}
+              />
+            )}
             <span className="user flex gap-1 items-center font-medium select-none">
-              {userName}
-              <IoIosArrowDown className={`transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`} size={18} />
+              {loadingProfile ? <SkeletonLine w={90} h={16} /> : userName}
+              <IoIosArrowDown
+                className={`transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`}
+                size={18}
+              />
             </span>
           </div>
+
           {showSettings && (
             <div ref={dropdownRef} className="settings absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white py-2">
               <Link to="/profile" className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 w-full text-left text-gray-700">
@@ -207,6 +242,29 @@ export default function Header() {
           )}
         </div>
       </div>
+
+      {/* Inline skeleton styles (keep tiny; move to CSS if you prefer) */}
+      <style>{`
+        .skel {
+          position: relative;
+          overflow: hidden;
+          display: inline-block;
+          border-radius: 6px;
+          background: #e5e7eb; /* gray-200 */
+        }
+        .skel::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          transform: translateX(-100%);
+          background: linear-gradient(90deg, rgba(229,231,235,0) 0%, rgba(255,255,255,0.75) 50%, rgba(229,231,235,0) 100%);
+          animation: skel-shimmer 1.2s infinite;
+        }
+        .skel-circle { border-radius: 9999px; }
+        @keyframes skel-shimmer {
+          100% { transform: translateX(100%); }
+        }
+      `}</style>
     </header>
   );
 }

@@ -64,7 +64,7 @@ export default function ShipmentMethodView() {
       const list = await getShipmentMethods(params); // No token check needed
       setRows(Array.isArray(list) ? list : []);
     } catch (err) {
-      console.error("Failed to fetch shipment methods", err?.response || err);
+      
       setMsg({
         text: err?.response?.data?.message || "Failed to load shipment methods.",
         variant: "error",

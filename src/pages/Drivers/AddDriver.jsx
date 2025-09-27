@@ -124,7 +124,7 @@ const AddDriver = () => {
       const server = err?.response?.data;
       setFieldErrors(server?.errors || null);
       setMsg({ type: "error", text: (server?.message || "Validation failed").toString() });
-      console.error("Create driver error:", server || err?.message);
+
     } finally {
       setSubmitting(false);
     }

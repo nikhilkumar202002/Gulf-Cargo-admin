@@ -46,10 +46,8 @@ const fetchRows = async (setLoading, setRows, setMsg) => {
   setMsg({ text: "", variant: "" });
   try {
     const list = await getPorts(); // Make sure this is a valid API request
-    console.log("API Response: ", list); // Log the API response for debugging
     setRows(Array.isArray(list) ? list : []);
   } catch (err) {
-    console.error("Failed to fetch ports", err?.response || err);
     setMsg({
       text: err?.response?.data?.message || "Failed to load ports.",
       variant: "error",

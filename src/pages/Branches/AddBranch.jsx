@@ -81,7 +81,7 @@ export default function AddBranch() {
           .sort((a, b) => a.label.localeCompare(b.label));
         setCodes(norm);
       } catch (e) {
-        console.error("Failed to load phone codes:", e);
+        
         setCodes([{ label: "India (+91)", dial: "+91" }]); // graceful fallback
       }
     })();
@@ -177,7 +177,7 @@ export default function AddBranch() {
         error?.response?.data?.message ||
         error?.message ||
         "Failed to create branch.";
-      console.error("Branch creation failed:", error);
+    
       setMessage("❌ " + msg);
     } finally {
       setLoading(false);

@@ -36,14 +36,7 @@ const normalizeList = (p) => {
   }
   return [];
 };
-const debugNormalize = (label, res) => {
-  const list = normalizeList(res);
-  console.debug(`[WORLD-API] ${label}`, {
-    length: Array.isArray(list) ? list.length : 0,
-    peek: list.slice?.(0, 3),
-  });
-  return list;
-};
+const debugNormalize = (label, res) => normalizeList(res);
 const pickLabel = (obj, keys) => {
   for (const k of keys) {
     const v = obj?.[k];
@@ -123,8 +116,8 @@ const resolveLabel = (id, list, getLabelFn) => {
 };
 
 /* Upload limits */
-const MAX_FILE_MB = 8; // per file
-const MAX_TOTAL_MB = 24; // total
+const MAX_FILE_MB = 8;
+const MAX_TOTAL_MB = 24;
 const MAX_DIMENSION = 2000;
 const WEBP_QUALITY = 0.82;
 const bytesToMB = (b) => b / (1024 * 1024);
@@ -169,18 +162,16 @@ async function compressIfImage(file) {
   }
 }
 
-/* ─────────────── Phone code helpers (for Contact section) ─────────────── */
+/* ─────────────── Phone code helpers ─────────────── */
 const getDialCode = (o) =>
   String(
     o?.dial_code ?? o?.phone_code ?? o?.code ?? o?.calling_code ?? o?.isd ?? o?.prefix ?? ""
   ).replace(/\s+/g, "");
-
 const getDialLabel = (o) => {
   const name = o?.country ?? o?.country_name ?? o?.name ?? o?.title ?? o?.label ?? "—";
   const dc = getDialCode(o);
   return dc ? `${name} (${dc})` : name;
 };
-
 const pickDialCodeByNumber = (num = "", codes = []) => {
   if (!num?.startsWith("+")) return null;
   const only = num.replace(/[^\d+]/g, "");
@@ -192,7 +183,6 @@ const pickDialCodeByNumber = (num = "", codes = []) => {
   }
   return best;
 };
-
 const composeE164 = (code, local) => {
   const c = String(code || "").trim();
   const n = String(local || "").trim();
@@ -233,9 +223,19 @@ const fieldDisabled = "disabled:cursor-not-allowed disabled:bg-slate-50";
 const ErrorMsg = ({ children }) =>
   children ? (
     <p className="mt-1 flex items-center gap-1 text-sm text-rose-700">
-      <FiAlertCircle /> {children}
+      {/* simple icon spacing without importing another icon */}
+      <span className="inline-block h-4 w-4 rounded-full bg-rose-600/10 ring-1 ring-rose-200" />
+      {children}
     </p>
   ) : null;
+
+/* Skeleton atom */
+const Skel = ({ h = 40, w = "100%", className = "" }) => (
+  <div
+    className={`animate-pulse rounded-lg bg-slate-200/80 ${className}`}
+    style={{ height: h, width: w }}
+  />
+);
 
 /* ─────────────────────────── Main Component ─────────────────────────── */
 const makeInitialForm = () => ({
@@ -307,7 +307,6 @@ const SenderCreate = () => {
     setCreatedData(null);
     setDisplayDetails(null);
     setFileKey((k) => k + 1);
-    // keep selected codes as-is
   };
 
   const handleChange = async (e) => {
@@ -360,7 +359,9 @@ const SenderCreate = () => {
           trimmed.push(f);
         }
         setFormData((prev) => ({ ...prev, documents: trimmed }));
-        setSubmitNotice(`Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length} file(s).`);
+        setSubmitNotice(
+          `Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length} file(s).`
+        );
         return;
       }
       setFormData((prev) => ({ ...prev, documents: kept }));
@@ -397,7 +398,6 @@ const SenderCreate = () => {
         setTypesError("Failed to load customer types.");
         setDocsError("Failed to load document types.");
         setBranchError("Failed to load branches.");
-        console.error(err);
       } finally {
         if (!mounted) return;
         setTypesLoading(false);
@@ -423,7 +423,6 @@ const SenderCreate = () => {
         setPhoneCodes(Array.isArray(list) ? list : []);
       } catch (e) {
         if (!alive) return;
-        console.error("[PHONE-CODES] load failed:", e);
         setPhoneCodesError("Failed to load phone codes.");
         setPhoneCodes([]);
       } finally {
@@ -491,14 +490,12 @@ const SenderCreate = () => {
             if (mounted && fetchStamp.current === myStamp) setDistrictLoading(false);
           }
         }
-      } catch (err) {
-        console.error("[WORLD-API] unexpected error:", err);
-      }
+      } catch {}
     })();
     return () => {
       mounted = false;
     };
-  }, [formData.country, formData.state]); // intentionally not depending on countries list
+  }, [formData.country, formData.state]);
 
   /* payload (JSON or multipart) */
   const buildPartyPayload = (fd) => {
@@ -524,9 +521,6 @@ const SenderCreate = () => {
       city: fd.city,
       postal_code: fd.zipCode,
       address: fd.address,
-      // If backend also wants the raw codes, uncomment:
-      // phone_code: contactCode,
-      // whatsapp_phone_code: whatsappCode,
     };
 
     if (!hasFiles) {
@@ -556,7 +550,6 @@ const SenderCreate = () => {
       setSubmitLoading(true);
       const payload = buildPartyPayload(formData);
 
-      // Toasted submit
       const created = await toast.promise(
         createParty(payload),
         {
@@ -589,9 +582,7 @@ const SenderCreate = () => {
       setCreatedData(created ?? null);
       setDisplayDetails(details);
       setShowSuccess(true);
-      // do not reset immediately; modal close will reset
     } catch (err) {
-      console.error(err);
       if (err?.response?.status === 413) {
         setSubmitError("Attachments exceed server limit (413). Trim or upload fewer files.");
         toast.error("Attachments too large (413)", { position: "top-right" });
@@ -719,44 +710,52 @@ const SenderCreate = () => {
 
               <div>
                 <Label required>Branch</Label>
-                <select
-                  name="branch"
-                  value={String(formData.branch ?? "")}
-                  onChange={handleChange}
-                  className={`${fieldBase} ${fieldDisabled}`}
-                  disabled={branchLoading}
-                  aria-invalid={!!fieldErrors.branch_id}
-                >
-                  <option value="">{branchLoading ? "Loading..." : "Select Branch"}</option>
-                  {!branchLoading &&
-                    branches.map((b) => (
-                      <option key={getBranchId(b)} value={getBranchId(b)}>
-                        {getBranchLabel(b)}
-                      </option>
-                    ))}
-                </select>
+                {branchLoading ? (
+                  <Skel />
+                ) : (
+                  <select
+                    name="branch"
+                    value={String(formData.branch ?? "")}
+                    onChange={handleChange}
+                    className={`${fieldBase} ${fieldDisabled}`}
+                    disabled={branchLoading}
+                    aria-invalid={!!fieldErrors.branch_id}
+                  >
+                    <option value="">{branchLoading ? "Loading..." : "Select Branch"}</option>
+                    {!branchLoading &&
+                      branches.map((b) => (
+                        <option key={getBranchId(b)} value={getBranchId(b)}>
+                          {getBranchLabel(b)}
+                        </option>
+                      ))}
+                  </select>
+                )}
                 {branchError && <ErrorMsg>{branchError}</ErrorMsg>}
                 <ErrorMsg>{fieldErrors.branch_id?.[0]}</ErrorMsg>
               </div>
 
               <div>
                 <Label required>Customer Type</Label>
-                <select
-                  name="customerType"
-                  value={String(formData.customerType ?? "")}
-                  onChange={handleChange}
-                  className={`${fieldBase} ${fieldDisabled}`}
-                  disabled={typesLoading}
-                  aria-invalid={!!fieldErrors.customer_type_id}
-                >
-                  <option value="">{typesLoading ? "Loading..." : "Select Customer Type"}</option>
-                  {!typesLoading &&
-                    customerTypes.map((t) => (
-                      <option key={getTypeId(t)} value={getTypeId(t)}>
-                        {getTypeLabel(t)}
-                      </option>
-                    ))}
-                </select>
+                {typesLoading ? (
+                  <Skel />
+                ) : (
+                  <select
+                    name="customerType"
+                    value={String(formData.customerType ?? "")}
+                    onChange={handleChange}
+                    className={`${fieldBase} ${fieldDisabled}`}
+                    disabled={typesLoading}
+                    aria-invalid={!!fieldErrors.customer_type_id}
+                  >
+                    <option value="">{typesLoading ? "Loading..." : "Select Customer Type"}</option>
+                    {!typesLoading &&
+                      customerTypes.map((t) => (
+                        <option key={getTypeId(t)} value={getTypeId(t)}>
+                          {getTypeLabel(t)}
+                        </option>
+                      ))}
+                  </select>
+                )}
                 {typesError && <ErrorMsg>{typesError}</ErrorMsg>}
                 <ErrorMsg>{fieldErrors.customer_type_id?.[0]}</ErrorMsg>
               </div>
@@ -774,20 +773,24 @@ const SenderCreate = () => {
               <div>
                 <Label>WhatsApp Number</Label>
                 <div className="grid grid-cols-[150px,1fr] gap-2">
-                  <select
-                    value={whatsappCode}
-                    onChange={(e) => setWhatsappCode(e.target.value)}
-                    disabled={phoneCodesLoading}
-                    className={`${fieldBase} ${fieldDisabled}`}
-                  >
-                    <option value="+">{phoneCodesLoading ? "Loading…" : "Code"}</option>
-                    {!phoneCodesLoading &&
-                      phoneCodes.map((pc, i) => (
-                        <option key={i} value={getDialCode(pc)}>
-                          {getDialLabel(pc)}
-                        </option>
-                      ))}
-                  </select>
+                  {phoneCodesLoading ? (
+                    <Skel />
+                  ) : (
+                    <select
+                      value={whatsappCode}
+                      onChange={(e) => setWhatsappCode(e.target.value)}
+                      disabled={phoneCodesLoading}
+                      className={`${fieldBase} ${fieldDisabled}`}
+                    >
+                      <option value="+">{phoneCodesLoading ? "Loading…" : "Code"}</option>
+                      {!phoneCodesLoading &&
+                        phoneCodes.map((pc, i) => (
+                          <option key={i} value={getDialCode(pc)}>
+                            {getDialLabel(pc)}
+                          </option>
+                        ))}
+                    </select>
+                  )}
                   <input
                     type="text"
                     name="whatsappNumber"
@@ -798,27 +801,31 @@ const SenderCreate = () => {
                   />
                 </div>
                 {phoneCodesError && <p className="mt-1 text-sm text-rose-700">{phoneCodesError}</p>}
-                <ErrorMsg>{(fieldErrors.whatsapp?.[0] ?? fieldErrors.whatsapp_number?.[0])}</ErrorMsg>
+                <ErrorMsg>{fieldErrors.whatsapp?.[0] ?? fieldErrors.whatsapp_number?.[0]}</ErrorMsg>
               </div>
 
               {/* Contact */}
               <div>
                 <Label>Contact Number</Label>
                 <div className="grid grid-cols-[150px,1fr] gap-2">
-                  <select
-                    value={contactCode}
-                    onChange={(e) => setContactCode(e.target.value)}
-                    disabled={phoneCodesLoading}
-                    className={`${fieldBase} ${fieldDisabled}`}
-                  >
-                    <option value="+">{phoneCodesLoading ? "Loading…" : "Code"}</option>
-                    {!phoneCodesLoading &&
-                      phoneCodes.map((pc, i) => (
-                        <option key={i} value={getDialCode(pc)}>
-                          {getDialLabel(pc)}
-                        </option>
-                      ))}
-                  </select>
+                  {phoneCodesLoading ? (
+                    <Skel />
+                  ) : (
+                    <select
+                      value={contactCode}
+                      onChange={(e) => setContactCode(e.target.value)}
+                      disabled={phoneCodesLoading}
+                      className={`${fieldBase} ${fieldDisabled}`}
+                    >
+                      <option value="+">{phoneCodesLoading ? "Loading…" : "Code"}</option>
+                      {!phoneCodesLoading &&
+                        phoneCodes.map((pc, i) => (
+                          <option key={i} value={getDialCode(pc)}>
+                            {getDialLabel(pc)}
+                          </option>
+                        ))}
+                    </select>
+                  )}
                   <input
                     type="text"
                     name="contactNumber"
@@ -828,7 +835,7 @@ const SenderCreate = () => {
                     className={fieldBase}
                   />
                 </div>
-                <ErrorMsg>{(fieldErrors.phone?.[0] ?? fieldErrors.contact_number?.[0])}</ErrorMsg>
+                <ErrorMsg>{fieldErrors.phone?.[0] ?? fieldErrors.contact_number?.[0]}</ErrorMsg>
               </div>
             </div>
 
@@ -842,22 +849,26 @@ const SenderCreate = () => {
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
               <div>
                 <Label required>ID Type</Label>
-                <select
-                  name="senderIdType"
-                  value={String(formData.senderIdType ?? "")}
-                  onChange={handleChange}
-                  className={`${fieldBase} ${fieldDisabled}`}
-                  disabled={docsLoading}
-                  aria-invalid={!!fieldErrors.document_type_id}
-                >
-                  <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
-                  {!docsLoading &&
-                    docTypes.map((d) => (
-                      <option key={getDocId(d)} value={getDocId(d)}>
-                        {getDocLabel(d)}
-                      </option>
-                    ))}
-                </select>
+                {docsLoading ? (
+                  <Skel />
+                ) : (
+                  <select
+                    name="senderIdType"
+                    value={String(formData.senderIdType ?? "")}
+                    onChange={handleChange}
+                    className={`${fieldBase} ${fieldDisabled}`}
+                    disabled={docsLoading}
+                    aria-invalid={!!fieldErrors.document_type_id}
+                  >
+                    <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
+                    {!docsLoading &&
+                      docTypes.map((d) => (
+                        <option key={getDocId(d)} value={getDocId(d)}>
+                          {getDocLabel(d)}
+                        </option>
+                      ))}
+                  </select>
+                )}
                 {docsError && <ErrorMsg>{docsError}</ErrorMsg>}
                 <ErrorMsg>{fieldErrors.document_type_id?.[0]}</ErrorMsg>
               </div>
@@ -903,55 +914,67 @@ const SenderCreate = () => {
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
               <div>
                 <Label>Country</Label>
-                <select
-                  name="country"
-                  value={String(formData.country ?? "")}
-                  onChange={handleChange}
-                  className={`${fieldBase} ${fieldDisabled}`}
-                  disabled={countryLoading}
-                  aria-invalid={!!fieldErrors.country_id}
-                >
-                  <option value="">{countryLoading ? "Loading..." : "Select Country"}</option>
-                  {!countryLoading && renderCountryOptions()}
-                </select>
+                {countryLoading ? (
+                  <Skel />
+                ) : (
+                  <select
+                    name="country"
+                    value={String(formData.country ?? "")}
+                    onChange={handleChange}
+                    className={`${fieldBase} ${fieldDisabled}`}
+                    disabled={countryLoading}
+                    aria-invalid={!!fieldErrors.country_id}
+                  >
+                    <option value="">{countryLoading ? "Loading..." : "Select Country"}</option>
+                    {!countryLoading && renderCountryOptions()}
+                  </select>
+                )}
                 {countryError && <ErrorMsg>{countryError}</ErrorMsg>}
                 <ErrorMsg>{fieldErrors.country_id?.[0]}</ErrorMsg>
               </div>
 
               <div>
                 <Label>State</Label>
-                <select
-                  name="state"
-                  value={String(formData.state ?? "")}
-                  onChange={handleChange}
-                  className={`${fieldBase} ${fieldDisabled}`}
-                  disabled={!formData.country || stateLoading}
-                  aria-invalid={!!fieldErrors.state_id}
-                >
-                  <option value="">
-                    {!formData.country ? "Select Country first" : stateLoading ? "Loading..." : "Select State"}
-                  </option>
-                  {!stateLoading && formData.country && renderStateOptions()}
-                </select>
+                {stateLoading ? (
+                  <Skel />
+                ) : (
+                  <select
+                    name="state"
+                    value={String(formData.state ?? "")}
+                    onChange={handleChange}
+                    className={`${fieldBase} ${fieldDisabled}`}
+                    disabled={!formData.country || stateLoading}
+                    aria-invalid={!!fieldErrors.state_id}
+                  >
+                    <option value="">
+                      {!formData.country ? "Select Country first" : stateLoading ? "Loading..." : "Select State"}
+                    </option>
+                    {!stateLoading && formData.country && renderStateOptions()}
+                  </select>
+                )}
                 {stateError && <ErrorMsg>{stateError}</ErrorMsg>}
                 <ErrorMsg>{fieldErrors.state_id?.[0]}</ErrorMsg>
               </div>
 
               <div>
                 <Label>District</Label>
-                <select
-                  name="district"
-                  value={String(formData.district ?? "")}
-                  onChange={handleChange}
-                  className={`${fieldBase} ${fieldDisabled}`}
-                  disabled={!formData.state || districtLoading}
-                  aria-invalid={!!fieldErrors.district_id}
-                >
-                  <option value="">
-                    {!formData.state ? "Select State first" : districtLoading ? "Loading..." : "Select District"}
-                  </option>
-                  {!districtLoading && formData.state && renderDistrictOptions()}
-                </select>
+                {districtLoading ? (
+                  <Skel />
+                ) : (
+                  <select
+                    name="district"
+                    value={String(formData.district ?? "")}
+                    onChange={handleChange}
+                    className={`${fieldBase} ${fieldDisabled}`}
+                    disabled={!formData.state || districtLoading}
+                    aria-invalid={!!fieldErrors.district_id}
+                  >
+                    <option value="">
+                      {!formData.state ? "Select State first" : districtLoading ? "Loading..." : "Select District"}
+                    </option>
+                    {!districtLoading && formData.state && renderDistrictOptions()}
+                  </select>
+                )}
                 {districtError && <ErrorMsg>{districtError}</ErrorMsg>}
                 <ErrorMsg>{fieldErrors.district_id?.[0]}</ErrorMsg>
               </div>
@@ -998,7 +1021,8 @@ const SenderCreate = () => {
               />
               <ErrorMsg>{fieldErrors.address?.[0]}</ErrorMsg>
             </div>
-              <div className="mx-auto flex max-w-6xl items-center justify-end gap-3 py-2">
+
+            <div className="mx-auto flex max-w-6xl items-center justify-end gap-3 py-2">
               <button
                 type="button"
                 className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-slate-700 hover:bg-slate-50"

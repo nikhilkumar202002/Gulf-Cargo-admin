@@ -119,7 +119,6 @@ export const getBranchUsers = async (branchId) => {
     const firstArr = Object.values(data || {}).find(Array.isArray);
     return Array.isArray(firstArr) ? firstArr : [];
   } catch (err) {
-    console.error("getBranchUsers failed:", err);
     return [];
   }
 };

@@ -9,7 +9,6 @@ const TrackingBody = () => {
     fetch("/api/orders") // Change to your real API URL
       .then((res) => res.json())
       .then((data) => setOrders(data))
-      .catch((err) => console.error("Error fetching orders:", err));
   }, []);
 
   return (

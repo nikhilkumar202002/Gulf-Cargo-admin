@@ -19,7 +19,7 @@ function ViewBranch() {
       setBranch(b || null);
       setError("");
     } catch (err) {
-      console.error("Fetch Error:", err);
+      
       setError("Failed to fetch branch details.");
     } finally {
       setLoading(false);

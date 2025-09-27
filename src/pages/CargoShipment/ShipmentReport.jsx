@@ -4,18 +4,37 @@ import { Link } from "react-router-dom";
 import { listCargoShipments } from "../../api/shipmentCargo";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
+
+/* ---------------- Skeleton helpers (lightweight) ---------------- */
+const Skel = ({ w = "100%", h = 14, rounded = 8, className = "" }) => (
+  <span
+    className={cx("inline-block bg-slate-200 animate-pulse", className)}
+    style={{
+      width: typeof w === "number" ? `${w}px` : w,
+      height: typeof h === "number" ? `${h}px` : h,
+      borderRadius: rounded,
+    }}
+    aria-hidden="true"
+  />
+);
+const SkelInput = () => <Skel w="100%" h={36} rounded={10} />;
+const SkelBtn = ({ wide = false }) => <Skel w={wide ? 120 : 90} h={36} rounded={10} />;
+const SkelChip = () => <Skel w={80} h={20} rounded={999} />;
+
 const Spinner = ({ className = "h-5 w-5 text-indigo-600" }) => (
   <svg className={cx("animate-spin", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
   </svg>
 );
+
 const formatDate = (iso) => {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
+
 const Badge = ({ text = "", color = "indigo" }) => (
   <span
     className={cx(
@@ -32,6 +51,7 @@ const Badge = ({ text = "", color = "indigo" }) => (
     {text || "—"}
   </span>
 );
+
 const statusColor = (s = "") => {
   const v = s.toLowerCase();
   if (v.includes("hold") || v.includes("wait")) return "amber";
@@ -129,7 +149,7 @@ export default function ShipmentReport() {
     { key: "destination_port", label: "Destination" },
     { key: "branch", label: "Branch" },
     { key: "created_by", label: "Created By" },
-    { key: "no_of_cargos", label: "No. of Cargos" }, // <<--- only the count
+    { key: "no_of_cargos", label: "No. of Cargos" }, // << count only
     { key: "status", label: "Status" },
     { key: "view", label: "View" },
   ];
@@ -139,66 +159,90 @@ export default function ShipmentReport() {
 
   return (
     <div className="min-h-screen">
+      {/* Header */}
       <header>
         <div className="mx-auto max-w-6xl">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Shipment Report</h1>
-          <p className="mt-1 text-sm text-slate-600">All shipments fetched from the API.</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            {loading ? <Skel w={200} h={24} /> : "Shipment Report"}
+          </h1>
+          <p className="mt-1 text-sm text-slate-600">
+            {loading ? <Skel w={260} h={14} /> : "All shipments fetched from the API."}
+          </p>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl py-6">
+        {/* Controls */}
         <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-3">
             <label className="mb-1 block text-xs font-medium text-slate-600">Search</label>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search AWB, ports, branch, user, status…"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+            {loading ? (
+              <SkelInput />
+            ) : (
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search AWB, ports, branch, user, status…"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            )}
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">Rows</label>
-            <select
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(Number(e.target.value));
-                setPage(1);
-              }}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {[10, 20, 50, 100].map((n) => (
-                <option key={n} value={n}>
-                  {n} / page
-                </option>
-              ))}
-            </select>
+            {loading ? (
+              <SkelInput />
+            ) : (
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {[10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n} / page
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="flex items-end gap-2">
-            <button
-              type="button"
-              onClick={() => load({ page: 1 })}
-              className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {loading ? <Spinner className="h-4 w-4 text-white" /> : "Refresh"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setQuery("");
-                setPerPage(10);
-                setPage(1);
-                load({ page: 1, perPage: 10 });
-              }}
-              className="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Reset
-            </button>
+            {loading ? (
+              <>
+                <SkelBtn wide />
+                <SkelBtn />
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => load({ page: 1 })}
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {loading ? <Spinner className="h-4 w-4 text-white" /> : "Refresh"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setPerPage(10);
+                    setPage(1);
+                    load({ page: 1, perPage: 10 });
+                  }}
+                  className="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Reset
+                </button>
+              </>
+            )}
           </div>
         </div>
 
+        {/* Table */}
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
@@ -215,17 +259,19 @@ export default function ShipmentReport() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
+                {/* Skeleton rows */}
                 {loading &&
                   Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={`skeleton-${i}`} className="animate-pulse">
-                      {columns.map((c) => (
-                        <td key={c.key} className="px-4 py-3">
-                          <div className="h-3 rounded bg-slate-200" />
+                    <tr key={`skeleton-${i}`}>
+                      {columns.map((c, j) => (
+                        <td key={`${c.key}-${j}`} className="px-4 py-3">
+                          <Skel w={j === 0 ? 30 : "80%"} h={14} />
                         </td>
                       ))}
                     </tr>
                   ))}
 
+                {/* Error */}
                 {!loading && err && (
                   <tr>
                     <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-rose-600">
@@ -234,6 +280,7 @@ export default function ShipmentReport() {
                   </tr>
                 )}
 
+                {/* Empty */}
                 {!loading && !err && filtered.length === 0 && (
                   <tr>
                     <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-slate-500">
@@ -242,10 +289,10 @@ export default function ShipmentReport() {
                   </tr>
                 )}
 
+                {/* Data rows */}
                 {!loading &&
                   !err &&
                   filtered.map((r) => {
-                    // <<< ONLY COUNT OF CARGOS >>>
                     const noOfCargos = Array.isArray(r.cargos)
                       ? r.cargos.length
                       : Number(r.no_of_cargos || r.total_cargos || r.cargo_count || 0);
@@ -290,40 +337,56 @@ export default function ShipmentReport() {
           {/* Pagination */}
           <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 p-3 sm:flex-row">
             <div className="text-sm text-slate-600">
-              Showing <span className="font-medium">{filtered.length ? showingFrom : 0}</span> to{" "}
-              <span className="font-medium">{filtered.length ? showingTo : 0}</span> of{" "}
-              <span className="font-medium">{meta.total ?? filtered.length}</span> shipments
+              {loading ? (
+                <Skel w={220} h={16} />
+              ) : (
+                <>
+                  Showing <span className="font-medium">{filtered.length ? showingFrom : 0}</span> to{" "}
+                  <span className="font-medium">{filtered.length ? showingTo : 0}</span> of{" "}
+                  <span className="font-medium">{meta.total ?? filtered.length}</span> shipments
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={loading || meta.current_page <= 1}
-                className={cx(
-                  "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
-                  meta.current_page <= 1 || loading
-                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                )}
-              >
-                Prev
-              </button>
-              <span className="text-sm text-slate-700">
-                Page <span className="font-semibold">{meta.current_page}</span> of{" "}
-                <span className="font-semibold">{meta.last_page}</span>
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}
-                disabled={loading || meta.current_page >= meta.last_page}
-                className={cx(
-                  "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
-                  meta.current_page >= meta.last_page || loading
-                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                )}
-              >
-                Next
-              </button>
+              {loading ? (
+                <>
+                  <SkelBtn />
+                  <Skel w={120} h={28} rounded={6} />
+                  <SkelBtn />
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={loading || meta.current_page <= 1}
+                    className={cx(
+                      "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
+                      meta.current_page <= 1 || loading
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    )}
+                  >
+                    Prev
+                  </button>
+                  <span className="text-sm text-slate-700">
+                    Page <span className="font-semibold">{meta.current_page}</span> of{" "}
+                    <span className="font-semibold">{meta.last_page}</span>
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}
+                    disabled={loading || meta.current_page >= meta.last_page}
+                    className={cx(
+                      "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
+                      meta.current_page >= meta.last_page || loading
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    )}
+                  >
+                    Next
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

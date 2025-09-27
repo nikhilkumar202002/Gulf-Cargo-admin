@@ -9,7 +9,6 @@ export const createDriver = async (driverData) => {
     });
     return data;
   } catch (error) {
-    console.error("Error creating driver:", error);
     throw error;
   }
 };
@@ -20,7 +19,6 @@ export const getAllDrivers = async () => {
     const { data } = await axiosInstance.get('/drivers');
     return data;  // Return the response data
   } catch (error) {
-    console.error('Error fetching drivers:', error);
     throw error;  // Propagate error for handling in component
   }
 };
@@ -31,7 +29,6 @@ export const getActiveDrivers = async () => {
     const { data } = await axiosInstance.get('/drivers?status=1');
     return data;  // Return the response data
   } catch (error) {
-    console.error('Error fetching active drivers:', error);
     throw error;  // Propagate error for handling in component
   }
 };
@@ -42,7 +39,6 @@ export const getInactiveDrivers = async () => {
     const { data } = await axiosInstance.get('/drivers?status=0');
     return data;  // Return the response data
   } catch (error) {
-    console.error('Error fetching inactive drivers:', error);
     throw error;  // Propagate error for handling in component
   }
 };

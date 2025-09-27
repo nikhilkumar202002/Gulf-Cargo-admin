@@ -51,10 +51,10 @@ input.react-autosuggest__input {
 }
 .cargo-add-box-btn{
     position: absolute;
-    top: 45%;
+    top: 65%;
     right: 0;
     button{
-        padding: 10px 20px;
+        padding: 8px 15px;
         background-color: var(--secondary-color);
         border-radius: 10px;
         color: white;
@@ -63,10 +63,33 @@ input.react-autosuggest__input {
         gap: 6px;
         align-items: center;
         font-weight: 600;
+        font-size: 15px;
         box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;
     }
     button:hover{
         background-color: var(--primary-color);
         transition: 400ms;
     }
+}
+.cargo-delete-btn{
+    font-family: "Inter";
+    font-size: 15px;
+    font-weight: 500;
+}
+.cargo-delete-btn:hover{
+    background-color: #b3110e;
+    transition: 400ms;
+}
+.delete-btn-icon{
+    font-size: 20px;
+}
+.items-delete-btn{
+    background-color: var(--secondary-color);
+    padding: 4px 6px;
+    border-radius: 5px;
+    color: white;
+    font-size: 18px;
+}
+.box-add-btn-icon{
+    font-size: 25px;
 }

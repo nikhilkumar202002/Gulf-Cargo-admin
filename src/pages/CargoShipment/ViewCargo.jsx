@@ -1,10 +1,9 @@
 // src/pages/ViewCargo.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { BsFillBoxSeamFill } from "react-icons/bs";
 import { IoLocationSharp } from "react-icons/io5";
 import { MdAddIcCall } from "react-icons/md";
-import { CiEdit } from "react-icons/ci";
 import { getCargoById } from "../../api/createCargoApi";
 import "./ShipmentStyles.css";
 
@@ -28,12 +27,13 @@ const timeHHMM = (t) => {
 const statusClass = (s) => {
   const v = String(s || "").toLowerCase();
   if (!v || v === "pending") return "bg-amber-100 text-amber-800";
+  if (v.includes("enquiry")) return "bg-sky-100 text-sky-800";
   if (v.includes("received") || v.includes("deliver")) return "bg-emerald-100 text-emerald-800";
   if (v.includes("cancel")) return "bg-rose-100 text-rose-800";
   return "bg-slate-100 text-slate-800";
 };
 
-/* ---------------- value pickers (robust to API variants) ---------------- */
+/* ---------------- value pickers ---------------- */
 const pickOne = (obj, keys, d = undefined) => {
   for (const k of keys) {
     const v = k.split(".").reduce((acc, kk) => (acc ? acc[kk] : undefined), obj);
@@ -43,9 +43,7 @@ const pickOne = (obj, keys, d = undefined) => {
 };
 
 const formatPhones = (p = {}) => {
-  const phones = [
-    p.contact_number, p.phone, p.mobile, p.mobile_number, p.contact,
-  ].filter(Boolean);
+  const phones = [p.contact_number, p.phone, p.mobile, p.mobile_number, p.contact].filter(Boolean);
   const whats = p.whatsapp_number ?? p.whatsapp;
   const chunks = [];
   if (phones.length) chunks.push(`Call: ${phones.join(" / ")}`);
@@ -92,6 +90,74 @@ const Stat = ({ label, value, after }) => (
   </div>
 );
 
+/* ---------------- normalize helpers for boxes ---------------- */
+function normalizeBoxes(cargo) {
+  const raw = cargo?.boxes;
+
+  // API sample: { "1": { items: [...] }, "2": { items: [...] } }
+  if (raw && !Array.isArray(raw) && typeof raw === "object") {
+    const out = [];
+    for (const [k, v] of Object.entries(raw)) {
+      const items = Array.isArray(v?.items) ? v.items : [];
+      const pieces = items.reduce(
+        (sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0),
+        0
+      );
+      // your payload doesn't include box_weight at this level; default 0
+      const weight = Number(v?.box_weight ?? v?.weight ?? 0);
+      out.push({ box_number: k, weight, pieces, items });
+    }
+    return out;
+  }
+
+  if (Array.isArray(raw)) {
+    return raw.map((b, i) => {
+      const box_number = b?.box_number ?? b?.boxNo ?? b?.box ?? (i + 1);
+      const items = Array.isArray(b?.items) ? b.items : [];
+      const pieces = items.reduce(
+        (sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0),
+        0
+      );
+      const weight = Number(b?.box_weight ?? b?.weight ?? 0);
+      return { box_number, weight, pieces, items };
+    });
+  }
+
+  // fallback: try flat items
+  const flat = Array.isArray(cargo?.items) ? cargo.items : [];
+  if (flat.length) {
+    const byBox = new Map();
+    flat.forEach((it) => {
+      const bn = it?.box_number ?? it?.boxNo ?? it?.box ?? 1;
+      if (!byBox.has(bn)) byBox.set(bn, []);
+      byBox.get(bn).push(it);
+    });
+    return Array.from(byBox.entries()).map(([box_number, items]) => {
+      const pieces = items.reduce(
+        (sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0),
+        0
+      );
+      return { box_number, weight: 0, pieces, items };
+    });
+  }
+
+  return [];
+}
+
+function flattenItemsFromBoxes(boxes) {
+  const arr = [];
+  boxes.forEach((b) => {
+    (b.items || []).forEach((it, i) =>
+      arr.push({
+        ...it,
+        box_number: b.box_number,
+        slno: it?.slno ?? i + 1,
+      })
+    );
+  });
+  return arr;
+}
+
 /* ---------------- main ---------------- */
 export default function ViewCargo() {
   const { id } = useParams();
@@ -106,7 +172,13 @@ export default function ViewCargo() {
       setLoading(true);
       setErr("");
       try {
-        const c = await getCargoById(id);
+        const res = await getCargoById(id);
+        // ✅ unwrap the API shape you shared
+        const c =
+          res?.cargo ??
+          res?.data?.cargo ??
+          (res?.success && res?.cargo) ? res.cargo : res;
+
         setCargo(c || {});
       } catch (e) {
         setErr(e?.message || "Failed to fetch cargo.");
@@ -116,78 +188,30 @@ export default function ViewCargo() {
     })();
   }, [id]);
 
-  /* ---------- derive sender/receiver & meta safely ---------- */
-  const sender = useMemo(() => cargo?.sender || {}, [cargo]);
-  const receiver = useMemo(() => cargo?.receiver || {}, [cargo]);
+  /* ---------- derive fields ---------- */
+  const sender = cargo?.sender || {};
+  const receiver = cargo?.receiver || {};
 
   const senderName = pickOne(cargo, ["sender_name", "sender.name"], "—");
   const receiverName = pickOne(cargo, ["receiver_name", "consignee_name", "receiver.name"], "—");
 
+  // In your sample these are plain strings; keep .name fallback for other shapes
   const shippingText = pickOne(cargo, ["shipping_method.name", "shipping_method"], "—");
   const paymentText  = pickOne(cargo, ["payment_method.name", "payment_method"], "—");
   const deliveryText = pickOne(cargo, ["delivery_type.name", "delivery_type"], "—");
   const statusText   = pickOne(cargo, ["status.name", "status"], "—");
 
-  /* ---------- normalize items and boxes ---------- */
+  /* ---------- boxes & items ---------- */
+  const boxList = useMemo(() => normalizeBoxes(cargo), [cargo]);
   const flatItems = useMemo(() => {
-    // Prefer explicit items
-    if (Array.isArray(cargo?.items)) return cargo.items;
-
-    // Some APIs put items inside boxes
-    if (Array.isArray(cargo?.boxes)) {
-      const arr = [];
-      cargo.boxes.forEach((b) => {
-        (b?.items || []).forEach((it) =>
-          arr.push({ ...it, box_number: it?.box_number ?? it?.boxNo ?? it?.box ?? b?.box_number ?? b?.boxNo ?? b?.box })
-        );
-      });
-      return arr;
-    }
-    return [];
-  }, [cargo]);
-
-  const boxes = useMemo(() => {
-    // If API already gives boxes with nested items, use as-is (but normalize keys)
-    if (Array.isArray(cargo?.boxes) && cargo.boxes.length) {
-      return cargo.boxes.map((b, i) => {
-        const boxNo =
-          b?.box_number ?? b?.boxNo ?? b?.box ?? (i + 1);
-        const items = Array.isArray(b?.items) ? b.items : [];
-        const weight = Number(
-          b?.weight ??
-          b?.box_weight ??
-          items.reduce((sum, it) => sum + Number(it?.weight || 0), 0)
-        ) || 0;
-
-        const pieces = items.reduce(
-          (sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0),
-          0
-        );
-
-        return { box_number: boxNo, weight, pieces, items };
-      });
-    }
-
-    // Else: group flat items by their box field
-    const byBox = new Map();
-    flatItems.forEach((it) => {
-      const boxNo = it?.box_number ?? it?.boxNo ?? it?.box ?? 1;
-      if (!byBox.has(boxNo)) byBox.set(boxNo, []);
-      byBox.get(boxNo).push(it);
-    });
-
-    return Array.from(byBox.entries()).map(([boxNo, items]) => {
-      const weight = items.reduce((sum, it) => sum + Number(it?.weight || 0), 0);
-      const pieces = items.reduce((sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0), 0);
-      return { box_number: boxNo, weight, pieces, items };
-    });
-  }, [cargo, flatItems]);
+    if (Array.isArray(cargo?.items) && cargo.items.length) return cargo.items;
+    return flattenItemsFromBoxes(boxList);
+  }, [cargo, boxList]);
 
   const totals = useMemo(() => {
     const totalWeight =
       Number(pickOne(cargo, ["total_weight"])) ||
-      boxes.reduce((s, b) => s + Number(b.weight || 0), 0) ||
-      flatItems.reduce((s, it) => s + Number(it?.weight || 0), 0);
+      boxList.reduce((s, b) => s + Number(b.weight || 0), 0);
 
     return {
       total_cost: money(cargo?.total_cost),
@@ -197,7 +221,7 @@ export default function ViewCargo() {
       net_total: money(cargo?.net_total),
       total_weight: weight3(totalWeight),
     };
-  }, [cargo, boxes, flatItems]);
+  }, [cargo, boxList]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -210,13 +234,6 @@ export default function ViewCargo() {
           </h1>
 
           <div className="flex gap-2">
-            <Link
-              to={`/cargo/${id}`}
-              className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 flex items-center gap-1"
-            >
-              <CiEdit className="text-lg" />
-              Edit
-            </Link>
             <button
               onClick={() => window.print()}
               className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
@@ -344,20 +361,20 @@ export default function ViewCargo() {
               </div>
             </div>
 
-            {/* -------- BOX-WISE LISTS -------- */}
+            {/* Boxes */}
             <div className="rounded-xl border bg-white overflow-hidden">
               <div className="px-4 py-3 border-b bg-gray-50 font-semibold flex items-center justify-between">
                 <span>Boxes</span>
                 <span className="text-sm text-gray-500">
-                  Total Boxes: {boxes.length || 0}
+                  Total Boxes: {boxList.length || 0}
                 </span>
               </div>
 
-              {boxes.length === 0 ? (
+              {boxList.length === 0 ? (
                 <div className="p-6 text-sm text-gray-500">No boxes found.</div>
               ) : (
                 <div className="divide-y">
-                  {boxes
+                  {boxList
                     .sort((a, b) => Number(a.box_number) - Number(b.box_number))
                     .map((b, bi) => (
                       <div key={`box-${bi}`}>
@@ -372,7 +389,7 @@ export default function ViewCargo() {
                         </div>
 
                         <div className="overflow-x-auto">
-                          <table className="min-w-[760px] w-full text-sm">
+                          <table className="min-w-[700px] w-full text-sm">
                             <thead className="bg-gray-100 border-y border-gray-200">
                               <tr className="text-left text-gray-600">
                                 <th className="px-3 py-2 w-14 text-center">Slno</th>
@@ -380,7 +397,6 @@ export default function ViewCargo() {
                                 <th className="px-3 py-2 w-28 text-right">Pieces</th>
                                 <th className="px-3 py-2 w-28 text-right">Unit Price</th>
                                 <th className="px-3 py-2 w-28 text-right">Total Price</th>
-                                <th className="px-3 py-2 w-28 text-right">Weight (kg)</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -400,16 +416,16 @@ export default function ViewCargo() {
                                       {money(it?.unit_price ?? it?.unitPrice)} SAR
                                     </td>
                                     <td className="px-3 py-2 text-right tabular-nums">
-                                      {money(it?.total_price ?? (Number(it?.piece_no ?? it?.pieces ?? 0) * Number(it?.unit_price ?? 0)))} SAR
-                                    </td>
-                                    <td className="px-3 py-2 text-right tabular-nums">
-                                      {weight3(it?.weight)} kg
+                                      {money(
+                                        it?.total_price ??
+                                        (Number(it?.piece_no ?? it?.pieces ?? 0) * Number(it?.unit_price ?? 0))
+                                      )} SAR
                                     </td>
                                   </tr>
                                 ))
                               ) : (
                                 <tr>
-                                  <td colSpan={6} className="px-3 py-6 text-center text-gray-500">
+                                  <td colSpan={5} className="px-3 py-6 text-center text-gray-500">
                                     No items in this box.
                                   </td>
                                 </tr>
@@ -423,13 +439,12 @@ export default function ViewCargo() {
               )}
             </div>
 
-            {/* -------- OPTIONAL: OVERALL ITEMS (flat) -------- */}
-            {/* Keep if you still want a combined view. If not needed, remove this block. */}
+            {/* (Optional) Flat items table */}
             {flatItems.length > 0 && (
               <div className="rounded-xl border bg-white overflow-hidden">
                 <div className="px-4 py-3 border-b bg-gray-50 font-semibold">All Items (Flat)</div>
                 <div className="overflow-x-auto">
-                  <table className="min-w-[860px] w-full text-sm">
+                  <table className="min-w-[820px] w-full text-sm">
                     <thead className="bg-gray-100 border-b border-gray-200">
                       <tr className="text-left text-gray-600">
                         <th className="px-3 py-2 w-14 text-center">Slno</th>
@@ -438,7 +453,6 @@ export default function ViewCargo() {
                         <th className="px-3 py-2 w-28 text-right">Pieces</th>
                         <th className="px-3 py-2 w-28 text-right">Unit Price</th>
                         <th className="px-3 py-2 w-28 text-right">Total Price</th>
-                        <th className="px-3 py-2 w-28 text-right">Weight (kg)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -454,9 +468,11 @@ export default function ViewCargo() {
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">{money(it?.unit_price ?? it?.unitPrice)} SAR</td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {money(it?.total_price ?? (Number(it?.piece_no ?? it?.pieces ?? 0) * Number(it?.unit_price ?? 0)))} SAR
+                            {money(
+                              it?.total_price ??
+                              (Number(it?.piece_no ?? it?.pieces ?? 0) * Number(it?.unit_price ?? 0))
+                            )} SAR
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums">{weight3(it?.weight)} kg</td>
                         </tr>
                       ))}
                     </tbody>
@@ -473,12 +489,6 @@ export default function ViewCargo() {
               >
                 Print
               </button>
-              <Link
-                to={`/cargo/${id}`}
-                className="px-4 py-2 rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
-              >
-                Edit Cargo
-              </Link>
               <button
                 onClick={() => navigate(-1)}
                 className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-900"

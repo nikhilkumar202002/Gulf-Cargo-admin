@@ -47,7 +47,7 @@ const EditBranch = () => {
           });
         }
       } catch (error) {
-        console.error("Error fetching branch:", error);
+        
         alert("Failed to fetch branch details!");
       } finally {
         if (!cancelled) setLoading(false);
@@ -76,7 +76,7 @@ const EditBranch = () => {
       alert("Branch updated successfully!");
       navigate("/branches");
     } catch (error) {
-      console.error("Error updating branch:", error?.response?.data || error);
+      
       alert(
         `Failed to update branch!\n${
           error?.response?.data?.message || "Please check all fields."

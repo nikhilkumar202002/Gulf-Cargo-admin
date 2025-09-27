@@ -83,7 +83,7 @@ export default function PartyView() {
         const obj = res?.data ?? res;
         setParty(obj || null);
       } catch (e) {
-        console.error(e);
+        
         setErr(e?.message || "Failed to load party.");
       } finally {
         setIsLoading(false);

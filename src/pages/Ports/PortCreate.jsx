@@ -66,7 +66,7 @@ export default function PortCreate() {
           (details ? ` ${details}` : ""),
         variant: "error",
       });
-      console.error("Create port failed", err?.response || err);
+     
     } finally {
       setSubmitting(false);
     }

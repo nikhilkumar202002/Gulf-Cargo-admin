@@ -41,7 +41,7 @@ function ResetPassword() {
         setTimeout(() => navigate("/login"), 1500);
       }
     } catch (err) {
-      console.error("Reset error details:", err?.response?.data);
+      
       const apiMsg =
         err?.response?.data?.message ||
         Object.values(err?.response?.data?.errors || {})?.[0]?.[0] ||

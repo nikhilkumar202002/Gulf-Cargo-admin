@@ -41,14 +41,11 @@ export default function PaymentTypeList() {
   setLoading(true);
   setMsg({ text: "", variant: "" });
   try {
-    const response = await getAllPaymentMethods(); // Fetch payment types
-    console.log("Fetched Payment Methods:", response); // Debugging line
-
-    // Extract the `data` array safely
+    const response = await getAllPaymentMethods(); 
     const rows = response?.data ?? [];
     setRows(Array.isArray(rows) ? rows : []);
   } catch (err) {
-    console.error("Failed to fetch payment types", err?.response || err);
+    
     setMsg({
       text: err?.response?.data?.message || "Failed to load payment types.",
       variant: "error",
@@ -218,7 +215,7 @@ export default function PaymentTypeList() {
     </tr>
   ) : (
     rows.map((r, idx) => {
-      console.log("Row data:", r);  // Debugging row data
+      
       const active = String(r.status).toLowerCase() === "active" || r.status === 1;
       return (
         <tr

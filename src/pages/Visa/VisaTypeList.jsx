@@ -25,7 +25,7 @@ const VisaTypeList = () => {
       const list = Array.isArray(res) ? res : res?.data ?? [];
       setVisaTypes(list);
     } catch (err) {
-      console.error("Error fetching visa types:", err?.response?.data || err?.message);
+      
       const status = err?.response?.status;
       if (status === 401) {
         setError("Unauthorized (401). Please sign in and try again.");

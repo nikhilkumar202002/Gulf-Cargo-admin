@@ -35,7 +35,7 @@ function CreateRoles() {
         setErrorMsg("Failed to create role");
       }
     } catch (error) {
-      console.error("Error creating role:", error);
+      
       setErrorMsg(error.response?.data?.message || "Something went wrong!");
     } finally {
       setLoading(false);

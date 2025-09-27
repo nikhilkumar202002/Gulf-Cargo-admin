@@ -32,7 +32,7 @@ function ForgotPassword() {
         navigate("/resetpassword", { state: { email } });
       }
     } catch (error) {
-      console.error("Error during forgot password:", error);
+     
       setMessage(
         error?.response?.data?.message ||
           "Error sending OTP. Please try again."

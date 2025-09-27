@@ -32,10 +32,10 @@ const fetchRows = async (setLoading, setRows, setMsg) => {
   setMsg({ text: "", variant: "" });
   try {
     const list = await getLicenseTypes(); // Fetch license types
-    console.log("Fetched License Types:", list); // Debugging line
+   
     setRows(Array.isArray(list) ? list : []);
   } catch (err) {
-    console.error("Failed to fetch license types", err?.response || err);
+   
     setMsg({
       text: err?.response?.data?.message || "Failed to load license types.",
       variant: "error",

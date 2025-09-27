@@ -297,7 +297,7 @@ const handleSubmit = async (e) => {
       text: [err?.response?.data?.message || err?.message || "Registration failed.", ...flat].join(" "),
       variant: "error",
     });
-    console.error("Register failed", err?.response?.status, err?.response?.data);
+
   } finally {
     clearTimeout(timeoutId);
     setSubmitting(false);

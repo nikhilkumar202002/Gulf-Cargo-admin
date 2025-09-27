@@ -8,7 +8,7 @@ import { getPorts } from "../../api/portApi";
 import { getActiveBranches } from "../../api/branchApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 import { getProfile } from "../../api/accountApi";
-import { getCargos } from "../../api/createCargoApi";
+import { listCargos } from "../../api/createCargoApi";
 import {
   createCargoShipment,
   markCargoInShipment,
@@ -196,7 +196,7 @@ export default function CreateShipment() {
         setShipmentStatuses(unwrapArray(statuses));
         setProfileObj(me?.data ?? me ?? null);
       } catch (e) {
-        console.error("Prefetch failed:", e);
+       
         setToast({ open: true, variant: "error", text: e?.message || "Failed to load dropdown data." });
       }
     })();
@@ -283,7 +283,7 @@ export default function CreateShipment() {
       if (!hasQuery) {
         // Initial picker / reset: show FREE (0)
         setSearchShowsUsed(false);
-        const resp = await getCargos({ is_in_cargo_shipment: 0 }); // FREE is 0
+        const resp = await listCargos({ is_in_cargo_shipment: 0 }); // FREE is 0
         tableRows = onlyFree(unwrapArray(resp));
         // hide already saved/hidden this session
         const hidden = sessionHiddenIdsRef.current;
@@ -304,8 +304,8 @@ export default function CreateShipment() {
         // SEARCH: show FREE (0) in table, USED (1) in the note
         setSearchShowsUsed(false);
         const [freeResp, usedResp] = await Promise.all([
-          getCargos({ is_in_cargo_shipment: 0, search: queryText }), // FREE is 0
-          getCargos({ is_in_cargo_shipment: 1, search: queryText }), // USED is 1
+          listCargos({ is_in_cargo_shipment: 0, search: queryText }), // FREE is 0
+          listCargos({ is_in_cargo_shipment: 1, search: queryText }), // USED is 1
         ]);
 
 
@@ -320,11 +320,11 @@ export default function CreateShipment() {
 
         // Fallbacks if backend ignored 'search'
         if (tableRows.length === 0 && unwrapArray(freeResp).length === 0) {
-          const allFree = onlyFree(unwrapArray(await getCargos({ is_in_cargo_shipment: 0 }))); // 0 here
+          const allFree = onlyFree(unwrapArray(await listCargos({ is_in_cargo_shipment: 0 }))); // 0 here
           tableRows = allFree.filter((r) => String(r?.booking_no || "").toLowerCase().includes(qlc));
         }
         if (usedRows.length === 0 && unwrapArray(usedResp).length === 0) {
-          const allUsed = unwrapArray(await getCargos({ is_in_cargo_shipment: 1 })); // 1 here
+          const allUsed = unwrapArray(await listCargos({ is_in_cargo_shipment: 1 })); // 1 here
           usedRows = allUsed.filter((r) => String(r?.booking_no || "").toLowerCase().includes(qlc));
         }
 
@@ -340,7 +340,7 @@ export default function CreateShipment() {
       setResults(tableRows);
       setOppositeBucket(usedRows);
     } catch (e) {
-      console.error("getCargos failed:", e);
+      
       setResults([]);
       setOppositeBucket([]);
       setToast({ open: true, variant: "error", text: e?.message || "Failed to fetch cargos." });

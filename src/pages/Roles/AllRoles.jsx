@@ -13,7 +13,7 @@ function AllRoles() {
       setRoles(Array.isArray(items) ? items : []);
       setError("");  // Reset error on success
     } catch (err) {
-      console.error("Error fetching roles:", err);
+      
       setError("Something went wrong. Please try again later.");
     } finally {
       setLoading(false);
