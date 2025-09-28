@@ -124,6 +124,24 @@ export default function ShipmentView() {
           </h1>
           <div className="flex gap-2">
             <button
+              onClick={() => navigate(`/shipments/${id}/deliverylist`)}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Delivery List
+            </button>
+            <button
+              onClick={() => navigate(`/shipments/${id}/packinglist`)}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Packing List
+            </button>
+                 <button
+              onClick={() => navigate(`/shipments/${id}/loadinglist`)}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Loading List
+            </button>
+            <button
               onClick={() => navigate(`/shipments/${id}/manifest`)}
               className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
             >

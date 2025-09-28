@@ -121,7 +121,10 @@ const LicenceView = lazy(() => import("../pages/Licence type/LicenceView"));
 const PaymentTypeList = lazy(() => import("../pages/Payment Types/PaymentTypeList"));
 
 const InvoiceView = lazy(() => import("../components/InvoiceView"));
-const CustomerManifest = lazy(() => import("../pages/All Excels/CustomManifest"))
+const CustomerManifest = lazy(() => import("../pages/All Excels/CustomManifest"));
+const DeliveryList = lazy(() => import("../pages/All Excels/DeliveryList"));
+const LoadingList = lazy(() => import("../pages/All Excels/LoadingList"));
+const PackingList = lazy(() => import("../pages/All Excels/PackingList"));
 
 /* ---------------- helpers ---------------- */
 const AuthRedirect = () => {
@@ -220,6 +223,9 @@ const router = createBrowserRouter([
       { path: "licence/create", element: <LicenceCreate /> },
       { path: "licence/view", element: <LicenceView /> },
       { path: "shipments/:id/manifest", element: <CustomerManifest /> },
+      { path: "shipments/:id/packinglist", element: <PackingList /> },
+      { path: "shipments/:id/loadinglist", element: <LoadingList /> },
+      { path: "shipments/:id/deliverylist", element: <DeliveryList /> },
 
       {
         path: "roles/allroles",
