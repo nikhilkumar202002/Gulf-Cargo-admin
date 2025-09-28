@@ -1,6 +1,6 @@
 // src/pages/ShipmentView.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { getCargoShipment } from "../../api/shipmentCargo";
 
 /* -------------------------- tiny UI/format helpers -------------------------- */
@@ -70,6 +70,7 @@ const Box = ({ label, value, loading }) => (
 
 /* ---------------------------------- page ----------------------------------- */
 export default function ShipmentView() {
+  const navigate = useNavigate();
   const { id } = useParams();
   const [data, setData] = useState(null); // raw shipment
   const [loading, setLoading] = useState(true);
@@ -121,12 +122,20 @@ export default function ShipmentView() {
           <h1 className="text-2xl font-semibold text-slate-900">
             {loading ? <Skel w={200} h={24} /> : "Shipment Details"}
           </h1>
-          <button
-            onClick={() => window.history.back()}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Back
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate(`/shipments/${id}/manifest`)}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Custom Manifest
+            </button>
+            <button
+              onClick={() => window.history.back()}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Back
+            </button>
+          </div>
         </div>
 
         {/* Status / top card */}

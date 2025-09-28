@@ -49,10 +49,10 @@ export const getPartiesByCustomerType = async (customerTypeId, params = {}) => {
 };
 
 
-export const getPartyById = async (partyId) => {
+export const getPartyById = async (id) => {
   if (partyId == null) throw new Error("partyId is required");
-  const res = await api.get(`/party/${partyId}`);
-  return unwrap(res);
+  const res = await axios.get(`/party/${id}`);
+   return res.data?.data || res.data || null;
 };
 
 export default {

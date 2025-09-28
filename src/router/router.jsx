@@ -121,6 +121,7 @@ const LicenceView = lazy(() => import("../pages/Licence type/LicenceView"));
 const PaymentTypeList = lazy(() => import("../pages/Payment Types/PaymentTypeList"));
 
 const InvoiceView = lazy(() => import("../components/InvoiceView"));
+const CustomerManifest = lazy(() => import("../pages/All Excels/CustomManifest"))
 
 /* ---------------- helpers ---------------- */
 const AuthRedirect = () => {
@@ -218,6 +219,7 @@ const router = createBrowserRouter([
 
       { path: "licence/create", element: <LicenceCreate /> },
       { path: "licence/view", element: <LicenceView /> },
+      { path: "shipments/:id/manifest", element: <CustomerManifest /> },
 
       {
         path: "roles/allroles",
