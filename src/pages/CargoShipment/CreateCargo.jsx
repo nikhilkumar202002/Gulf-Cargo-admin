@@ -18,9 +18,10 @@ import { getBranchUsers } from "../../api/branchApi";
 import { getPartiesByCustomerType } from "../../api/partiesApi";
 import { getAllPaymentMethods } from "../../api/paymentMethod";
 import { getActiveDeliveryTypes } from "../../api/deliveryType";
-import { getActiveDrivers } from "../../api/driverApi";
+
 import { getProfile } from "../../api/accountApi";
 import { getActiveCollected } from "../../api/collectedByApi";
+import { getActiveDrivers } from "../../api/driverApi"; 
 
 import InvoiceModal from "../../components/InvoiceModal";
 import { IoLocationSharp } from "react-icons/io5";
@@ -160,8 +161,22 @@ const idOf = (o) =>
   o?._id ??
   null;
 
+  const unwrapDrivers = (res) => {
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.drivers)) return res.drivers;           // ← your shape
+  if (Array.isArray(res?.data?.drivers)) return res.data.drivers;
+  return [];
+};
+
+const prettyDriver = (d = {}) => {
+  const name = d.name || "-";
+  const phone = [d.phone_code, d.phone_number].filter(Boolean).join(" ");
+  return phone ? `${name} (${phone})` : name;
+};
+
 const labelOf = (o) =>
   o?.name ??
+  o?.driver_name ??
   o?.company_name ??
   o?.full_name ??
   o?.branch_name ??
@@ -169,6 +184,8 @@ const labelOf = (o) =>
   o?.label ??
   o?.username ??
   o?.email ??
+  ([o?.first_name, o?.last_name].filter(Boolean).join(" ") ||
+  [o?.mobile, o?.phone, o?.contact_number].find(Boolean)) ??
   "-";
 
 const today = () => new Date().toISOString().split("T")[0];
@@ -469,6 +486,25 @@ export default function CreateCargo() {
     return () => { alive = false; };
   }, [token, tokenBranchId]);
 
+  useEffect(() => {
+  if (form.collectedByRoleName !== "Driver") return;
+  let alive = true;
+  (async () => {
+    try {
+      const res = await getActiveDrivers();       // import from driverApi.js
+      const list = unwrapDrivers(res);
+      if (alive) setCollectedByOptions(list);
+    } catch {
+      if (alive) {
+        setCollectedByOptions([]);
+        setMsg({ text: "Failed to load drivers.", variant: "error" });
+      }
+    }
+  })();
+  return () => { alive = false; };
+}, [form.collectedByRoleName]);
+
+
   /* keep form.branchId synced */
   useEffect(() => {
     const bidRaw = pickBranchId(userProfile) ?? tokenBranchId ?? null;
@@ -492,14 +528,21 @@ export default function CreateCargo() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (form.collectedByRoleName !== "Office") return;
+      if (form.collectedByRoleName === "Office") {
+      try { await loadOfficeStaff(); } catch { /* toasts already handled */ }
+      return;
+    } if (form.collectedByRoleName === "Driver") {
       try {
-        await loadOfficeStaff();
+        const res = await getActiveDrivers();
+        if (!alive) return;
+        setCollectedByOptions(unwrapArray(res));
       } catch {
         if (!alive) return;
         setCollectedByOptions([]);
-        setMsg({ text: "Failed to load office staff for the selected branch.", variant: "error" });
+        setMsg({ text: "Failed to load drivers.", variant: "error" });
       }
+      return;
+    }
     })();
     return () => { alive = false; };
   }, [form.branchId, form.collectedByRoleName, loadOfficeStaff]);
@@ -933,20 +976,24 @@ export default function CreateCargo() {
                     }
                     disabled={!form.collectedByRoleName}
                   >
-                    <option value="">Select person</option>
-                    {collectedByOptions.map((opt, i) => {
-                      const valueId =
-                        form.collectedByRoleName === "Driver"
-                          ? opt?.driver_id ?? opt?.id ?? null
-                          : opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null;
-                      if (!valueId) return null;
-                      const label = labelOf(opt);
-                      return (
-                        <option key={`${valueId}-${i}`} value={String(valueId)}>
-                          {label}
-                        </option>
-                      );
-                    })}
+                  <option value="">Select person</option>
+                        {collectedByOptions.map((opt, i) => {
+                          const valueId =
+                            form.collectedByRoleName === "Driver"
+                              ? (opt?.id ?? opt?.driver_id ?? null)      // your API uses `id`
+                              : (opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null);
+                          if (!valueId) return null;
+
+                          const label =
+                            form.collectedByRoleName === "Driver" ? prettyDriver(opt) : labelOf(opt);
+
+                          return (
+                            <option key={`${valueId}-${i}`} value={String(valueId)}>
+                              {label}
+                            </option>
+                          );
+                        })}
+
                   </select>
                 </div>
               </div>

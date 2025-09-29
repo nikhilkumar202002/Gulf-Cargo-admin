@@ -106,7 +106,6 @@ const formatPhones = (p) => {
     p?.contact_number, p?.phone, p?.mobile, p?.mobile_number, p?.contact,
   ].filter(Boolean);
   const whats = p?.whatsapp_number ?? p?.whatsapp ?? null;
-
   const a = [];
   if (vals.length) a.push(`Call: ${vals.join(" / ")}`);
   if (whats) a.push(`WhatsApp: ${whats}`);
@@ -130,9 +129,24 @@ const matchByName = (name, list) => {
   return list.find((x) => getName(x) === low) || list.find((x) => getName(x).includes(low)) || null;
 };
 
+const buildTrackUrl = (shipment) => {
+  const base = "https://gulfcargoksa.com/trackorder/";
+  const track = shipment?.track_code || shipment?.tracking_no || "";
+  const box   = shipment?.box_no || shipment?.booking_no || shipment?.invoice_no || "";
+  const params = new URLSearchParams();
+
+  if (track) params.set("code", track);       // adjust param name if your page expects something else
+  if (box)   params.set("box", String(box));  // optional
+  params.set("src", "qr");
+
+  // If you want a clean URL when there are no params:
+  return params.toString() ? `${base}?${params.toString()}` : base;
+};
+
+
 /* ---------- QR helper ---------- */
-const buildQrUrl = (data, size = 160) =>
-  `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(data)}`;
+const buildQrUrl = (url, size = 160) =>
+  `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}`;
 
 export default function InvoiceView({ shipment: injected = null, modal = false }) {
   const { id } = useParams();
@@ -148,6 +162,8 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
   const [senderParty, setSenderParty] = useState(null);
   const [receiverParty, setReceiverParty] = useState(null);
   const [partyLoading, setPartyLoading] = useState(false);
+
+  const trackUrl = buildTrackUrl(shipment);
 
   // boot: prefer prop → route state → fetch by id
   useEffect(() => {
@@ -181,7 +197,7 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
     const fetchParty = async (role) => {
       const isSender = role === "sender";
       // inside fetchParty('receiver') ID candidates:
-const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id, shipment.consignee_party_id];
+      const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id, shipment.consignee_party_id];
 
       const name = isSender
         ? shipment.sender?.name || shipment.sender || shipment.shipper_name
@@ -267,18 +283,6 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
     }));
   }, [shipment]);
 
-  const Field = ({ label, children }) => (
-    <div className="flex items-start gap-2 py-0.5">
-      <div className="w-24 shrink-0 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      <div className="flex-1 text-[13px] leading-snug text-slate-900">
-        {children || "—"}
-      </div>
-    </div>
-  );
-
-
   const getName = (p, side, shipment) =>
     p?.name ||
     shipment?.[side]?.name ||
@@ -322,7 +326,7 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
       ""
     );
 
-  const ROWS_PER_COL = 6;
+  const ROWS_PER_COL = 15;
 
   const computedSubtotal = items.reduce((s, it) => s + toNum(it.amount), 0);
   const apiSubtotalNum = toNum(shipment?.subtotal);
@@ -434,26 +438,26 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
               {/* QR */}
               <div className="invoice-qrcode flex items-center justify-center">
                 <img
-                  src={buildQrUrl(qrText, 160)}
-                  alt="Invoice QR"
+                  src={buildQrUrl(trackUrl, 160)}
+                  alt="Invoice QR (Track this package)"
                   className="h-36 w-36 rounded bg-white p-1 ring-1 ring-slate-200"
                 />
               </div>
 
               {/* Company text */}
               <div className="text-center sm:text-right">
-                <div className="text-[14px] font-semibold leading-tight text-indigo-900">
+                <div className="text-[11px] font-semibold leading-tight text-indigo-900">
                   <div>{COMPANY.arHeadingLine1}</div>
                   <div>{COMPANY.arHeadingLine2}</div>
                 </div>
-                <div className="header-invoice-heading mt-1 font-semibold text-rose-700">
+                <div className="text-[11px] header-invoice-heading mt-1 font-semibold text-rose-700">
                   {COMPANY.nameEn}
                 </div>
 
-                <p className="header-invoice-address text-xs mt-1 font-medium text-slate-800">
+                <p className="text-[11px] header-invoice-address text-xs mt-1 font-medium text-slate-800">
                   {COMPANY.phones}
                 </p>
-                <p className="header-invoice-address text-xs text-slate-700">
+                <p className="text-[11px] header-invoice-address text-xs text-slate-700">
                   {COMPANY.email}
                 </p>
               </div>
@@ -463,39 +467,37 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
             {/* Red ribbon */}
             <div className="mt-3 grid grid-cols-1 items-center gap-2 rounded bg-rose-600 px-2 py-1 text-white sm:grid-cols-3">
               <div className="text-xs">
-                <div className="font-semibold">VAT NO. : {COMPANY.vatNo}</div>
-                <div>SHIPMENT TYPE: {shipment?.method || COMPANY.defaultShipmentType}</div>
+                <div className="invoice-top-header">VAT NO. : {COMPANY.vatNo}</div>
+                <div className="invoice-top-header">SHIPMENT TYPE: {shipment?.method || COMPANY.defaultShipmentType}</div>
               </div>
               <div className="text-center">
-                <div className="text-[15px] font-semibold">فاتورة ضريبة مبسطة</div>
-                <div className="text-xs tracking-wide">SIMPLIFIED TAX INVOICE</div>
+                <div className="invoice-top-header">فاتورة ضريبة مبسطة</div>
+                <div className="invoice-top-header">SIMPLIFIED TAX INVOICE</div>
               </div>
               <div className="text-right text-xs">
-                <div className="font-semibold">{COMPANY.branchLabel}</div>
-                <div className="mt-1 inline-block rounded bg-black px-2 py-0.5 font-semibold">{shipment?.booking_no || shipment?.invoice_no || "—"}
-                </div>
+                <div className="invoice-top-header">{COMPANY.branchLabel}</div>
+                <div className="invoice-top-header">{shipment?.booking_no || shipment?.invoice_no || "—"}
+                </div>                                                                        
               </div>
             </div>
           </div>
-          {/* ======= END COMPANY HEADER ======= */}
 
-          {/* ======= META STRIP ======= */}
           <div className="grid grid-cols-5 gap-4 border-b border-slate-200 px-2 py-3 sm:grid-cols-5 lg:grid-cols-5">
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Track No.</div>
-              <div className="mt-1 inline-flex items-center rounded-lg bg-gradient-to-r px-2.5 py-1 font-mono text-xs font-semibold text-white bg-black">
+              <div className="tracking-invoice-heading">Track No.</div>
+              <div className="tracking-invoice-content-track-no">
                 {shipment?.track_code || "—"}
               </div>
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Box No.</div>
-              <div className="text-[13px] inline-block rounded bg-black px-2 py-0.5 font-semibold text-white">
+              <div className="tracking-invoice-heading">Box No.</div>
+              <div className="tracking-invoice-content">
                 {shipment?.booking_no || shipment?.invoice_no || "—"}
               </div>
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Branch</div>
-              <div className=" text-sm font-medium text-slate-900">
+              <div className="tracking-invoice-heading">Branch</div>
+              <div className="tracking-invoice-content">
                 {pick(
                   shipment,
                   ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"],
@@ -510,39 +512,35 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
               </div>
             </div> */}
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Delivery Type</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.delivery_type || "—"}</div>
+              <div className="tracking-invoice-heading">Delivery Type</div>
+              <div className="tracking-invoice-content">{shipment?.delivery_type || "—"}</div>
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Payment Method</div>
-              <div className="mt-1 text-sm font-medium text-slate-900">{shipment?.payment_method || "—"}</div>
+              <div className="tracking-invoice-heading">Payment Method</div>
+              <div className="tracking-invoice-content">{shipment?.payment_method || "—"}</div>
             </div>
           </div>
 
-          {/* ======= PARTIES ======= */}
-          <div className="grid grid-cols-1 gap-6 border-b border-slate-200 px-3 py-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 border-b border-slate-200 px-2 py-2 sm:grid-cols-2">
             {/* SHIPPER */}
             <div>
               <div className="invoice-parties-header text-xs font-medium uppercase tracking-wide text-slate-500">
                 Shipper
               </div>
-              <div className="mt-1 invoice-parties-content">
-                <Field label="Name :">{getName(senderParty, "sender", shipment)}</Field>
-                <Field label="Address :">
-                  <span className="whitespace-pre-wrap text-slate-700">
-                    {getAddress(senderParty, "sender", shipment, pick)}
-                  </span>
-                </Field>
-                <Field label="PIN Code :">
-                  <span className="text-slate-700">
-                    {getPincode(senderParty, "sender", shipment, pick)}
-                  </span>
-                </Field>
-                <Field label="Phone :">
-                  <span className="text-slate-700">
-                    {getPhone(senderParty, "sender", shipment, pick)}
-                  </span>
-                </Field>
+              <div className="mt-1 invoice-parties-content grid grid-cols-[100px_1fr] text-sm">
+                <span className="invoice-parties-label text-slate-500">Name:</span>
+                <span className="invoice-parties-text">{getName(senderParty, "sender", shipment)}</span>
+
+                <span className="invoice-parties-label text-slate-500">Address:</span>
+                <span className="invoice-parties-text whitespace-pre-wrap">
+                  {getAddress(senderParty, "sender", shipment, pick)}
+                </span>
+
+                <span className="invoice-parties-label text-slate-500">Pin code:</span>
+                <span className="invoice-parties-text">{getPincode(senderParty, "sender", shipment, pick)}</span>
+
+                <span className="invoice-parties-label text-slate-500">Phone:</span>
+                <span className="invoice-parties-text">{getPhone(senderParty, "sender", shipment, pick)}</span>
               </div>
             </div>
 
@@ -551,34 +549,31 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
               <div className="invoice-parties-header text-xs font-medium tracking-wide text-slate-500">
                 Consignee
               </div>
-              <div className="mt-1 invoice-parties-content">
-                <Field label="Name :">{getName(receiverParty, "receiver", shipment)}</Field>
-                <Field label="Address :">
-                  <span className="whitespace-pre-wrap text-slate-700">
-                    {getAddress(receiverParty, "receiver", shipment, pick)}
-                  </span>
-                </Field>
-                <Field label="PIN Code :">
-                  <span className="text-slate-700">
-                    {getPincode(receiverParty, "receiver", shipment, pick)}
-                  </span>
-                </Field>
-                <Field label="Phone">
-                  <span className="text-slate-700">
-                    {getPhone(receiverParty, "receiver", shipment, pick)}
-                  </span>
-                </Field>
+              <div className="mt-1 invoice-parties-content grid grid-cols-[100px_1fr] text-sm">
+                <span className="invoice-parties-label text-slate-500">Name:</span>
+                <span className="invoice-parties-text">{getName(receiverParty, "receiver", shipment)}</span>
+
+                <span className="invoice-parties-label text-slate-500">Address:</span>
+                <span className="invoice-parties-text whitespace-pre-wrap">
+                  {getAddress(receiverParty, "receiver", shipment, pick)}
+                </span>
+
+                <span className="invoice-parties-label text-slate-500">Pincode:</span>
+                <span className="invoice-parties-text">{getPincode(receiverParty, "receiver", shipment, pick)}</span>
+
+                <span className="invoice-parties-label text-slate-500">Phone:</span>
+                <span className="invoice-parties-text">{getPhone(receiverParty, "receiver", shipment, pick)}</span>
               </div>
             </div>
           </div>
 
           {/* ======= ITEMS (two columns like your PDF) ======= */}
-          <div className="px-1 py-2">
+          <div className="px-1 py-1">
             <div className="flex justify-between">
-              <div className="mb-3 text-sm font-semibold text-slate-900">Cargo Items</div>
+              <div className="invoice-cargo-heading mb-3">Cargo Items</div>
               {/* Weight highlight badge */}
-              <div className="inline-flex items-center gap-2 rounded-lg bg-black px-2 py-1 text-sm font-semibold text-white">
-                Total Weight: {Math.trunc(parseFloat(pick(shipment, ["total_weight","weight","gross_weight"], 0)) || 0)} kg
+              <div className="invoice-weight-text">
+                Total Weight: {Math.trunc(parseFloat(pick(shipment, ["total_weight", "weight", "gross_weight"], 0)) || 0)} kg
               </div>
             </div>
 
@@ -586,26 +581,26 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
               {/* Column A */}
               <div className="lg:col-span-1">
                 <table className="min-w-full border-separate border-spacing-0 avoid-break">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="w-12 rounded-tl-lg border border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                  <thead className="invoice-table-header">
+                    <tr>
+                      <th className="w-12 border border-slate-200 px-1 py-1 text-left uppercase tracking-wider">
                         Sl.No
                       </th>
-                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left uppercase tracking-wider">
                         Items
                       </th>
-                      <th className="rounded-tr-lg border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                      <th className=" border border-slate-200 px-1 py-1 text-right uppercase tracking-wider">
                         Qty
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="invoice-table-content">
                     {colA.map((it, idx) => (
                       <tr key={`A-${idx}`} className="align-top">
-                        <td className="border-x border-b border-slate-200 px-1.5 py-1.5 text-sm text-slate-700">
+                        <td className="border-x border-b border-slate-200 px-1 py-1">
                           {it ? it.idx : ""}
                         </td>
-                        <td className="border-b border-slate-200 px-1.5 py-1.5 text-sm text-slate-800">
+                        <td className="border-b border-slate-200 px-1 py-1 ">
                           {it ? (
                             <>
                               {it.name || "—"}
@@ -620,7 +615,7 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
                             <span className="opacity-0">pad</span>
                           )}
                         </td>
-                        <td className="border-x border-b border-slate-200 px-1.5 py-1.5 text-right text-sm text-slate-900">
+                        <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
                           {it ? it.qty || "—" : ""}
                         </td>
                       </tr>
@@ -632,26 +627,26 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
               {/* Column B */}
               <div className="lg:col-span-1">
                 <table className="min-w-full border-separate border-spacing-0">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="w-12 rounded-tl-lg border border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                  <thead className="invoice-table-header">
+                    <tr>
+                      <th className="w-12 border px-1 py-1 text-left uppercase tracking-wider ">
                         S.No
                       </th>
-                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider ">
                         Items
                       </th>
-                      <th className="rounded-tr-lg border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                      <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">
                         Qty
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="invoice-table-content">
                     {colB.map((it, idx) => (
                       <tr key={`B-${idx}`} className="align-top">
-                        <td className="border-x border-b border-slate-200 px-3 py-1.5 text-sm text-slate-700">
+                        <td className="border-x border-b border-slate-200 px-1 py-1">
                           {it ? it.idx : ""}
                         </td>
-                        <td className="border-b border-slate-200 px-3 py-1.5 text-sm text-slate-800">
+                        <td className="border-b border-slate-200 ppx-1 py-1">
                           {it ? (
                             <>
                               {it.name || "—"}
@@ -665,7 +660,7 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
                             <span className="opacity-0">pad</span>
                           )}
                         </td>
-                        <td className="border-x border-b border-slate-200 px-3 py-1.5 text-right text-sm text-slate-900">
+                        <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right ">
                           {it ? it.qty || "—" : ""}
                         </td>
                       </tr>
@@ -684,19 +679,19 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
               <div className="lg:col-span-1 avoid-break">
                 <div className="mx-auto w-full rounded-xl border-slate-200 p-1 ">
                   <div className="total-card-list flex justify-between text-sm text-slate-700">
-                    <div>Subtotal</div>
+                    <div className="invoice-bill-content">Subtotal</div>
                     <div className="font-medium text-slate-900">{fmtMoney(subtotal, currency)}</div>
                   </div>
                   <div className="total-card-list flex justify-between text-sm text-slate-700">
-                    <div>Bill Charges</div>
+                    <div className="invoice-bill-content">Bill Charges</div>
                     <div className="total-card-list font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
                   </div>
                   <div className=" flex justify-between text-sm text-slate-700">
-                    <div>Tax</div>
+                    <div className="invoice-bill-content">Tax</div>
                     <div className="font-medium text-slate-900">{fmtMoney(tax, currency)}</div>
                   </div>
                   <div className="total-card-money mt-1 flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
-                    <div>Total</div>
+                    <div className="invoice-bill-total">Total</div>
                     <div>{fmtMoney(shipment?.total_cost ?? shipment?.net_total ?? total, currency)}</div>
                   </div>
 
@@ -711,8 +706,8 @@ const idCandidates = [shipment.receiver_id, shipment.consignee_id, shipment.rece
           </div>
 
           {/* ======= FOOTER ======= */}
-          <div className="border-t border-slate-200 px-6 py-4 text-xs text-slate-500">
-            <div className="flex justify-between py-2 invoice-terms-conditions-header">
+          <div className="border-t border-slate-200 px-1 py-2">
+            <div className="invoice-footer-header flex justify-between px-10 py-2 invoice-terms-conditions-header">
               <div>TERMS AND CONDITIONS </div>
               <div>Thank you for your business.</div>
             </div>
