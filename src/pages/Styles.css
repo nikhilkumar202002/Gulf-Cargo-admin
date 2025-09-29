@@ -6,6 +6,10 @@
     --primary-color: #262262;
     --secondary-color: #ED2624;
     --text-color: #1e1e1e;
+      --muted:#6b7280;
+  --surface:#ffffff;
+  --border:#e5e7eb;
+  --ring: rgba(38,34,98,.18);
 }
 
 .card-icon{
@@ -204,3 +208,4 @@
 .add-driver-submit{
     padding-bottom: 30px;
 }
+

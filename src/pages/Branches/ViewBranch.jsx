@@ -1,10 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../../api/axiosInstance";
 import { FiArrowLeft } from "react-icons/fi";
+import { FaExternalLinkAlt, FaGlobe, FaMapMarkerAlt, FaPhoneAlt } from "react-icons/fa";
 import "../styles.css";
+import "./BranchStyles.css";
 
-function ViewBranch() {
+/* Skeleton chip */
+const Skel = ({ w = 120, h = 14, r = 8, className = "" }) => (
+  <span
+    className={`skel ${className}`}
+    style={{
+      display: "inline-block",
+      width: typeof w === "number" ? `${w}px` : w,
+      height: typeof h === "number" ? `${h}px` : h,
+      borderRadius: r,
+    }}
+    aria-hidden="true"
+  />
+);
+
+export default function ViewBranch() {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -12,31 +28,42 @@ function ViewBranch() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const fetchBranch = async () => {
-    try {
-      const res = await api.get(`/branch/${id}`); // ✅ token auto-handled if axiosInstance has interceptor
-      const b = res.data?.branch ?? res.data?.data ?? res.data;
-      setBranch(b || null);
-      setError("");
-    } catch (err) {
-      
-      setError("Failed to fetch branch details.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Guard against duplicate effect runs in StrictMode (dev) and stale updates
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (!cancelled) await fetchBranch();
-    };
-    run();
+    let aborted = false;
+    const ctrl = new AbortController();
 
-    const interval = setInterval(run, 5000);
+    const fetchBranch = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const res = await api.get(`/branch/${id}`, { signal: ctrl.signal });
+        const b = res?.data?.branch ?? res?.data?.data ?? res?.data ?? null;
+        if (!aborted) setBranch(b || null);
+      } catch (err) {
+        if (aborted) return;
+        if (err?.name === "CanceledError") return;
+        setBranch(null);
+        setError(err?.response?.data?.message || "Failed to fetch branch details.");
+      } finally {
+        if (!aborted) setLoading(false);
+      }
+    };
+
+    // prevent duplicate immediate calls in dev strict mode
+    if (!hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      fetchBranch();
+    } else {
+      // when id changes for real navigation, refetch
+      fetchBranch();
+    }
+
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      aborted = true;
+      ctrl.abort();
     };
   }, [id]);
 
@@ -48,145 +75,132 @@ function ViewBranch() {
       branch.status === "Active");
 
   return (
-    <section className="flex justify-center py-10 px-4">
-      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-lg p-6 md:p-10">
-        <div className="view-branch-header flex justify-between border-b items-center">
-          <h2>Branch Details</h2>
-          <button
-            className="flex items-center gap-2 mb-6 text-white bg-[#ED2624] hover:bg-[#e6403e] px-5 py-2 rounded-lg shadow transition-all duration-300"
-            onClick={() => navigate(-1)}
-          >
-            <FiArrowLeft size={18} />
+    <section className="vb-wrap">
+      {/* Header bar */}
+      <div className="ipx-head ipx-head-bar vb-head">
+        <div className="ipx-brand">
+          <h2 className="ipx-title">Branch Details</h2>
+          <p className="ipx-sub">Profile and contact information for branch #{id}.</p>
+        </div>
+        <div className="vb-head-actions">
+          <button className="ipx-btn ghost vb-back" onClick={() => navigate(-1)}>
+            <FiArrowLeft size={16} />
             Back
           </button>
         </div>
+      </div>
 
-        {/* Loading State */}
-        {loading ? (
-          <p className="text-center text-lg text-gray-600 animate-pulse">
-            Loading branch details...
-          </p>
-        ) : error ? (
-          <p className="text-center text-red-500 text-lg">{error}</p>
-        ) : (
-          branch && (
-            <div>
-              {/* Details Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Branch Name
+      {/* Error */}
+      {error && <div className="vb-card vb-error">{error}</div>}
+
+      {/* Main card */}
+      <div className="vb-card" aria-busy={loading}>
+        {/* Title row */}
+        <div className="vb-title-row">
+          <div className="vb-title-main">
+            {loading ? (
+              <>
+                <Skel w={220} h={22} />
+                <Skel w={140} />
+              </>
+            ) : (
+              <>
+                <h3 className="vb-branch-name">{branch?.branch_name || "—"}</h3>
+                <div className="vb-badges">
+                  <span className={`ipx-pill ${isActive ? "ok" : "muted"}`}>
+                    {isActive ? "Active" : "Inactive"}
                   </span>
-                  <span className="text-lg font-semibold text-gray-800">
-                    {branch.branch_name}
-                  </span>
+                  {branch?.branch_code && (
+                    <span className="vb-code-chip">Code: {branch.branch_code}</span>
+                  )}
                 </div>
+              </>
+            )}
+          </div>
 
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Branch Code
-                  </span>
-                  <span className="text-lg font-semibold text-gray-800">
-                    {branch.branch_code}
-                  </span>
-                </div>
+          {!loading && branch?.branch_website && (
+            <a
+              className="ipx-btn primary vb-visit"
+              href={branch.branch_website}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open website"
+            >
+              Visit Site <FaExternalLinkAlt />
+            </a>
+          )}
+        </div>
 
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Alternative Number
-                  </span>
-                  <span className="text-lg font-semibold text-gray-800">
-                    {branch.branch_alternative_number}
-                  </span>
-                </div>
+        {/* Content grid */}
+        <div className="vb-grid">
+          {/* Contact */}
+          <div className="vb-section">
+            <div className="vb-section-head">
+              <FaPhoneAlt className="vb-icon" />
+              <h4>Contact</h4>
+            </div>
+            <div className="vb-kv">
+              <span>Primary</span>
+              <div>{loading ? <Skel w={160} /> : (branch?.branch_contact_number || "—")}</div>
+            </div>
+            <div className="vb-kv">
+              <span>Alternative</span>
+              <div>{loading ? <Skel w={140} /> : (branch?.branch_alternative_number || "—")}</div>
+            </div>
+            <div className="vb-kv">
+              <span>Email</span>
+              <div className="vb-clip">{loading ? <Skel w={220} /> : (branch?.branch_email || "—")}</div>
+            </div>
+          </div>
 
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">Email</span>
-                  <span className="text-lg font-semibold text-[#262262] break-words">
-                    {branch.branch_email}
-                  </span>
-                </div>
-
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Address
-                  </span>
-                  <span className="text-lg font-semibold text-gray-800">
-                    {branch.branch_address}
-                  </span>
-                </div>
-
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Location
-                  </span>
-                  <span className="text-lg font-semibold text-gray-800">
-                    {branch.branch_location}
-                  </span>
-                </div>
-
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Contact Number
-                  </span>
-                  <span className="text-lg font-semibold text-gray-800">
-                    {branch.branch_contact_number}
-                  </span>
-                </div>
-
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Website
-                  </span>
+          {/* Location */}
+          <div className="vb-section">
+            <div className="vb-section-head">
+              <FaMapMarkerAlt className="vb-icon" />
+              <h4>Location</h4>
+            </div>
+            <div className="vb-kv">
+              <span>Address</span>
+              <div className="vb-clip">{loading ? <Skel w="80%" /> : (branch?.branch_address || "—")}</div>
+            </div>
+            <div className="vb-kv">
+              <span>City / Area</span>
+              <div>{loading ? <Skel w={160} /> : (branch?.branch_location || "—")}</div>
+            </div>
+            <div className="vb-kv">
+              <span>Website</span>
+              <div className="vb-clip">
+                {loading ? (
+                  <Skel w={220} />
+                ) : branch?.branch_website ? (
                   <a
                     href={branch.branch_website}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-lg font-semibold text-[#262262] hover:underline break-words"
+                    className="vb-link"
                   >
-                    {branch.branch_website}
+                    <FaGlobe /> {branch.branch_website}
                   </a>
-                </div>
-
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Status
-                  </span>
-                  <span
-                    className={`px-3 py-1 rounded-full text-sm font-bold w-fit ${
-                      branch.status === "Active"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-600"
-                    }`}
-                  >
-                    {branch.status}
-                  </span>
-                </div>
-
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Created By
-                  </span>
-                  <span className="text-lg font-semibold text-gray-800">
-                    {branch.created_by}
-                  </span>
-                </div>
-
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-500">
-                    Creator Email
-                  </span>
-                  <span className="text-lg font-semibold text-[#262262] break-words">
-                    {branch.created_by_email}
-                  </span>
-                </div>
+                ) : (
+                  "—"
+                )}
               </div>
             </div>
-          )
-        )}
+            <div className="vb-kv">
+              <span>Status</span>
+              <div>
+                {loading ? (
+                  <Skel w={80} h={22} r={999} />
+                ) : (
+                  <span className={`ipx-pill ${isActive ? "ok" : "muted"}`}>
+                    {isActive ? "Active" : "Inactive"}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
 }
-
-export default ViewBranch;

@@ -1,5 +1,3 @@
-// src/pages/AllBranches.jsx
-import { Button } from "@radix-ui/themes";
 import React, { useEffect, useState } from "react";
 import { FaSearch } from "react-icons/fa";
 import { FiMoreVertical } from "react-icons/fi";
@@ -7,7 +5,9 @@ import { LuPlus } from "react-icons/lu";
 import { Link } from "react-router-dom";
 import DropdownMenu from "../../components/DropdownMenu";
 import api from "../../api/axiosInstance";
+import toast, { Toaster } from "react-hot-toast";
 import "../styles.css";
+import "./BranchStyles.css";
 
 /* --------- skeleton helpers --------- */
 const Skel = ({ w = 100, h = 14, rounded = 8, className = "" }) => (
@@ -24,7 +24,7 @@ const Skel = ({ w = 100, h = 14, rounded = 8, className = "" }) => (
 );
 
 const SkelRow = () => (
-  <tr className="border-t">
+  <tr>
     <td className="py-3 px-4"><Skel w={24} /></td>
     <td className="py-3 px-4"><Skel w="70%" /></td>
     <td className="py-3 px-4"><Skel w="50%" /></td>
@@ -37,7 +37,7 @@ const SkelRow = () => (
     </td>
     <td className="py-3 px-4"><Skel w="70%" /></td>
     <td className="py-3 px-4"><Skel w={68} h={22} rounded={999} /></td>
-    <td className="py-3 px-4"><Skel w={28} h={28} rounded={6} /></td>
+    <td className="py-3 px-4 text-right"><Skel w={28} h={28} rounded={6} /></td>
   </tr>
 );
 
@@ -46,19 +46,32 @@ const AllBranches = () => {
   const [search, setSearch] = useState("");
   const [openMenuIndex, setOpenMenuIndex] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
-  const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(true);        // ← NEW
-  const [error, setError] = useState("");              // ← optional
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showSkel, setShowSkel] = useState(false);
+
+  useEffect(() => {
+    let t;
+    if (loading) t = setTimeout(() => setShowSkel(true), 120); // only show if >120ms
+    else setShowSkel(false);
+    return () => t && clearTimeout(t);
+  }, [loading]);
 
   useEffect(() => {
     let cancelled = false;
+    let didStart = false; // strict mode / accidental reruns guard
+    const ctrl = new AbortController();
 
-    const fetchBranches = async () => {
+    (async () => {
+      if (didStart) return;
+      didStart = true;
+
       try {
         setLoading(true);
         setError("");
-        const res = await api.get("/branches");
+        const res = await api.get("/branches", { signal: ctrl.signal });
         const payload = res.data;
         const items = Array.isArray(payload)
           ? payload
@@ -67,18 +80,20 @@ const AllBranches = () => {
           : [];
         if (!cancelled) setBranches(items);
       } catch (err) {
-        if (!cancelled) {
-          setError(err?.response?.data?.message || "Failed to load branches.");
+        if (!cancelled && err?.name !== "CanceledError") {
+          const msg = err?.response?.data?.message || "Failed to load branches.";
+          setError(msg);
+          toast.error(msg);
           setBranches([]);
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
-    };
+    })();
 
-    fetchBranches();
     return () => {
       cancelled = true;
+      ctrl.abort();
     };
   }, []);
 
@@ -94,137 +109,133 @@ const AllBranches = () => {
   const currentBranches = filteredBranches.slice(startIndex, startIndex + rowsPerPage);
 
   const handleDelete = async (branch) => {
-    if (!window.confirm(`Are you sure you want to delete ${branch.branch_name}?`)) return;
+    if (!window.confirm(`Delete "${branch.branch_name}"?`)) return;
+
     try {
-      await api.delete(`/branch/${branch.id}`);
+      await toast.promise(
+        api.delete(`/branch/${branch.id}`),
+        {
+          loading: "Deleting branch…",
+          success: `"${branch.branch_name}" deleted.`,
+          error: (e) =>
+            e?.response?.data?.message || e?.message || "Delete failed.",
+        }
+      );
       setBranches((prev) => prev.filter((b) => b.id !== branch.id));
-      alert("Branch deleted successfully!");
-    } catch (error) {
-      alert(`Failed to delete branch!\n${error?.response?.data?.message || "Please try again."}`);
+    } catch (_) {
+      // toast.promise already handled the error toast
     }
   };
 
   return (
     <>
-      <div className="add-branch-header">
-        <h1 className="add-branch-heading">Branch List</h1>
-      </div>
+      {/* HEADER */}
+      <div className="ipx-head ipx-head-bar">
+        <div className="ipx-brand">
+          <h2 className="ipx-title">Branch List</h2>
+          <p className="ipx-sub">Manage branches, contacts and status.</p>
+        </div>
 
-      <div className="p-6 bg-white shadow-lg rounded-lg" aria-busy={loading}>
-        {/* Error message */}
-        {error && (
-          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </div>
-        )}
-
-        {/* Search + Actions */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-4">
-          {/* Search bar */}
-          <div className="relative w-full md:w-1/2">
+        <div className="ipx-toolbar">
+          {/* Search */}
+          <div className="ipx-field grow relative">
             {loading ? (
-              <Skel w="100%" h={40} />
+              <Skel w="100%" h={44} />
             ) : (
               <>
                 <input
-                  type="text"
-                  placeholder="Search branch..."
+                  className="ipx-input ipx-input-lg ipx-searchpad"
+                  type="search"
+                  placeholder="Search by name, code or location…"
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <FaSearch className="absolute left-3 top-3 text-gray-400" />
+                <FaSearch className="ipx-search-icon" />
               </>
             )}
           </div>
 
-          {/* Rows per page selector + Add button */}
-          <div className="all-branches-row-right flex gap-4 items-center">
-            <div className="flex items-center gap-2 md:w-auto w-full">
-              <label className="font-medium text-gray-700">Rows:</label>
-              {loading ? (
-                <Skel w={72} h={36} />
-              ) : (
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="border px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={15}>15</option>
-                </select>
-              )}
-            </div>
-
-            <div className="all-branches-row-add-new">
-              {loading ? (
-                <Skel w={160} h={36} />
-              ) : (
-                <Link to="/branches/add">
-                  <Button className="flex items-center gap-2 font-bold">
-                    Add New Branch <LuPlus />
-                  </Button>
-                </Link>
-              )}
-            </div>
+          {/* Rows per page */}
+          <div className="ipx-field">
+            <label className="ipx-label small">Rows</label>
+            {loading ? (
+              <Skel w={88} h={36} />
+            ) : (
+              <select
+                className="ipx-input"
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={25}>25</option>
+              </select>
+            )}
           </div>
-        </div>
 
-        {/* Table */}
-        <div className="overflow-hidden rounded-lg">
-          <table className="w-full border-collapse">
-            <thead className="allbranches-table-head">
+          {/* Add new */}
+          <Link to="/branches/add" className="ipx-btn primary ipx-btn-cta flex items-center gap-2">
+            <LuPlus /> Add Branch
+          </Link>
+        </div>
+      </div>
+
+      {/* CARD */}
+      <div className="ipx-card p-0" aria-busy={loading}>
+        {/* Error banner */}
+        {error && (
+          <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
+          </div>
+        )}
+
+        {/* TABLE */}
+        <div className="ipx-table-wrap ipx-table-elevated" aria-busy={loading}>
+          <table className="ipx-table ipx-table-compact ipx-table-hover ipx-table-sticky">
+            <thead>
               <tr>
-                <th className="py-3 px-4 text-left">#</th>
-                <th className="py-3 px-4 text-left">Name</th>
-                <th className="py-3 px-4 text-left">Branch Code</th>
-                <th className="py-3 px-4 text-left">Location</th>
-                <th className="py-3 px-4 text-left">Contact Numbers</th>
-                <th className="py-3 px-4 text-left">Email</th>
-                <th className="py-3 px-4 text-left">Status</th>
-                <th className="py-3 px-4 text-left">Actions</th>
+                <th className="w-64">#</th>
+                <th>Name</th>
+                <th className="w-160 ipx-col-hide-sm">Code</th>
+                <th className="w-220">Location</th>
+                <th className="w-240 ipx-col-hide-md">Contacts</th>
+                <th className="w-220 ipx-col-hide-md">Email</th>
+                <th className="w-120">Status</th>
+                <th className="w-80 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                // 5 skeleton rows
-                Array.from({ length: 5 }).map((_, i) => <SkelRow key={`sk-${i}`} />)
+                Array.from({ length: 6 }).map((_, i) => <SkelRow key={`sk-${i}`} />)
               ) : currentBranches.length > 0 ? (
                 currentBranches.map((branch, index) => (
-                  <tr
-                    key={branch.id}
-                    className="border-t hover:bg-gray-50 transition duration-200"
-                  >
-                    <td className="py-3 px-4 font-medium text-gray-700">
+                  <tr key={branch.id}>
+                    <td className="py-3 px-4 font-medium text-slate-700">
                       {startIndex + index + 1}
                     </td>
-                    <td className="py-3 px-4 text-gray-700">{branch.branch_name || "-"}</td>
-                    <td className="py-3 px-4 text-gray-600">{branch.branch_code || "-"}</td>
-                    <td className="py-3 px-4 text-gray-600">{branch.branch_location || "-"}</td>
-                    <td className="py-3 px-4 text-gray-600">
+                    <td className="py-3 px-4">{branch.branch_name || "-"}</td>
+                    <td className="py-3 px-4 ipx-col-hide-sm">{branch.branch_code || "-"}</td>
+                    <td className="py-3 px-4">{branch.branch_location || "-"}</td>
+                    <td className="py-3 px-4 ipx-col-hide-md">
                       {branch.branch_contact_number && <p>{branch.branch_contact_number}</p>}
                       {branch.branch_alternative_number && <p>{branch.branch_alternative_number}</p>}
                     </td>
-                    <td className="py-3 px-4 text-gray-600">{branch.branch_email || "-"}</td>
+                    <td className="py-3 px-4 ipx-col-hide-md">{branch.branch_email || "-"}</td>
                     <td className="py-3 px-4">
-                      {branch.status === "Active" || branch.status === 1 ? (
-                        <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded">
-                          Active
-                        </span>
+                      {(branch.status === "Active" || branch.status === 1) ? (
+                        <span className="ipx-pill ok">Active</span>
                       ) : (
-                        <span className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded">
-                          Inactive
-                        </span>
+                        <span className="ipx-pill muted">Inactive</span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-center relative">
+                    <td className="py-3 px-4 text-right">
                       <button
                         disabled={loading}
                         onClick={(e) => {
@@ -235,9 +246,10 @@ const AllBranches = () => {
                             left: rect.left + window.scrollX - 100,
                           });
                         }}
-                        className="p-2 rounded hover:bg-gray-200 transition disabled:opacity-50"
+                        className="ipx-more-btn"
+                        title="More"
                       >
-                        <FiMoreVertical size={20} />
+                        <FiMoreVertical size={18} />
                       </button>
 
                       {openMenuIndex === index && (
@@ -253,72 +265,72 @@ const AllBranches = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="py-4 px-4 text-center text-gray-500">
+                  <td colSpan={8} className="py-5 px-4 text-center text-slate-500">
                     No branches found.
                   </td>
                 </tr>
               )}
             </tbody>
+
+            <tfoot>
+              <tr>
+                <td colSpan={8}>
+                  <div className="ipx-pagination">
+                    <div className="ipx-results-count">
+                      {loading ? (
+                        <Skel w={200} />
+                      ) : (
+                        <>
+                          Showing {filteredBranches.length === 0 ? 0 : startIndex + 1} –{" "}
+                          {Math.min(startIndex + rowsPerPage, filteredBranches.length)} of{" "}
+                          {filteredBranches.length}
+                        </>
+                      )}
+                    </div>
+                    <div className="ipx-pager">
+                      <button
+                        className="ipx-btn ghost sm"
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage === 1 || loading}
+                      >
+                        ← Prev
+                      </button>
+                      <span className="ipx-page-indicator">Page {currentPage} / {totalPages}</span>
+                      <button
+                        className="ipx-btn ghost sm"
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages || loading}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex justify-between items-center mt-4">
-          <p className="text-gray-600">
-            {loading ? (
-              <Skel w={220} />
-            ) : (
-              <>
-                Showing {filteredBranches.length === 0 ? 0 : startIndex + 1} -{" "}
-                {Math.min(startIndex + rowsPerPage, filteredBranches.length)} of{" "}
-                {filteredBranches.length} branches
-              </>
-            )}
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1 || loading}
-              className="px-4 py-2 border rounded-md disabled:opacity-50 hover:bg-gray-100"
-            >
-              Prev
-            </button>
-            <button
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-              }
-              disabled={currentPage === totalPages || loading}
-              className="px-4 py-2 border rounded-md disabled:opacity-50 hover:bg-gray-100"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        {/* Toaster (you can move this to App root once) */}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 3000,
+            style: { background: "#111827", color: "#fff" }, // slate-900
+            success: { iconTheme: { primary: "#10B981", secondary: "#111827" } }, // emerald
+            error: { iconTheme: { primary: "#EF4444", secondary: "#111827" } }, // red
+          }}
+        />
       </div>
 
-      {/* tiny shimmer CSS; move to a global file if you prefer */}
+      {/* tiny shimmer CSS (keep) */}
       <style>{`
-        .skel {
-          background: #e5e7eb; /* gray-200 */
-          position: relative;
-          overflow: hidden;
-        }
-        .skel::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          transform: translateX(-100%);
-          background: linear-gradient(
-            90deg,
-            rgba(229,231,235,0) 0%,
-            rgba(255,255,255,0.75) 50%,
-            rgba(229,231,235,0) 0%
-          );
+        .skel { background:#e5e7eb; position:relative; overflow:hidden; }
+        .skel::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
+          background:linear-gradient(90deg, rgba(229,231,235,0) 0%, rgba(255,255,255,.75) 50%, rgba(229,231,235,0) 100%);
           animation: skel-shimmer 1.2s infinite;
         }
-        @keyframes skel-shimmer {
-          100% { transform: translateX(100%); }
-        }
+        @keyframes skel-shimmer { 100% { transform: translateX(100%); } }
       `}</style>
     </>
   );
