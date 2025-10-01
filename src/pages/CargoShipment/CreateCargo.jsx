@@ -32,6 +32,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { FaPlus } from "react-icons/fa6";
 import "./ShipmentStyles.css";
 
+
+const DEFAULT_STATUS_ID = 13;
+
 /* ---------------- skeleton helpers ---------------- */
 const Skel = ({ w = "100%", h = 12, className = "" }) => (
   <div
@@ -216,7 +219,7 @@ const buildInitialForm = (branchId = "") => ({
   receiverPhone: "",
   shippingMethodId: "",
   paymentMethodId: "",
-  statusId: 13,
+  statusId: DEFAULT_STATUS_ID,
   date: today(),
   time: "09:36",
   collectedByRoleId: "",
@@ -775,7 +778,7 @@ export default function CreateCargo() {
 
       shipping_method_id: Number(form.shippingMethodId),
       payment_method_id: Number(form.paymentMethodId),
-      status_id: Number(form.statusId),
+      status_id: DEFAULT_STATUS_ID,
 
       date: form.date,
       time: form.time,
@@ -1106,7 +1109,7 @@ export default function CreateCargo() {
                   </select>
                 </div>
 
-                <div>
+                {/* <div>
                   <label className="block text-sm mb-1">Status</label>
                   <select
                     className="w-full border rounded-lg px-3 py-2"
@@ -1121,7 +1124,7 @@ export default function CreateCargo() {
                       </option>
                     ))}
                   </select>
-                </div>
+                </div> */}
               </div>
 
               {/* Date / Tracking / Delivery / Remarks & Totals */}
@@ -1173,7 +1176,7 @@ export default function CreateCargo() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-3">
                   <label className="block text-sm mb-1">Special remarks</label>
                   <input
@@ -1184,12 +1187,61 @@ export default function CreateCargo() {
                   />
                 </div>
 
-                <div className="flex flex-col justify-end text-sm">
-                  <div className="flex justify-between"><span>Total Cost:</span><b>{totalCost.toFixed(2)}</b></div>
-                  <div className="flex justify-between"><span>VAT:</span><b>{vatCost.toFixed(2)}</b></div>
-                  <div className="flex justify-between"><span>Net Total:</span><b>{netTotal.toFixed(2)}</b></div>
-                  <div className="flex justify-between"><span>Total Weight:</span><b>{totalWeight.toFixed(3)} kg</b></div>
-                </div>
+                  <div>
+    <label className="block text-sm mb-1">Bill Charges (SAR)</label>
+    <input
+      type="number"
+      min="0"
+      step="0.01"
+      className="w-full border rounded-lg px-3 py-2 text-right"
+      placeholder="0.00"
+      value={form.billCharges}
+      onChange={(e) =>
+        setForm((f) => ({ ...f, billCharges: Number.parseFloat(e.target.value || 0) || 0 }))
+      }
+    />
+  </div>
+
+  {/* VAT Percentage */}
+  <div>
+    <label className="block text-sm mb-1">VAT %</label>
+    <input
+      type="number"
+      min="0"
+      step="0.01"
+      className="w-full border rounded-lg px-3 py-2 text-right"
+      placeholder="0.00"
+      value={form.vatPercentage}
+      onChange={(e) =>
+        setForm((f) => ({ ...f, vatPercentage: Number.parseFloat(e.target.value || 0) || 0 }))
+      }
+    />
+  </div>
+
+              <div className="md:col-span-2">
+    <div className="rounded-xl border border-slate-200 p-3">
+      <div className="flex justify-between text-sm text-slate-700">
+        <span>Subtotal</span>
+        <b>{subtotal.toFixed(2)}</b>
+      </div>
+      <div className="flex justify-between text-sm text-slate-700">
+        <span>Bill Charges</span>
+        <b>{billCharges.toFixed(2)}</b>
+      </div>
+      <div className="flex justify-between text-sm text-slate-700">
+        <span>VAT</span>
+        <b>{vatCost.toFixed(2)}</b>
+      </div>
+      <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
+        <span>Total (Net)</span>
+        <span>{netTotal.toFixed(2)}</span>
+      </div>
+      <div className="mt-1 flex justify-between text-xs text-slate-600">
+        <span>Total Weight</span>
+        <span>{totalWeight.toFixed(3)} kg</span>
+      </div>
+    </div>
+  </div>
               </div>
 
               {/* Render Boxes with Items */}

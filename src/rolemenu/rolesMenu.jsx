@@ -128,6 +128,7 @@ export const rolesMenu = {
         { name: "Licence type", path: "/licence/view" },
         { name: "Payment type", path: "/paymenttype/view" },
         { name: "Invoice Prefix", path: "/invoiceprevix/list" },
+        { name: "Delivery Type", path: "/deliverytype/list" },
       ]
     }
   ],

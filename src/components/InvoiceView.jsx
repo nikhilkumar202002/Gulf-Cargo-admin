@@ -6,14 +6,17 @@ import { getPartyById, getParties /* optional: getPartiesByCustomerType */ } fro
 import InvoiceLogo from "../assets/Logo.png";
 import "./invoice.css";
 
+const MONEY_LOCALE = 'en-SA';
+const DEFAULT_CURRENCY = 'SAR';
+
 /* ---------- utils ---------- */
 const cx = (...c) => c.filter(Boolean).join(" ");
 const toNum = (v) => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
 
-const fmtMoney = (n, currency = "INR") => {
+const fmtMoney = (n, currency = DEFAULT_CURRENCY) => {
   if (n === null || n === undefined || n === "") return "—";
   try {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(Number(n) || 0);
+    return new Intl.NumberFormat(MONEY_LOCALE, { style: "currency", currency }).format(Number(n) || 0);
   } catch {
     return String(n);
   }
@@ -36,6 +39,41 @@ const pick = (obj, keys, fallback = "—") => {
   }
   return fallback;
 };
+
+const flattenBoxesToItems = (boxes) => {
+  const keys = Object.keys(boxes || {});
+  // sort numerically so "1","2","10" are in the right order
+  const ordered = keys.sort((a, b) => Number(a) - Number(b));
+  const labelByKey = Object.fromEntries(ordered.map((k, i) => [k, `B${i + 1}`]));
+
+  const out = [];
+  let runningIndex = 1;
+
+  for (const k of ordered) {
+    const box = boxes[k];
+    const list = Array.isArray(box?.items) ? box.items : [];
+    for (const it of list) {
+      const rawBox = it?.box_number ?? it?.box_no ?? k; // fallback to key if item doesn’t have it
+      const qty = it?.piece_no ?? it?.qty ?? it?.quantity ?? it?.pieces ?? "";
+
+      out.push({
+        idx: runningIndex++,
+        name: it?.name ?? it?.description ?? "Item",
+        qty,
+        weight: it?.weight ?? it?.weight_kg ?? "",
+        unitPrice: it?.unit_price ?? it?.price ?? it?.rate ?? "",
+        amount:
+          it?.total_price ??
+          it?.amount ??
+          (Number(it?.unit_price ?? it?.price ?? it?.rate ?? 0) * Number(qty || 0)),
+        // what we’ll render in the “Box No.” column:
+        boxLabel: labelByKey[String(rawBox)] ?? `B${Number(rawBox) || String(rawBox)}`,
+      });
+    }
+  }
+  return out;
+};
+
 
 /* ---------- Company header (keep yours) ---------- */
 const COMPANY = {
@@ -264,24 +302,38 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
   }, [shipment]);
 
   /* ---------- normalized basics ---------- */
-  const currency = pick(shipment, ["currency", "currency_code"], "INR");
+  const currency = DEFAULT_CURRENCY;
 
-  const items = useMemo(() => {
-    const raw = Array.isArray(shipment?.items) ? shipment.items : [];
-    return raw.map((it, i) => ({
+const items = useMemo(() => {
+  // If API gave nested boxes, flatten and return with B1/B2 labels
+  if (shipment?.boxes && Object.keys(shipment.boxes).length) {
+    return flattenBoxesToItems(shipment.boxes);
+  }
+
+  // Fallback: legacy flat items shape
+  const raw = Array.isArray(shipment?.items) ? shipment.items : [];
+  return raw.map((it, i) => {
+    const qty =
+      it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces ?? it?.count ?? it?.piece_no ?? "";
+
+    const rawBox = it?.box_number ?? it?.box_no ?? it?.box ?? it?.package_no ?? "";
+    const boxLabel = rawBox ? `B${Number(rawBox) || String(rawBox)}` : "";
+
+    return {
       idx: i + 1,
       name: pick(it, ["description", "name", "item_name", "cargo_name", "title", "item"], "Item"),
-      qty: pick(it, ["qty", "no_of_pieces", "quantity", "pieces", "count", "piece_no"], ""),
+      qty,
       weight: pick(it, ["weight", "weight_kg", "kg"], ""),
       unitPrice: pick(it, ["unit_price", "price", "rate"], ""),
       amount:
         it?.total_price ??
         it?.amount ??
         it?.line_total ??
-        toNum(it?.unit_price ?? it?.price ?? it?.rate) *
-        toNum(it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces),
-    }));
-  }, [shipment]);
+        (Number(it?.unit_price ?? it?.price ?? it?.rate ?? 0) * Number(qty || 0)),
+      boxLabel,
+    };
+  });
+}, [shipment]);
 
   const getName = (p, side, shipment) =>
     p?.name ||
@@ -431,7 +483,11 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
               <div className="invoice-logo">
                 <img src={InvoiceLogo} alt="Gulf Cargo" className="h-16 object-contain" />
                 <div className="header-invoice-address mt-1 text-slate-700">
-                  {COMPANY.addr}
+                    {pick(
+                  shipment,
+                  ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"],
+                  "—"
+                )}
                 </div>
               </div>
 
@@ -475,9 +531,22 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                 <div className="invoice-top-header">SIMPLIFIED TAX INVOICE</div>
               </div>
               <div className="text-right text-xs">
-                <div className="invoice-top-header">{COMPANY.branchLabel}</div>
-                <div className="invoice-top-header">{shipment?.booking_no || shipment?.invoice_no || "—"}
-                </div>                                                                        
+                <div className="invoice-top-header">
+                    {pick(
+                  shipment,
+                  ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"],
+                  "—"
+                )}
+                </div>
+                <div className="invoice-top-header">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-black px-2 py-1 text-white font-semibold tracking-wide">
+                        <span className="invoice-number-text opacity-80">INV No. :</span>
+                        <span className="invoice-number-text">
+                          {shipment?.booking_no || shipment?.invoice_no || "—"}
+                        </span>
+                      </span>
+                    </div>
+                                                                       
               </div>
             </div>
           </div>
@@ -589,6 +658,9 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                       <th className="border-t border-b border-slate-200 px-1 py-1 text-left uppercase tracking-wider">
                         Items
                       </th>
+                       <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">
+                        Box No.
+                      </th>
                       <th className=" border border-slate-200 px-1 py-1 text-right uppercase tracking-wider">
                         Qty
                       </th>
@@ -615,6 +687,9 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                             <span className="opacity-0">pad</span>
                           )}
                         </td>
+                          <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
+                              {it ? (it.boxLabel || "—") : ""}
+                            </td>
                         <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
                           {it ? it.qty || "—" : ""}
                         </td>
@@ -636,6 +711,9 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                         Items
                       </th>
                       <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">
+                        Box No.
+                      </th>
+                        <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">
                         Qty
                       </th>
                     </tr>
@@ -660,6 +738,10 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                             <span className="opacity-0">pad</span>
                           )}
                         </td>
+                        <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right">
+                          {it ? (it.boxLabel || "—") : ""}
+                        </td>
+                        
                         <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right ">
                           {it ? it.qty || "—" : ""}
                         </td>
@@ -687,11 +769,11 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                     <div className="total-card-list font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
                   </div>
                   <div className=" flex justify-between text-sm text-slate-700">
-                    <div className="invoice-bill-content">Tax</div>
-                    <div className="font-medium text-slate-900">{fmtMoney(tax, currency)}</div>
+                    <div className="invoice-bill-content">Vat%</div>
+                    <div className="total-card-list text-slate-900">{fmtMoney(tax, currency)}</div>
                   </div>
                   <div className="total-card-money mt-1 flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
-                    <div className="invoice-bill-total">Total</div>
+                    <div className="invoice-bill-total">Net Total</div>
                     <div>{fmtMoney(shipment?.total_cost ?? shipment?.net_total ?? total, currency)}</div>
                   </div>
 
@@ -722,8 +804,8 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                 CALAMITY AND DELAY IN CUSTOMS CLEARANCE.
               </p>
               <p className="mt-1">الشروط: 1. لا توجد مطالب ضد الشركة الناشئة للخسائر الناتجة عن الحوادث الطبيعية أو تأخير التخليص الجمركي. 2. لا تتحمل الشركة مسؤولية أي خسارة ناتجة عن سوء الاستخدام أو الأضرار غير المسؤولة أو المسؤوليات المترتبة على أي رسوم ومعاملات تفرض من قبل السلطات الجمركية. 3. الشركة غير مسؤولة عن أي مسؤوليات قانونية ناشئة عن المستندات المفقودة أو التالفة. 4. يتحمل المستلم أو المشتري جميع الرسوم الإضافية، بما في ذلك رسوم التخزين والغرامات المفروضة من قبل الجمارك.</p>
-              <p lassName="mt-1">കമ്പനി നിയമങ്ങൾ പ്രകാരം തീർപ്പാക്കപ്പെടും. കമ്പനി പ്രകൃതി ദുരന്തത്തിനും കസ്റ്റംസ് ക്ലിയറൻസിലെ വൈകിപ്പിനും ഉത്തരവാദിയാവില്ല.</p>
-              <p lassName="mt-1">हिन्दी में समय समय पर कम्पनी नियमों के अनुसार भुगतान किया जायेगा। कम्पनी प्राकृतिक आपदा तथा कस्टम्स क्लियरेंस में देरी के लिए जिम्मेदार नहीं होगी। कम्पनी किसी भी नुकसान या हानि के लिए जिम्मेदार नहीं होगी जो असावधानी या अनुचित उपयोग के कारण हुआ हो। कस्टम्स द्वारा लगाए गए किसी भी अतिरिक्त शुल्क या दंड का भुगतान ग्राहक द्वारा किया जाएगा।</p>
+              <p lassName="mt-1">ഡെലിവറി ചെയ്യുമ്പോൾ സാധനങ്ങൾ പരിശോധിച്ച് ഉറപ്പ് വരുത്തിയതിന് ശേഷം മാത്രം സ്വീകരിക്കുക.</p>
+              {/* <p lassName="mt-1">हिन्दी में समय समय पर कम्पनी नियमों के अनुसार भुगतान किया जायेगा। कम्पनी प्राकृतिक आपदा तथा कस्टम्स क्लियरेंस में देरी के लिए जिम्मेदार नहीं होगी। कम्पनी किसी भी नुकसान या हानि के लिए जिम्मेदार नहीं होगी जो असावधानी या अनुचित उपयोग के कारण हुआ हो। कस्टम्स द्वारा लगाए गए किसी भी अतिरिक्त शुल्क या दंड का भुगतान ग्राहक द्वारा किया जाएगा।</p> */}
               <h2 lassName="mt-1">I AGREE TO THE ABOVE TERMS & CONDITIONS
                 أوافق على الشروط والأحكام المذكورة أعلاه</h2>
             </div>
