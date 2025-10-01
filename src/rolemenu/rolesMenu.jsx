@@ -120,8 +120,8 @@ export const rolesMenu = {
       icon: <FaCog />,
       label: "System Settings",
       submenus: [
-        { name: "All Roles", path: "/roles/allroles" },
-        { name: "Create Role", path: "/roles/addroles" },
+        // { name: "All Roles", path: "/roles/allroles" },
+        // { name: "Create Role", path: "/roles/addroles" },
         { name: "Shipment Methods", path: "/shipmentmethod/view" },
         { name: "Ports", path: "/port/view" },
         { name: "Shipment Status", path: "/shipmentstatus/view" },

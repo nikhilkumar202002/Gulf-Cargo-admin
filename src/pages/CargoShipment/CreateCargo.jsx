@@ -21,7 +21,7 @@ import { getActiveDeliveryTypes } from "../../api/deliveryType";
 
 import { getProfile } from "../../api/accountApi";
 import { getActiveCollected } from "../../api/collectedByApi";
-import { getActiveDrivers } from "../../api/driverApi"; 
+import { getActiveDrivers } from "../../api/driverApi";
 
 import InvoiceModal from "../../components/InvoiceModal";
 import { IoLocationSharp } from "react-icons/io5";
@@ -56,7 +56,7 @@ const SkeletonCreateCargo = () => (
 
     {/* Parties */}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {[0,1].map(i => (
+      {[0, 1].map(i => (
         <div key={i} className="space-y-3">
           <SkelLine w="30%" />
           <div>
@@ -83,7 +83,7 @@ const SkeletonCreateCargo = () => (
 
     {/* Date / Time / Tracking / Delivery */}
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {[0,1,2,3].map(k => (<div key={k}><SkelLine w="50%" className="mb-2" /><SkelField /></div>))}
+      {[0, 1, 2, 3].map(k => (<div key={k}><SkelLine w="50%" className="mb-2" /><SkelField /></div>))}
     </div>
 
     {/* Remarks + totals */}
@@ -110,7 +110,7 @@ const SkeletonCreateCargo = () => (
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left text-gray-600">
-              {["Slno","Name","Pieces","Unit Price","Total Price","Actions"].map(h => (
+              {["Slno", "Name", "Pieces", "Unit Price", "Total Price", "Actions"].map(h => (
                 <th key={h} className="px-3 py-2"><SkelLine w="60%" /></th>
               ))}
             </tr>
@@ -164,7 +164,7 @@ const idOf = (o) =>
   o?._id ??
   null;
 
-  const unwrapDrivers = (res) => {
+const unwrapDrivers = (res) => {
   if (Array.isArray(res)) return res;
   if (Array.isArray(res?.drivers)) return res.drivers;           // ← your shape
   if (Array.isArray(res?.data?.drivers)) return res.data.drivers;
@@ -188,7 +188,7 @@ const labelOf = (o) =>
   o?.username ??
   o?.email ??
   ([o?.first_name, o?.last_name].filter(Boolean).join(" ") ||
-  [o?.mobile, o?.phone, o?.contact_number].find(Boolean)) ??
+    [o?.mobile, o?.phone, o?.contact_number].find(Boolean)) ??
   "-";
 
 const today = () => new Date().toISOString().split("T")[0];
@@ -399,12 +399,12 @@ export default function CreateCargo() {
   const [toast, setToast] = useState({ visible: false, text: "", variant: "success" });
   const toastTimer = useRef(null);
   const showToast = useCallback((text, variant = "success", duration = 3500) => {
-    try { clearTimeout(toastTimer.current); } catch {}
+    try { clearTimeout(toastTimer.current); } catch { }
     setToast({ visible: true, text, variant });
     toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), duration);
   }, []);
   const hideToast = useCallback(() => {
-    try { clearTimeout(toastTimer.current); } catch {}
+    try { clearTimeout(toastTimer.current); } catch { }
     setToast((t) => ({ ...t, visible: false }));
   }, []);
 
@@ -490,22 +490,22 @@ export default function CreateCargo() {
   }, [token, tokenBranchId]);
 
   useEffect(() => {
-  if (form.collectedByRoleName !== "Driver") return;
-  let alive = true;
-  (async () => {
-    try {
-      const res = await getActiveDrivers();       // import from driverApi.js
-      const list = unwrapDrivers(res);
-      if (alive) setCollectedByOptions(list);
-    } catch {
-      if (alive) {
-        setCollectedByOptions([]);
-        setMsg({ text: "Failed to load drivers.", variant: "error" });
+    if (form.collectedByRoleName !== "Driver") return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await getActiveDrivers();       // import from driverApi.js
+        const list = unwrapDrivers(res);
+        if (alive) setCollectedByOptions(list);
+      } catch {
+        if (alive) {
+          setCollectedByOptions([]);
+          setMsg({ text: "Failed to load drivers.", variant: "error" });
+        }
       }
-    }
-  })();
-  return () => { alive = false; };
-}, [form.collectedByRoleName]);
+    })();
+    return () => { alive = false; };
+  }, [form.collectedByRoleName]);
 
 
   /* keep form.branchId synced */
@@ -532,20 +532,20 @@ export default function CreateCargo() {
     let alive = true;
     (async () => {
       if (form.collectedByRoleName === "Office") {
-      try { await loadOfficeStaff(); } catch { /* toasts already handled */ }
-      return;
-    } if (form.collectedByRoleName === "Driver") {
-      try {
-        const res = await getActiveDrivers();
-        if (!alive) return;
-        setCollectedByOptions(unwrapArray(res));
-      } catch {
-        if (!alive) return;
-        setCollectedByOptions([]);
-        setMsg({ text: "Failed to load drivers.", variant: "error" });
+        try { await loadOfficeStaff(); } catch { /* toasts already handled */ }
+        return;
+      } if (form.collectedByRoleName === "Driver") {
+        try {
+          const res = await getActiveDrivers();
+          if (!alive) return;
+          setCollectedByOptions(unwrapArray(res));
+        } catch {
+          if (!alive) return;
+          setCollectedByOptions([]);
+          setMsg({ text: "Failed to load drivers.", variant: "error" });
+        }
+        return;
       }
-      return;
-    }
     })();
     return () => { alive = false; };
   }, [form.branchId, form.collectedByRoleName, loadOfficeStaff]);
@@ -889,11 +889,10 @@ export default function CreateCargo() {
         }}
       >
         <div
-          className={`min-w-[260px] max-w-[360px] rounded-xl border px-4 py-3 shadow ${
-            toast.variant === "error"
+          className={`min-w-[260px] max-w-[360px] rounded-xl border px-4 py-3 shadow ${toast.variant === "error"
               ? "border-rose-200 bg-rose-50 text-rose-800"
               : "border-emerald-200 bg-emerald-50 text-emerald-800"
-          }`}
+            }`}
         >
           <div className="flex items-start gap-3">
             <div className="flex-1 text-sm">{toast.text}</div>
@@ -941,477 +940,475 @@ export default function CreateCargo() {
           {loading ? (
             <SkeletonCreateCargo />
           ) : (
-           <form onSubmit={submit} className="space-y-6">
+            <form onSubmit={submit} className="space-y-6">
 
-  {/* ===== Top: Branch / Collected By ===== */}
-  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="mb-3 flex items-center justify-between">
-      <h3 className="text-sm font-semibold tracking-wide text-slate-700">Collection Details</h3>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-      {/* Branch (read-only) */}
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
-        <input
-          className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-700"
-          value={branchNameFromProfile || ""}
-          readOnly
-          placeholder="No branch in profile"
-        />
-      </div>
-
-      {/* Collected By (Role) */}
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Collected By (Role)</label>
-        <select
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          value={form.collectedByRoleId}
-          onChange={onRoleChange}
-        >
-          <option value="">Select role</option>
-          {collectRoles.map((r) => (
-            <option key={r.id} value={String(r.id)}>{r.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Collected By (Person) */}
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Collected By (Person)</label>
-        <select
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          value={form.collectedByPersonId}
-          onChange={(e) => setForm((f) => ({ ...f, collectedByPersonId: e.target.value }))}
-          disabled={!form.collectedByRoleName}
-        >
-          <option value="">Select person</option>
-          {collectedByOptions.map((opt, i) => {
-            const valueId =
-              form.collectedByRoleName === "Driver"
-                ? (opt?.id ?? opt?.driver_id ?? null)
-                : (opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null);
-            if (!valueId) return null;
-            const label =
-              form.collectedByRoleName === "Driver" ? prettyDriver(opt) : labelOf(opt);
-            return (
-              <option key={`${valueId}-${i}`} value={String(valueId)}>{label}</option>
-            );
-          })}
-        </select>
-      </div>
-    </div>
-  </div>
-
-  {/* ===== Parties ===== */}
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    {/* Sender */}
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold tracking-wide text-slate-700">Sender Info</h3>
-        <Link
-          to="/customers/create"
-          className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
-          title="Add new customer"
-        >
-          + Add
-        </Link>
-      </div>
-      <div className="grid grid-cols-1 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Sender/Customer</label>
-          <select
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            value={form.senderId}
-            onChange={(e) => setForm((f) => ({ ...f, senderId: e.target.value }))}
-            disabled={loading}
-          >
-            <option value="">Select a sender</option>
-            {senders.map((s) => (
-              <option key={String(s.id)} value={String(s.id)}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-[88px_1fr] gap-2 text-sm">
-          <span className="text-slate-500">Address</span>
-          <span className="rounded-lg bg-slate-50 px-3 py-2">
-            {addressFromParty(selectedSender) || form.senderAddress || "—"}
-          </span>
-
-          <span className="text-slate-500">Phone</span>
-          <span className="rounded-lg bg-slate-50 px-3 py-2">
-            {phoneFromParty(selectedSender) || form.senderPhone || "—"}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    {/* Receiver */}
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold tracking-wide text-slate-700">Receiver Info</h3>
-        <Link
-          to="/customers/create"
-          className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
-          title="Add new customer"
-        >
-          + Add
-        </Link>
-      </div>
-      <div className="grid grid-cols-1 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Receiver/Customer</label>
-          <select
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            value={form.receiverId}
-            onChange={(e) => setForm((f) => ({ ...f, receiverId: e.target.value }))}
-            disabled={loading}
-          >
-            <option value="">Select a receiver</option>
-            {receivers.map((r) => (
-              <option key={String(r.id)} value={String(r.id)}>{r.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-[88px_1fr] gap-2 text-sm">
-          <span className="text-slate-500">Address</span>
-          <span className="rounded-lg bg-slate-50 px-3 py-2">
-            {addressFromParty(selectedReceiver) || form.receiverAddress || "—"}
-          </span>
-
-          <span className="text-slate-500">Phone</span>
-          <span className="rounded-lg bg-slate-50 px-3 py-2">
-            {phoneFromParty(selectedReceiver) || form.receiverPhone || "—"}
-          </span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {/* ===== Shipping / Payment ===== */}
-  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="mb-3">
-      <h3 className="text-sm font-semibold tracking-wide text-slate-700">Shipment & Payment</h3>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {/* Shipping Method */}
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Shipping Method</label>
-        <select
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          value={form.shippingMethodId}
-          onChange={(e) => setForm((f) => ({ ...f, shippingMethodId: e.target.value }))}
-          disabled={loading}
-        >
-          <option value="">Select</option>
-          {methods.map((m) => (
-            <option key={String(idOf(m))} value={String(idOf(m))}>{labelOf(m)}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Payment Method */}
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Payment Method</label>
-        <select
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          value={form.paymentMethodId}
-          onChange={(e) => setForm((f) => ({ ...f, paymentMethodId: e.target.value }))}
-        >
-          <option value="">Select Payment Method</option>
-          {paymentMethods.map((pm) => (
-            <option key={String(pm.id)} value={String(pm.id)}>{pm.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Delivery Type */}
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Delivery Type</label>
-        <select
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          value={form.deliveryTypeId}
-          onChange={(e) => setForm((f) => ({ ...f, deliveryTypeId: e.target.value }))}
-        >
-          <option value="">Select</option>
-          {deliveryTypes.map((t) => (
-            <option key={String(t.id)} value={String(t.id)}>{t.name}</option>
-          ))}
-        </select>
-      </div>
-    </div>
-  </div>
-
-  {/* ===== Dates / Tracking ===== */}
-  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="mb-3">
-      <h3 className="text-sm font-semibold tracking-wide text-slate-700">Schedule & Tracking</h3>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Date</label>
-        <input
-          type="date"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          value={form.date}
-          onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Time</label>
-        <input
-          type="time"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          value={form.time}
-          onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
-        />
-      </div>
-
-      <div className="md:col-span-2">
-        <label className="block text-xs font-medium text-slate-600 mb-1">LRL Tracking Code</label>
-        <input
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          value={form.lrlTrackingCode}
-          onChange={(e) => setForm((f) => ({ ...f, lrlTrackingCode: e.target.value }))}
-          placeholder="LRL-XXXX"
-        />
-      </div>
-    </div>
-  </div>
-
-  {/* ===== Remarks + Charges + Sticky Totals ===== */}
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">Remarks & Charges</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-        <div className="md:col-span-3">
-          <label className="block text-xs font-medium text-slate-600 mb-1">Special remarks</label>
-          <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            value={form.specialRemarks}
-            onChange={(e) => setForm((f) => ({ ...f, specialRemarks: e.target.value }))}
-            placeholder="Handle with care, fragile goods."
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Bill Charges (SAR)</label>
-          <input
-            type="number" min="0" step="0.01"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-            placeholder="0.00"
-            value={form.billCharges}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, billCharges: Number.parseFloat(e.target.value || 0) || 0 }))
-            }
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">VAT %</label>
-          <input
-            type="number" min="0" step="0.01"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-            placeholder="0.00"
-            value={form.vatPercentage}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, vatPercentage: Number.parseFloat(e.target.value || 0) || 0 }))
-            }
-          />
-        </div>
-
-        <div className="hidden md:block"></div>
-      </div>
-    </div>
-
-    {/* Sticky totals on desktop */}
-    <div className="lg:col-span-1">
-      <div className="lg:sticky lg:top-20 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">Summary</h3>
-        <div className="space-y-1 text-sm">
-          <div className="flex justify-between text-slate-700"><span>Subtotal</span><b>{subtotal.toFixed(2)}</b></div>
-          <div className="flex justify-between text-slate-700"><span>Bill Charges</span><b>{billCharges.toFixed(2)}</b></div>
-          <div className="flex justify-between text-slate-700"><span>VAT</span><b>{vatCost.toFixed(2)}</b></div>
-          <div className="mt-1 flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
-            <span>Total (Net)</span><span>{netTotal.toFixed(2)}</span>
-          </div>
-          <div className="mt-2 flex justify-between text-xs text-slate-600">
-            <span>Total Weight</span><span>{totalWeight.toFixed(3)} kg</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {/* ===== Boxes & Items ===== */}
-  <div className="space-y-4">
-    {boxes.map((box, boxIndex) => (
-      <div key={boxIndex} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        {/* Box header */}
-        <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="text-sm font-semibold text-slate-800">
-              Box No:
-              <span className="ml-2 inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 px-2 py-0.5">
-                {box.box_number}
-              </span>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-slate-600">Box Weight (kg)</span>
-              <input
-                type="number" min="0" step="0.001" title="Enter after packing"
-                className={`w-32 rounded-lg border px-2 py-1 text-right ${
-                  Number(box.box_weight || 0) <= 0 ? "border-rose-300" : "border-slate-300"
-                }`}
-                value={box.box_weight}
-                onChange={(e) => setBoxWeight(boxIndex, e.target.value)}
-                placeholder="0.000"
-              />
-            </label>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => removeBox(boxIndex)}
-              disabled={boxes.length <= 1}
-              className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-white ${
-                boxes.length <= 1 ? "bg-slate-300 cursor-not-allowed" : "bg-rose-600 hover:bg-rose-700"
-              }`}
-              title={boxes.length <= 1 ? "At least one box is required" : "Remove this box"}
-            >
-              Remove Box
-            </button>
-          </div>
-        </div>
-
-        {/* Items table */}
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr className="text-left">
-                <th className="px-3 py-2 w-12 text-center">Sl.</th>
-                <th className="px-3 py-2">Item</th>
-                <th className="px-3 py-2 w-28 text-right">Pieces</th>
-                <th className="px-3 py-2 w-32 text-right">Unit Price</th>
-                <th className="px-3 py-2 w-32 text-right">Total</th>
-                <th className="px-3 py-2 w-24 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {box.items.map((it, itemIndex) => (
-                <tr key={itemIndex} className={itemIndex % 2 ? "bg-white" : "bg-slate-50/50"}>
-                  <td className="px-3 py-2 text-center text-slate-500">{itemIndex + 1}</td>
-
-                  <td className="px-3 py-2">
-                    <ItemAutosuggest
-                      value={it.name}
-                      onChange={(v) => setBoxItem(boxIndex, itemIndex, "name", v)}
-                    />
-                  </td>
-
-                  <td className="px-3 py-2">
+              {/* ===== Top: Branch / Collected By ===== */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold tracking-wide text-slate-700">Collection Details</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                  {/* Branch (read-only) */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Branch</label>
                     <input
-                      type="number" min="0"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-                      placeholder="0"
-                      value={it.pieces}
-                      onChange={(e) =>
-                        setBoxItem(
-                          boxIndex,
-                          itemIndex,
-                          "pieces",
-                          Number.parseInt(e.target.value || 0, 10) || 0
-                        )
-                      }
+                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-700"
+                      value={branchNameFromProfile || ""}
+                      readOnly
+                      placeholder="No branch in profile"
                     />
-                  </td>
+                  </div>
 
-                  <td className="px-3 py-2">
-                    <input
-                      type="number" min="0" step="0.01"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-                      placeholder="0.00"
-                      value={it.unitPrice}
-                      onChange={(e) =>
-                        setBoxItem(
-                          boxIndex,
-                          itemIndex,
-                          "unitPrice",
-                          Number.parseFloat(e.target.value || 0) || 0
-                        )
-                      }
-                    />
-                  </td>
-
-                  <td className="px-3 py-2 text-right font-medium">
-                    {(Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)}
-                  </td>
-
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => removeItemFromBox(boxIndex, itemIndex)}
-                      className="inline-flex rounded-lg bg-rose-500 px-2 py-1 text-white hover:bg-rose-600"
+                  {/* Collected By (Role) */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Collected By (Role)</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      value={form.collectedByRoleId}
+                      onChange={onRoleChange}
                     >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      <option value="">Select role</option>
+                      {collectRoles.map((r) => (
+                        <option key={r.id} value={String(r.id)}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-        {/* Add item */}
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={() => addItemToBox(boxIndex)}
-            className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
-          >
-            Add Item
-          </button>
-        </div>
-      </div>
-    ))}
-  </div>
+                  {/* Collected By (Person) */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Collected By (Person)</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      value={form.collectedByPersonId}
+                      onChange={(e) => setForm((f) => ({ ...f, collectedByPersonId: e.target.value }))}
+                      disabled={!form.collectedByRoleName}
+                    >
+                      <option value="">Select person</option>
+                      {collectedByOptions.map((opt, i) => {
+                        const valueId =
+                          form.collectedByRoleName === "Driver"
+                            ? (opt?.id ?? opt?.driver_id ?? null)
+                            : (opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null);
+                        if (!valueId) return null;
+                        const label =
+                          form.collectedByRoleName === "Driver" ? prettyDriver(opt) : labelOf(opt);
+                        return (
+                          <option key={`${valueId}-${i}`} value={String(valueId)}>{label}</option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+              </div>
 
-  {/* ===== Add Box + Actions (sticky on mobile bottom) ===== */}
-  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-    <div className="cargo-add-box-btn">
-  <button
-      type="button"
-      onClick={addBox}
-      title="Add a new box; box number will auto-increment"
-      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50"
-    >
-      + Add Box
-    </button>
-    </div>
-  
+              {/* ===== Parties ===== */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Sender */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold tracking-wide text-slate-700">Sender Info</h3>
+                    <Link
+                      to="/customers/create"
+                      className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+                      title="Add new customer"
+                    >
+                      + Add
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Sender/Customer</label>
+                      <select
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        value={form.senderId}
+                        onChange={(e) => setForm((f) => ({ ...f, senderId: e.target.value }))}
+                        disabled={loading}
+                      >
+                        <option value="">Select a sender</option>
+                        {senders.map((s) => (
+                          <option key={String(s.id)} value={String(s.id)}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
 
-    <div className="flex items-center justify-end gap-3">
-      <button
-        type="button"
-        onClick={onResetClick}
-        className="rounded-lg bg-slate-100 px-4 py-2 text-slate-800 hover:bg-slate-200"
-      >
-        Reset
-      </button>
-      <button
-        type="submit"
-        disabled={loading}
-        className={`rounded-lg px-4 py-2 text-white ${loading ? "bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
-      >
-        Save &amp; Generate Invoice
-      </button>
-    </div>
-  </div>
-</form>
+                    <div className="grid grid-cols-[88px_1fr] gap-2 text-sm">
+                      <span className="text-slate-500">Address</span>
+                      <span className="rounded-lg bg-slate-50 px-3 py-2">
+                        {addressFromParty(selectedSender) || form.senderAddress || "—"}
+                      </span>
+
+                      <span className="text-slate-500">Phone</span>
+                      <span className="rounded-lg bg-slate-50 px-3 py-2">
+                        {phoneFromParty(selectedSender) || form.senderPhone || "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Receiver */}
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold tracking-wide text-slate-700">Receiver Info</h3>
+                    <Link
+                      to="/customers/create"
+                      className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+                      title="Add new customer"
+                    >
+                      + Add
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Receiver/Customer</label>
+                      <select
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        value={form.receiverId}
+                        onChange={(e) => setForm((f) => ({ ...f, receiverId: e.target.value }))}
+                        disabled={loading}
+                      >
+                        <option value="">Select a receiver</option>
+                        {receivers.map((r) => (
+                          <option key={String(r.id)} value={String(r.id)}>{r.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-[88px_1fr] gap-2 text-sm">
+                      <span className="text-slate-500">Address</span>
+                      <span className="rounded-lg bg-slate-50 px-3 py-2">
+                        {addressFromParty(selectedReceiver) || form.receiverAddress || "—"}
+                      </span>
+
+                      <span className="text-slate-500">Phone</span>
+                      <span className="rounded-lg bg-slate-50 px-3 py-2">
+                        {phoneFromParty(selectedReceiver) || form.receiverPhone || "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== Shipping / Payment ===== */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3">
+                  <h3 className="text-sm font-semibold tracking-wide text-slate-700">Shipment & Payment</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Shipping Method */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Shipping Method</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      value={form.shippingMethodId}
+                      onChange={(e) => setForm((f) => ({ ...f, shippingMethodId: e.target.value }))}
+                      disabled={loading}
+                    >
+                      <option value="">Select</option>
+                      {methods.map((m) => (
+                        <option key={String(idOf(m))} value={String(idOf(m))}>{labelOf(m)}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Payment Method</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      value={form.paymentMethodId}
+                      onChange={(e) => setForm((f) => ({ ...f, paymentMethodId: e.target.value }))}
+                    >
+                      <option value="">Select Payment Method</option>
+                      {paymentMethods.map((pm) => (
+                        <option key={String(pm.id)} value={String(pm.id)}>{pm.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Delivery Type */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Delivery Type</label>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      value={form.deliveryTypeId}
+                      onChange={(e) => setForm((f) => ({ ...f, deliveryTypeId: e.target.value }))}
+                    >
+                      <option value="">Select</option>
+                      {deliveryTypes.map((t) => (
+                        <option key={String(t.id)} value={String(t.id)}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== Dates / Tracking ===== */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3">
+                  <h3 className="text-sm font-semibold tracking-wide text-slate-700">Schedule & Tracking</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Date</label>
+                    <input
+                      type="date"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      value={form.date}
+                      onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Time</label>
+                    <input
+                      type="time"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      value={form.time}
+                      onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">LRL Tracking Code</label>
+                    <input
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      value={form.lrlTrackingCode}
+                      onChange={(e) => setForm((f) => ({ ...f, lrlTrackingCode: e.target.value }))}
+                      placeholder="LRL-XXXX"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== Remarks + Charges + Sticky Totals ===== */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">Remarks & Charges</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Special remarks</label>
+                      <input
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        value={form.specialRemarks}
+                        onChange={(e) => setForm((f) => ({ ...f, specialRemarks: e.target.value }))}
+                        placeholder="Handle with care, fragile goods."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Bill Charges (SAR)</label>
+                      <input
+                        type="number" min="0" step="0.01"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                        placeholder="0.00"
+                        value={form.billCharges}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, billCharges: Number.parseFloat(e.target.value || 0) || 0 }))
+                        }
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">VAT %</label>
+                      <input
+                        type="number" min="0" step="0.01"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                        placeholder="0.00"
+                        value={form.vatPercentage}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, vatPercentage: Number.parseFloat(e.target.value || 0) || 0 }))
+                        }
+                      />
+                    </div>
+
+                    <div className="hidden md:block"></div>
+                  </div>
+                </div>
+
+                {/* Sticky totals on desktop */}
+                <div className="lg:col-span-1">
+                  <div className="lg:sticky lg:top-20 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h3 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">Summary</h3>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between text-slate-700"><span>Subtotal</span><b>{subtotal.toFixed(2)}</b></div>
+                      <div className="flex justify-between text-slate-700"><span>Bill Charges</span><b>{billCharges.toFixed(2)}</b></div>
+                      <div className="flex justify-between text-slate-700"><span>VAT</span><b>{vatCost.toFixed(2)}</b></div>
+                      <div className="mt-1 flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+                        <span>Total (Net)</span><span>{netTotal.toFixed(2)}</span>
+                      </div>
+                      <div className="mt-2 flex justify-between text-xs text-slate-600">
+                        <span>Total Weight</span><span>{totalWeight.toFixed(3)} kg</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== Boxes & Items ===== */}
+              <div className="space-y-4">
+                {boxes.map((box, boxIndex) => (
+                  <div key={boxIndex} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    {/* Box header */}
+                    <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <div className="text-sm font-semibold text-slate-800">
+                          Box No:
+                          <span className="ml-2 inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 px-2 py-0.5">
+                            {box.box_number}
+                          </span>
+                        </div>
+
+                        <label className="flex items-center gap-2 text-sm">
+                          <span className="text-slate-600">Box Weight (kg)</span>
+                          <input
+                            type="number" min="0" step="0.001" title="Enter after packing"
+                            className={`w-32 rounded-lg border px-2 py-1 text-right ${Number(box.box_weight || 0) <= 0 ? "border-rose-300" : "border-slate-300"
+                              }`}
+                            value={box.box_weight}
+                            onChange={(e) => setBoxWeight(boxIndex, e.target.value)}
+                            placeholder="0.000"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => removeBox(boxIndex)}
+                          disabled={boxes.length <= 1}
+                          className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-white ${boxes.length <= 1 ? "bg-slate-300 cursor-not-allowed" : "bg-rose-600 hover:bg-rose-700"
+                            }`}
+                          title={boxes.length <= 1 ? "At least one box is required" : "Remove this box"}
+                        >
+                          Remove Box
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Items table */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-600">
+                          <tr className="text-left">
+                            <th className="px-3 py-2 w-12 text-center">Sl.</th>
+                            <th className="px-3 py-2">Item</th>
+                            <th className="px-3 py-2 w-28 text-right">Pieces</th>
+                            <th className="px-3 py-2 w-32 text-right">Unit Price</th>
+                            <th className="px-3 py-2 w-32 text-right">Total</th>
+                            <th className="px-3 py-2 w-24 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {box.items.map((it, itemIndex) => (
+                            <tr key={itemIndex} className={itemIndex % 2 ? "bg-white" : "bg-slate-50/50"}>
+                              <td className="px-3 py-2 text-center text-slate-500">{itemIndex + 1}</td>
+
+                              <td className="px-3 py-2">
+                                <ItemAutosuggest
+                                  value={it.name}
+                                  onChange={(v) => setBoxItem(boxIndex, itemIndex, "name", v)}
+                                />
+                              </td>
+
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number" min="0"
+                                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                                  placeholder="0"
+                                  value={it.pieces}
+                                  onChange={(e) =>
+                                    setBoxItem(
+                                      boxIndex,
+                                      itemIndex,
+                                      "pieces",
+                                      Number.parseInt(e.target.value || 0, 10) || 0
+                                    )
+                                  }
+                                />
+                              </td>
+
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                                  placeholder="0.00"
+                                  value={it.unitPrice}
+                                  onChange={(e) =>
+                                    setBoxItem(
+                                      boxIndex,
+                                      itemIndex,
+                                      "unitPrice",
+                                      Number.parseFloat(e.target.value || 0) || 0
+                                    )
+                                  }
+                                />
+                              </td>
+
+                              <td className="px-3 py-2 text-right font-medium">
+                                {(Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2)}
+                              </td>
+
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => removeItemFromBox(boxIndex, itemIndex)}
+                                  className="inline-flex rounded-lg bg-rose-500 px-2 py-1 text-white hover:bg-rose-600"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Add item */}
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => addItemToBox(boxIndex)}
+                        className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+                      >
+                        Add Item
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ===== Add Box + Actions (sticky on mobile bottom) ===== */}
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="cargo-add-box-btn">
+                  <button
+                    type="button"
+                    onClick={addBox}
+                    title="Add a new box; box number will auto-increment"
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-50"
+                  >
+                    + Add Box
+                  </button>
+                </div>
+
+
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={onResetClick}
+                    className="rounded-lg bg-slate-100 px-4 py-2 text-slate-800 hover:bg-slate-200"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className={`rounded-lg px-4 py-2 text-white ${loading ? "bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                  >
+                    Save &amp; Generate Invoice
+                  </button>
+                </div>
+              </div>
+            </form>
 
           )}
         </div>
