@@ -28,6 +28,7 @@ const unwrapArray = (o) =>
 const today = () => new Date().toISOString().slice(0, 10);
 const onlyFree = (rows = []) => rows.filter((r) => Number(r?.is_in_cargo_shipment) === 0);
 
+
 const statusPill = (s) => {
   const v = String(s || "").toLowerCase();
   if (!v || v === "pending") return "bg-amber-100 text-amber-800";

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Suspense } from "react";
+import React, { useEffect, useRef, useState, Suspense } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProfile, clearAuth } from "./store/slices/authSlice";
 import { RouterProvider } from "react-router-dom";
@@ -8,25 +8,46 @@ import Preloader from "./components/Preloader";
 export default function App() {
   const dispatch = useDispatch();
   const { token, status, user } = useSelector((s) => s.auth || {});
-  const [ready, setReady] = useState(false);
+  const [splashDone, setSplashDone] = useState(false);
 
+  // JS version: no TypeScript generic here
+  const bootstrappedTokenRef = useRef(null);
+
+  // One-time splash
   useEffect(() => {
-    if (!token) return;
-    if (status === "idle" && !user) {
+    const t = setTimeout(() => setSplashDone(true), 500);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Bootstrap profile once per token
+  useEffect(() => {
+    if (!token) {
+      bootstrappedTokenRef.current = null; // reset on logout
+      return;
+    }
+
+    const alreadyBootstrapped = bootstrappedTokenRef.current === token;
+
+    if (!alreadyBootstrapped && status === "idle" && !user) {
+      bootstrappedTokenRef.current = token;
       dispatch(fetchProfile())
         .unwrap()
-        .catch(() => dispatch(clearAuth()));
+        .catch(() => {
+          bootstrappedTokenRef.current = null;
+          dispatch(clearAuth());
+        });
     }
   }, [dispatch, token, status, user]);
 
-  const stillLoading = !ready || status === "loading";
+  const authBootstrapping = Boolean(token) && (status === "idle" || status === "loading") && !user;
+  const stillBlocking = !splashDone || authBootstrapping;
 
-  if (stillLoading) {
-    return <Preloader onDone={() => setReady(true)} duration={800} />;
+  if (stillBlocking) {
+    return <Preloader duration={500} />;
   }
 
   return (
-    <Suspense fallback={<Preloader duration={600} />}>
+    <Suspense fallback={<div style={{ height: 2, background: "#eee" }} />}>
       <RouterProvider router={router} />
     </Suspense>
   );

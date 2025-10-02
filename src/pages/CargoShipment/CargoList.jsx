@@ -3,10 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { GiCargoCrate } from "react-icons/gi";
 import { IoIosSearch } from "react-icons/io";
-
-import { listCargos, bulkUpdateCargoStatus } from "../../api/createCargoApi";
+import { listCargos } from "../../api/createCargoApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
-
 import { SlEye } from "react-icons/sl";
 import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
 import { Link } from "react-router-dom";
@@ -89,15 +87,8 @@ export default function AllCargoList() {
   const [allCargos, setAllCargos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  // filters
   const [filter, setFilter] = useState(initialFilter);
   const [statuses, setStatuses] = useState([]);
-
-  // bulk status update
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [bulkStatusId, setBulkStatusId] = useState("");
-
   // pagination (client-side)
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -118,7 +109,6 @@ export default function AllCargoList() {
   const fetchCargos = async () => {
     setLoading(true);
     setError("");
-    setSelectedIds([]);
     try {
       const rows = await listCargos({
         from_date: filter.fromDate || undefined,
@@ -200,18 +190,6 @@ export default function AllCargoList() {
 
   // selection
   const currentPageIds = useMemo(() => paged.map((c) => c.id), [paged]);
-  const allChecked = currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.includes(id));
-  const toggleAll = () => {
-    setSelectedIds((prev) => {
-      if (allChecked) return prev.filter((id) => !currentPageIds.includes(id));
-      const set = new Set(prev);
-      currentPageIds.forEach((id) => set.add(id));
-      return Array.from(set);
-    });
-  };
-  const toggleOne = (id) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
 
   // Excel export
   const handleExcelExport = () => {
@@ -241,20 +219,6 @@ export default function AllCargoList() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Cargos");
     XLSX.writeFile(wb, `cargos_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.xlsx`);
-  };
-
-  // bulk status update
-  const doBulkUpdate = async () => {
-    if (!bulkStatusId) return alert("Choose a status to set.");
-    if (selectedIds.length === 0) return alert("Select at least one cargo.");
-    try {
-      await bulkUpdateCargoStatus({ status_id: Number(bulkStatusId), cargo_ids: selectedIds });
-      await fetchCargos();
-      setSelectedIds([]);
-      setBulkStatusId("");
-    } catch (e) {
-      alert(e?.message || "Failed to update status.");
-    }
   };
 
   // NOTE: assumes you have a handler; keep as-is if defined elsewhere
@@ -372,38 +336,6 @@ export default function AllCargoList() {
                 </button>
               </div>
 
-              <div className="mt-4 flex items-center gap-2">
-                <select
-                  className="w-full rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 sm:w-72"
-                  value={bulkStatusId}
-                  onChange={(e) => setBulkStatusId(e.target.value)}
-                >
-                  <option value="">Bulk: choose status…</option>
-                  {statuses.map((s) => (
-                    <option key={s.id} value={String(s.id)}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={doBulkUpdate}
-                  disabled={!bulkStatusId || selectedIds.length === 0}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium text-white shadow-sm ${
-                    !bulkStatusId || selectedIds.length === 0
-                      ? "cursor-not-allowed bg-slate-300"
-                      : "bg-emerald-600 hover:bg-emerald-700"
-                  }`}
-                  title={
-                    !bulkStatusId
-                      ? "Pick a status"
-                      : selectedIds.length === 0
-                      ? "Select at least one cargo"
-                      : "Update status for selected"
-                  }
-                >
-                  Update Status
-                </button>
-              </div>
             </>
           )}
         </div>
@@ -422,9 +354,7 @@ export default function AllCargoList() {
               <table className="min-w-[1200px] whitespace-nowrap">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-xs font-semibold tracking-wide text-slate-600">
-                    <th className="px-3 py-3">
-                      <input type="checkbox" checked={currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.includes(id))} onChange={toggleAll} />
-                    </th>
+                
                     <th className="px-3 py-3">Actions</th>
                     <th className="px-3 py-3">Booking No.</th>
                     <th className="px-3 py-3">Branch</th>
@@ -451,13 +381,7 @@ export default function AllCargoList() {
 
                   {paged.map((c) => (
                     <tr key={c.id} className="hover:bg-slate-50/60">
-                      <td className="px-3 py-2 align-top">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(c.id)}
-                          onChange={() => toggleOne(c.id)}
-                        />
-                      </td>
+               
 
                       <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">

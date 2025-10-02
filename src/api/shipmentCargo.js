@@ -139,3 +139,134 @@ export async function markCargoNotInShipment(cargoId, body = {}) {
     throw parseAxiosError(err);
   }
 }
+
+/* ============================================================================================
+ * PATCH /cargo-shipment/:id/status
+ * Updates the status of a single shipment.
+ * Body: { shipment_status_id: number, remarks?: string }
+ * ========================================================================================== */
+async function requestWithFallback({ candidates, body }) {
+  let lastErr;
+  for (const { method, url } of candidates) {
+    try {
+      const { data } = await axiosInstance.request({
+        method,
+        url,
+        data: body,
+        headers: { "Content-Type": "application/json" },
+      });
+      return data;
+    } catch (err) {
+      const status = err?.response?.status;
+      if (![400, 404, 405].includes(status)) throw parseAxiosError(err);
+      lastErr = err;
+      // continue to next candidate
+    }
+  }
+  throw parseAxiosError(lastErr);
+}
+
+export async function updateCargoShipmentStatus(shipmentId, payload = {}) {
+  const id = Number(shipmentId);
+  if (!id) throw new Error("updateCargoShipmentStatus: invalid shipment id");
+
+  const body = {
+    shipment_status_id:
+      payload?.shipment_status_id != null
+        ? Number(payload.shipment_status_id)
+        : payload?.status_id != null
+        ? Number(payload.status_id)
+        : undefined,
+    remarks: payload?.remarks || payload?.note || undefined,
+  };
+  if (!body.shipment_status_id) {
+    throw new Error("updateCargoShipmentStatus: shipment_status_id is required");
+  }
+
+  // Try PATCH first (your API spec), then PUT as a fallback
+  const candidates = [
+    { method: "PATCH", url: `/cargo-shipment/${id}/status` },
+    { method: "PUT",   url: `/cargo-shipment/${id}/status` },
+  ];
+
+  try {
+    for (const { method, url } of candidates) {
+      try {
+        const { data } = await axiosInstance.request({
+          method,
+          url,
+          data: body,
+          headers: { "Content-Type": "application/json" },
+        });
+        return data;
+      } catch (err) {
+        const code = err?.response?.status;
+        if (![400, 404, 405].includes(code)) throw parseAxiosError(err);
+        // else continue to next candidate
+      }
+    }
+    throw new Error("updateCargoShipmentStatus: all attempts failed");
+  } catch (err) {
+    throw parseAxiosError(err);
+  }
+}
+/* ============================================================================================
+ * PATCH /cargo-shipments/status-bulk
+ * Bulk updates the status of multiple shipments.
+ * Body: { shipment_ids: number[], shipment_status_id: number, remarks?: string }
+ * Returns: { updated_ids: number[], skipped_ids?: number[], ...backend_specific }
+ * ========================================================================================== */
+export async function bulkUpdateCargoShipmentStatus(input = {}) {
+  // normalize ids
+  const idsArr =
+    Array.isArray(input.shipment_ids) && input.shipment_ids.length
+      ? input.shipment_ids
+      : Array.isArray(input.ids)
+      ? input.ids
+      : [];
+  const shipment_ids = idsArr.map(Number).filter(Boolean);
+
+  // normalize status id
+  const statusId =
+    input?.shipment_status_id != null
+      ? Number(input.shipment_status_id)
+      : input?.status_id != null
+      ? Number(input.status_id)
+      : undefined;
+
+  if (!shipment_ids.length) throw new Error("bulkUpdateCargoShipmentStatus: shipment_ids[] required");
+  if (!statusId) throw new Error("bulkUpdateCargoShipmentStatus: shipment_status_id required");
+
+  const body = {
+    shipment_status_id: statusId,
+    shipment_ids,
+    remarks: input?.remarks || input?.note || undefined,
+  };
+
+  // Your API: PATCH /cargo-shipment/status/bulk
+  // Fallbacks: PUT /cargo-shipment/status/bulk, PATCH/PUT /cargo-shipment/status-bulk
+  const candidates = [
+    { method: "PATCH", url: `/cargo-shipment/status/bulk` },
+    { method: "PUT",   url: `/cargo-shipment/status/bulk` },
+    { method: "PATCH", url: `/cargo-shipment/status-bulk` },
+    { method: "PUT",   url: `/cargo-shipment/status-bulk` },
+  ];
+
+  let lastErr;
+  for (const { method, url } of candidates) {
+    try {
+      const { data } = await axiosInstance.request({
+        method,
+        url,
+        data: body,
+        headers: { "Content-Type": "application/json" },
+      });
+      return data;
+    } catch (err) {
+      const code = err?.response?.status;
+      if (![400, 404, 405].includes(code)) throw parseAxiosError(err);
+      lastErr = err; // try next candidate
+    }
+  }
+  throw parseAxiosError(lastErr);
+}

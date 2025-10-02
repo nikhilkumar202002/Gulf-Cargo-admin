@@ -6,9 +6,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import ReactDOM from "react-dom";
 import { useSelector } from "react-redux";
-import Autosuggest from "react-autosuggest";
 
 import { createCargo, normalizeCargoToInvoice } from "../../api/createCargoApi";
 import { getActiveShipmentMethods } from "../../api/shipmentMethodApi";
@@ -24,12 +22,9 @@ import { getActiveCollected } from "../../api/collectedByApi";
 import { getActiveDrivers } from "../../api/driverApi";
 
 import InvoiceModal from "../../components/InvoiceModal";
-import { IoLocationSharp } from "react-icons/io5";
-import { MdAddIcCall, MdDeleteForever } from "react-icons/md";
 import { BsFillBoxSeamFill } from "react-icons/bs";
-import { GoPlus } from "react-icons/go";
-import { Link, useNavigate } from "react-router-dom";
-import { FaPlus } from "react-icons/fa6";
+import { Link } from "react-router-dom";
+import ItemAutosuggest from "./components/ItemAutosuggest";
 import "./ShipmentStyles.css";
 
 
@@ -307,66 +302,10 @@ const options = [
   "Books",
 ];
 
-function ItemAutosuggest({ value, onChange }) {
-  const [localValue, setLocalValue] = useState(value || "");
-  const [localSuggestions, setLocalSuggestions] = useState([]);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => { setLocalValue(value || ""); }, [value]);
-
-  const fetchSuggestions = ({ value: q }) => {
-    const filtered = options.filter((item) =>
-      item.toLowerCase().includes((q || "").toLowerCase())
-    );
-    setLocalSuggestions(filtered);
-  };
-
-  return (
-    <Autosuggest
-      inputProps={{
-        value: localValue,
-        onChange: (e, { newValue }) => { setLocalValue(newValue); onChange(newValue); },
-        onFocus: () => setOpen(true),
-        onBlur: () => setTimeout(() => setOpen(false), 150),
-        className: "w-full px-3 py-2 border rounded-md",
-      }}
-      suggestions={localSuggestions}
-      onSuggestionsFetchRequested={fetchSuggestions}
-      onSuggestionsClearRequested={() => setLocalSuggestions([])}
-      renderSuggestion={(text) => (
-        <div className="px-4 py-2 cursor-pointer">{text}</div>
-      )}
-      getSuggestionValue={(a) => a}
-      onSuggestionSelected={(e, { suggestionValue }) => {
-        setLocalValue(suggestionValue);
-        onChange(suggestionValue);
-      }}
-      highlightFirstSuggestion={true}
-      renderSuggestionsContainer={({ containerProps, children }) => {
-        if (!open) return null;
-        const input = document.activeElement;
-        if (!input || input.tagName !== "INPUT") return null;
-        const rect = input.getBoundingClientRect();
-        return ReactDOM.createPortal(
-          <div
-            {...containerProps}
-            className="absolute bg-white border mt-1 rounded-md shadow-lg z-[9999] max-h-60 overflow-auto"
-            style={{ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: rect.width }}
-          >
-            {children}
-          </div>,
-          document.body
-        );
-      }}
-    />
-  );
-}
 
 /* ---------------------- Component ---------------------- */
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
-  const navigate = useNavigate();
-
   // selects
   const [methods, setMethods] = useState([]);
   const [statuses, setStatuses] = useState([]);
@@ -726,7 +665,6 @@ export default function CreateCargo() {
     ]);
   }, [userProfile, tokenBranchId]);
 
-  /* submit - GROUP BY box.box_number (items under each; include box_weight) */
   const submit = useCallback(async (e) => {
     e.preventDefault();
 
@@ -747,7 +685,6 @@ export default function CreateCargo() {
       return;
     }
 
-    // Build boxes object grouped by box.box_number
     const grouped = {};
     boxes.forEach((box, bIdx) => {
       const bn = String(box.box_number ?? bIdx + 1);
@@ -775,32 +712,23 @@ export default function CreateCargo() {
       branch_id: Number(form.branchId),
       sender_id: Number(form.senderId),
       receiver_id: Number(form.receiverId),
-
       shipping_method_id: Number(form.shippingMethodId),
       payment_method_id: Number(form.paymentMethodId),
       status_id: DEFAULT_STATUS_ID,
-
       date: form.date,
       time: form.time,
-
       collected_by: form.collectedByRoleName,
       collected_by_id: roleId,
       name_id: personId,
-
       lrl_tracking_code: form.lrlTrackingCode,
       delivery_type_id: Number(form.deliveryTypeId),
       special_remarks: form.specialRemarks,
-
       total_cost: totalCost.toFixed(2),
       bill_charges: Number(form.billCharges || 0).toFixed(2),
       vat_percentage: Number(form.vatPercentage || 0).toFixed(2),
       vat_cost: vatCost.toFixed(2),
       net_total: netTotal.toFixed(2),
-
-      // total weight from boxes
       total_weight: totalWeight.toFixed(3),
-
-      // boxes grouped by box_number, with box_weight included
       boxes: ordered,
     };
 
@@ -808,8 +736,6 @@ export default function CreateCargo() {
       setLoading(true);
       const created = await createCargo(payload);
       const normalized = normalizeCargoToInvoice(created);
-
-      // ensure booking_no fallback from boxes (if absent)
       if ((!normalized.booking_no || String(normalized.booking_no).trim() === "") && normalized.boxes) {
         const keys = Object.keys(normalized.boxes).filter((k) => String(k).trim() !== "");
         if (keys.length) {
@@ -1304,10 +1230,7 @@ export default function CreateCargo() {
                               <td className="px-3 py-2 text-center text-slate-500">{itemIndex + 1}</td>
 
                               <td className="px-3 py-2">
-                                <ItemAutosuggest
-                                  value={it.name}
-                                  onChange={(v) => setBoxItem(boxIndex, itemIndex, "name", v)}
-                                />
+                               <ItemAutosuggest value={it.name} onChange={(v) => setBoxItem(boxIndex, itemIndex, "name", v)} options={options} />
                               </td>
 
                               <td className="px-3 py-2">

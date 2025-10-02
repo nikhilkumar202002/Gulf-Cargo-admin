@@ -1,8 +1,9 @@
 // src/pages/ShipmentReport.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { listCargoShipments } from "../../api/shipmentCargo";
-
+import { listCargoShipments, updateCargoShipmentStatus, bulkUpdateCargoShipmentStatus } from "../../api/shipmentCargo";
+import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi"; // <- load status options
+import { IoMdEye } from "react-icons/io";
 const cx = (...c) => c.filter(Boolean).join(" ");
 
 /* ---------------- Skeleton helpers (lightweight) ---------------- */
@@ -19,7 +20,6 @@ const Skel = ({ w = "100%", h = 14, rounded = 8, className = "" }) => (
 );
 const SkelInput = () => <Skel w="100%" h={36} rounded={10} />;
 const SkelBtn = ({ wide = false }) => <Skel w={wide ? 120 : 90} h={36} rounded={10} />;
-const SkelChip = () => <Skel w={80} h={20} rounded={999} />;
 
 const Spinner = ({ className = "h-5 w-5 text-indigo-600" }) => (
   <svg className={cx("animate-spin", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -87,9 +87,47 @@ export default function ShipmentReport() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
+  // filters
   const [query, setQuery] = useState("");
+  const [fromDate, setFromDate] = useState(""); // yyyy-mm-dd
+  const [toDate, setToDate] = useState(""); // yyyy-mm-dd
+  const [statusId, setStatusId] = useState(""); // filter: id
+
+  // pagination
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+
+  // status options
+  const [statusOptions, setStatusOptions] = useState([]);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusErr, setStatusErr] = useState("");
+
+  // selection for bulk
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkStatusId, setBulkStatusId] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // per-row draft status
+  const [rowStatusDraft, setRowStatusDraft] = useState({}); // { [id]: statusId }
+  const [rowBusyId, setRowBusyId] = useState(null);
+
+  const loadStatuses = async () => {
+    setStatusLoading(true);
+    setStatusErr("");
+    try {
+      const list = await getActiveShipmentStatuses();
+      const normalized = (list || []).map((s) => ({
+        id: s.id ?? s.value ?? s._id ?? s.code ?? String(s.name || "Unknown"),
+        name: s.name ?? s.label ?? s.title ?? String(s.code || s.id || "Status"),
+      }));
+      setStatusOptions(normalized);
+    } catch (e) {
+      setStatusErr(e?.message || "Failed to load statuses");
+      setStatusOptions([]);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
 
   const load = async (overrides = {}) => {
     setLoading(true);
@@ -98,7 +136,15 @@ export default function ShipmentReport() {
       const p = overrides.page ?? page;
       const pp = overrides.perPage ?? perPage;
 
-      const resp = await listCargoShipments({ page: p, per_page: pp });
+      const params = {
+        page: p,
+        per_page: pp,
+        from_date: fromDate || undefined,
+        to_date: toDate || undefined,
+        status_id: statusId || undefined,
+      };
+
+      const resp = await listCargoShipments(params);
       const { list, meta: m } = unwrapShipments(resp, p, pp);
       setRows(list);
       setMeta(m);
@@ -111,10 +157,24 @@ export default function ShipmentReport() {
     }
   };
 
+  // initial loads
+  useEffect(() => {
+    loadStatuses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // reload on page/perPage
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, perPage]);
+
+  // reload when filters change (and reset to page 1)
+  useEffect(() => {
+    setPage(1);
+    load({ page: 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate, statusId]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;
@@ -142,26 +202,79 @@ export default function ShipmentReport() {
   }, [rows, query]);
 
   const columns = [
+    { key: "select", label: "" },
+     // selection checkbox
     { key: "id", label: "ID" },
+    { key: "actions", label: "Actions" },
+
     { key: "created_on", label: "Shipment Date" },
     { key: "awb_or_container_number", label: "AWB / Container" },
     { key: "origin_port", label: "Origin" },
     { key: "destination_port", label: "Destination" },
     { key: "branch", label: "Branch" },
     { key: "created_by", label: "Created By" },
-    { key: "no_of_cargos", label: "No. of Cargos" }, // << count only
+    { key: "no_of_cargos", label: "No. of Cargos" },
     { key: "status", label: "Status" },
-    { key: "view", label: "View" },
   ];
 
   const showingFrom = filtered.length ? (meta.current_page - 1) * meta.per_page + 1 : 0;
   const showingTo = filtered.length ? showingFrom + filtered.length - 1 : 0;
 
+  const toggleSelected = (id, checked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllThisPage = (checked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((r) => {
+        if (checked) next.add(r.id);
+        else next.delete(r.id);
+      });
+      return next;
+    });
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!bulkStatusId) {
+      alert("Choose a status to update to.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (!ids.length) {
+      alert("Select at least one shipment.");
+      return;
+    }
+    try {
+      setBulkBusy(true);
+      await bulkUpdateCargoShipmentStatus({
+        shipment_status_id: Number(bulkStatusId),
+        shipment_ids: ids,
+      });
+      // refresh and clear selection
+      await load();
+      setSelectedIds(new Set());
+      setBulkStatusId("");
+    } catch (e) {
+      console.error("Bulk update failed:", e);
+      alert(e?.message || "Bulk update failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+ 
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen mx-auto max-w-6xl">
       {/* Header */}
-      <header>
-        <div className="mx-auto max-w-6xl">
+      <header className="flex justify-between">
+        <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             {loading ? <Skel w={200} h={24} /> : "Shipment Report"}
           </h1>
@@ -169,12 +282,25 @@ export default function ShipmentReport() {
             {loading ? <Skel w={260} h={14} /> : "All shipments fetched from the API."}
           </p>
         </div>
+        <div className="flex items-end">
+            {loading ? (
+              <SkelBtn wide />
+            ) : (
+              <Link
+                to="/shipment/createshipment"
+                className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                + Add Shipment
+              </Link>
+            )}
+          </div>
       </header>
 
       <main className="mx-auto max-w-6xl py-6">
-        {/* Controls */}
-        <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="lg:col-span-3">
+ 
+        <div className="mb-4 grid grid-cols-4 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4 lg:grid-cols-4">
+
+          <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">Search</label>
             {loading ? (
               <SkelInput />
@@ -189,58 +315,87 @@ export default function ShipmentReport() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Rows</label>
+            <label className="mb-1 block text-xs font-medium text-slate-600">From</label>
             {loading ? (
               <SkelInput />
             ) : (
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">To</label>
+            {loading ? (
+              <SkelInput />
+            ) : (
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                min={fromDate || undefined}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Filter: Status</label>
+            {loading || statusLoading ? (
+              <SkelInput />
+            ) : (
               <select
-                value={perPage}
-                onChange={(e) => {
-                  setPerPage(Number(e.target.value));
-                  setPage(1);
-                }}
+                value={statusId}
+                onChange={(e) => setStatusId(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                {[10, 20, 50, 100].map((n) => (
-                  <option key={n} value={n}>
-                    {n} / page
+                <option value="">All</option>
+                {statusOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
                   </option>
                 ))}
               </select>
             )}
+            {!loading && statusErr && <p className="mt-1 text-xs text-rose-600">{statusErr}</p>}
           </div>
 
-          <div className="flex items-end gap-2">
-            {loading ? (
-              <>
-                <SkelBtn wide />
-                <SkelBtn />
-              </>
-            ) : (
-              <>
+           <div className="flex items-center gap-2">
+                <select
+                  value={bulkStatusId}
+                  onChange={(e) => setBulkStatusId(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  disabled={loading || statusLoading}
+                  title="Choose status to apply to selected rows"
+                >
+                  <option value="">Bulk: set status…</option>
+                  {statusOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
-                  onClick={() => load({ page: 1 })}
-                  className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  onClick={handleBulkUpdate}
+                  disabled={bulkBusy || !bulkStatusId || selectedIds.size === 0}
+                  className={cx(
+                    "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
+                    bulkBusy || !bulkStatusId || selectedIds.size === 0
+                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  )}
                 >
-                  {loading ? <Spinner className="h-4 w-4 text-white" /> : "Refresh"}
+                  {bulkBusy ? <Spinner className="h-4 w-4" /> : "Update Selected"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuery("");
-                    setPerPage(10);
-                    setPage(1);
-                    load({ page: 1, perPage: 10 });
-                  }}
-                  className="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Reset
-                </button>
-              </>
-            )}
-          </div>
+              </div>
+         
         </div>
+
 
         {/* Table */}
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -251,9 +406,24 @@ export default function ShipmentReport() {
                   {columns.map((c) => (
                     <th
                       key={c.key}
-                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600"
+                      className={cx(
+                        "px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600",
+                        c.key === "select" && "w-10"
+                      )}
                     >
-                      {c.label}
+                      {c.key === "select" ? (
+                        <input
+                          type="checkbox"
+                          aria-label="Select all on this page"
+                          onChange={(e) => toggleSelectAllThisPage(e.target.checked)}
+                          checked={
+                            filtered.length > 0 &&
+                            filtered.every((r) => selectedIds.has(r.id))
+                          }
+                        />
+                      ) : (
+                        c.label
+                      )}
                     </th>
                   ))}
                 </tr>
@@ -265,7 +435,7 @@ export default function ShipmentReport() {
                     <tr key={`skeleton-${i}`}>
                       {columns.map((c, j) => (
                         <td key={`${c.key}-${j}`} className="px-4 py-3">
-                          <Skel w={j === 0 ? 30 : "80%"} h={14} />
+                          <Skel w={j === 1 ? 30 : "80%"} h={14} />
                         </td>
                       ))}
                     </tr>
@@ -300,8 +470,35 @@ export default function ShipmentReport() {
                     const statusText = r.shipment_status || r.status || "";
                     return (
                       <tr key={r.id}>
+                        {/* select */}
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(r.id)}
+                            onChange={(e) => toggleSelected(r.id, e.target.checked)}
+                            aria-label={`Select shipment ${r.id}`}
+                          />
+                        </td>
+                  
                         <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">
                           {r.id ?? "—"}
+                        </td>
+                              <td className="px-4 py-3 text-sm">
+                          <div className="flex items-center gap-2">
+                      
+                            <Link
+                              to={`/shipments/shipmentsview/${r.id}`}
+                              state={{ shipment: r }}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md
+                               bg-sky-100 text-sky-700 ring-1 ring-sky-200
+                               hover:bg-sky-200 hover:text-sky-800
+                               focus:outline-none focus:ring-2 focus:ring-sky-400
+                               transition"
+                              title="View"
+                            >
+                              <IoMdEye/>
+                            </Link>
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">
                           {formatDate(r.created_on ?? r.created_at)}
@@ -314,19 +511,13 @@ export default function ShipmentReport() {
                         <td className="px-4 py-3 text-sm text-slate-700">{r.branch ?? "—"}</td>
                         <td className="px-4 py-3 text-sm text-slate-700">{r.created_by ?? "—"}</td>
                         <td className="px-4 py-3 text-sm text-slate-800">{noOfCargos}</td>
+
                         <td className="px-4 py-3 text-sm">
                           <Badge text={statusText || "—"} color={statusColor(statusText)} />
                         </td>
-                        <td className="px-4 py-3 text-sm">
-                          <Link
-                            to={`/shipments/shipmentsview/${r.id}`}
-                            state={{ shipment: r }}
-                            className="inline-flex items-center rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                            title="View"
-                          >
-                            View
-                          </Link>
-                        </td>
+
+                        {/* Actions: per-row quick update + view */}
+                        
                       </tr>
                     );
                   })}
@@ -334,7 +525,7 @@ export default function ShipmentReport() {
             </table>
           </div>
 
-          {/* Pagination */}
+          {/* Pagination + Bulk update controls */}
           <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 p-3 sm:flex-row">
             <div className="text-sm text-slate-600">
               {loading ? (
@@ -348,7 +539,31 @@ export default function ShipmentReport() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+              {/* Rows / page selector sits near pagination */}
+              {loading ? (
+                <Skel w={140} h={28} rounded={6} />
+              ) : (
+                <select
+                  value={perPage}
+                  onChange={(e) => {
+                    setPerPage(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {[10, 20, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n} / page
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Bulk updater */}
+             
+
+              {/* Pager */}
               {loading ? (
                 <>
                   <SkelBtn />
@@ -356,7 +571,7 @@ export default function ShipmentReport() {
                   <SkelBtn />
                 </>
               ) : (
-                <>
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={loading || meta.current_page <= 1}
@@ -385,7 +600,7 @@ export default function ShipmentReport() {
                   >
                     Next
                   </button>
-                </>
+                </div>
               )}
             </div>
           </div>
