@@ -27,7 +27,6 @@ import { Link } from "react-router-dom";
 import ItemAutosuggest from "./components/ItemAutosuggest";
 import "./ShipmentStyles.css";
 
-
 const DEFAULT_STATUS_ID = 13;
 
 /* ---------------- skeleton helpers ---------------- */
@@ -151,6 +150,21 @@ const unwrapArray = (o) => {
   return [];
 };
 
+// Normalize ANY time string to "HH:mm" (24h) to satisfy backend "H:i"
+const toHi = (t) => {
+  if (!t) return "00:00";
+  // accepts "H:mm", "HH:mm", or "HH:mm:ss"
+  const m = String(t).match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  let hh = Number(m?.[1] ?? 0);
+  let mm = Number(m?.[2] ?? 0);
+  if (!Number.isFinite(hh)) hh = 0;
+  if (!Number.isFinite(mm)) mm = 0;
+  hh = Math.min(Math.max(hh, 0), 23);
+  mm = Math.min(Math.max(mm, 0), 59);
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+};
+
+
 const idOf = (o) =>
   o?.id ??
   o?.branch_id ??
@@ -227,6 +241,10 @@ const buildInitialForm = (branchId = "") => ({
   vatPercentage: 0,
 });
 
+/* to-string decimal with fixed precision (Laravel-friendly) */
+const toDec = (n, places = 2) =>
+  Number.isFinite(Number(n)) ? Number(n).toFixed(places) : (0).toFixed(places);
+
 /* coalesce + robust phone/address from your API fields */
 const coalesce = (...vals) => {
   for (const v of vals) {
@@ -238,12 +256,7 @@ const coalesce = (...vals) => {
 
 const phoneFromParty = (p) => {
   if (!p) return "";
-  return coalesce(
-    p.contact_number,
-    p.whatsapp_number,
-    p.phone,
-    p.mobile
-  );
+  return coalesce(p.contact_number, p.whatsapp_number, p.phone, p.mobile);
 };
 
 const addressFromParty = (p) => {
@@ -302,13 +315,12 @@ const options = [
   "Books",
 ];
 
-
 /* ---------------------- Component ---------------------- */
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
   // selects
   const [methods, setMethods] = useState([]);
-  const [statuses, setStatuses] = useState([]);
+  const [statuses, setStatuses] = useState([]); // loaded but not shown in UI yet
   const [senders, setSenders] = useState([]);
   const [receivers, setReceivers] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
@@ -325,11 +337,11 @@ export default function CreateCargo() {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceShipment, setInvoiceShipment] = useState(null);
 
-  // Boxes: each has box_number (auto), weight (kg), and items[]
+  // Boxes: each has box_number (auto), box_weight (kg), and items[]
   const [boxes, setBoxes] = useState([
     {
       box_number: "1",
-      weight: 0,
+      box_weight: 0,
       items: [{ name: "", pieces: 1, unitPrice: 0 }],
     },
   ]);
@@ -369,7 +381,10 @@ export default function CreateCargo() {
   // total weight = sum of box weights (entered after packing)
   const totalWeight = useMemo(() => {
     let sum = 0;
-    for (const b of boxes) sum += Number(b.weight || 0);
+    for (const b of boxes) {
+      const w = b.box_weight ?? b.weight ?? 0;
+      sum += Number(w) || 0;
+    }
     return Number(sum.toFixed(3));
   }, [boxes]);
 
@@ -416,8 +431,8 @@ export default function CreateCargo() {
           getPartiesByCustomerType(2), // Receiver
         ]);
         if (!alive) return;
-        setSenders(allSenders);
-        setReceivers(allReceivers);
+        setSenders(unwrapArray(allSenders));
+        setReceivers(unwrapArray(allReceivers));
       } catch (e) {
         if (!alive) return;
         setMsg({ text: e?.details?.message || e?.message || "Failed to load options.", variant: "error" });
@@ -433,7 +448,7 @@ export default function CreateCargo() {
     let alive = true;
     (async () => {
       try {
-        const res = await getActiveDrivers();       // import from driverApi.js
+        const res = await getActiveDrivers();
         const list = unwrapDrivers(res);
         if (alive) setCollectedByOptions(list);
       } catch {
@@ -445,7 +460,6 @@ export default function CreateCargo() {
     })();
     return () => { alive = false; };
   }, [form.collectedByRoleName]);
-
 
   /* keep form.branchId synced */
   useEffect(() => {
@@ -471,9 +485,10 @@ export default function CreateCargo() {
     let alive = true;
     (async () => {
       if (form.collectedByRoleName === "Office") {
-        try { await loadOfficeStaff(); } catch { /* toasts already handled */ }
+        try { await loadOfficeStaff(); } catch {}
         return;
-      } if (form.collectedByRoleName === "Driver") {
+      }
+      if (form.collectedByRoleName === "Driver") {
         try {
           const res = await getActiveDrivers();
           if (!alive) return;
@@ -529,7 +544,7 @@ export default function CreateCargo() {
       ...prev,
       {
         box_number: nextNo,
-        weight: 0, // entered after packing
+        box_weight: 0,
         items: [{ name: "", pieces: 1, unitPrice: 0 }],
       },
     ]);
@@ -547,8 +562,8 @@ export default function CreateCargo() {
       const next = structuredClone(prev);
       const b = next[boxIndex];
       if (!b) return prev;
-      const n = Number.parseFloat(val || 0);
-      b.weight = Number.isNaN(n) ? 0 : Math.max(0, n);
+      const n = Number.parseFloat(val);
+      b.box_weight = Number.isFinite(n) ? Math.max(0, n) : 0; // number, not ""
       return next;
     });
   }, []);
@@ -643,11 +658,12 @@ export default function CreateCargo() {
       missing.push("At least one item (name + pieces)");
     }
 
-    // require each box to have weight > 0
-    const anyZeroBox = boxes.some((b) => Number(b.weight || 0) <= 0);
-    if (anyZeroBox) {
-      missing.push("Each box needs a weight > 0");
-    }
+    // weights: allow 0 during packing, just ensure finite and >= 0
+    const anyInvalid = boxes.some((b) => {
+      const n = Number(b.box_weight ?? b.weight ?? 0);
+      return !Number.isFinite(n) || n < 0;
+    });
+    if (anyInvalid) missing.push("Each box weight must be a number (≥ 0)");
 
     return missing;
   }, [form, boxes]);
@@ -659,7 +675,7 @@ export default function CreateCargo() {
     setBoxes([
       {
         box_number: "1",
-        weight: 0,
+        box_weight: 0,
         items: [{ name: "", pieces: 1, unitPrice: 0 }],
       },
     ]);
@@ -685,19 +701,32 @@ export default function CreateCargo() {
       return;
     }
 
+    // Build boxes payload (first item of each box carries the box's weight)
     const grouped = {};
     boxes.forEach((box, bIdx) => {
       const bn = String(box.box_number ?? bIdx + 1);
-      if (!grouped[bn]) grouped[bn] = { items: [], weight: Number(box.weight || 0).toFixed(3) };
+      const numericWeight = Number(box.box_weight ?? box.weight ?? 0);
+      const boxWeightNum = Number.isFinite(numericWeight) ? Math.max(0, numericWeight) : 0;
+
+      if (!grouped[bn]) {
+        grouped[bn] = { items: [] };
+      }
+      let putWeightOnFirstItem = true;
 
       (box.items || []).forEach((it) => {
+        const pieces = Number(it.pieces || 0);
+        const unit = Number(it.unitPrice || 0);
+        const itemWeight = putWeightOnFirstItem ? boxWeightNum : 0;
+        putWeightOnFirstItem = false;
+
         grouped[bn].items.push({
           slno: String(grouped[bn].items.length + 1),
           box_number: bn,
           name: it.name || "",
-          piece_no: String(Number(it.pieces || 0)),
-          unit_price: Number(it.unitPrice || 0).toFixed(2),
-          total_price: (Number(it.pieces || 0) * Number(it.unitPrice || 0)).toFixed(2),
+          piece_no: String(pieces),
+          unit_price: toDec(unit, 2),
+          total_price: toDec(pieces * unit, 2),
+          weight: toDec(itemWeight, 3), // string decimal for API
         });
       });
     });
@@ -708,6 +737,15 @@ export default function CreateCargo() {
       .sort((a, b) => Number(a) - Number(b))
       .forEach((k) => { ordered[k] = grouped[k]; });
 
+    // ensure time is HH:mm:ss
+    const timeStr = (form.time || "").length === 5 ? `${form.time}:00` : form.time;
+const boxWeights = boxes
+  .sort((a, b) => Number(a.box_number ?? 0) - Number(b.box_number ?? 0))
+  .map((box) => {
+    const w = Number(box.box_weight ?? box.weight ?? 0);
+    const wn = Number.isFinite(w) ? Math.max(0, w) : 0;
+    return wn.toFixed(3); // send as "30.000"
+  });
     const payload = {
       branch_id: Number(form.branchId),
       sender_id: Number(form.senderId),
@@ -716,26 +754,31 @@ export default function CreateCargo() {
       payment_method_id: Number(form.paymentMethodId),
       status_id: DEFAULT_STATUS_ID,
       date: form.date,
-      time: form.time,
-      collected_by: form.collectedByRoleName,
-      collected_by_id: roleId,
-      name_id: personId,
+      time: toHi(form.time),
+      collected_by: form.collectedByRoleName, // "Office" | "Driver"
+      collected_by_id: Number(form.collectedByRoleId),
+      name_id: Number(form.collectedByPersonId),
       lrl_tracking_code: form.lrlTrackingCode,
       delivery_type_id: Number(form.deliveryTypeId),
       special_remarks: form.specialRemarks,
-      total_cost: totalCost.toFixed(2),
-      bill_charges: Number(form.billCharges || 0).toFixed(2),
-      vat_percentage: Number(form.vatPercentage || 0).toFixed(2),
-      vat_cost: vatCost.toFixed(2),
-      net_total: netTotal.toFixed(2),
-      total_weight: totalWeight.toFixed(3),
+      total_cost: toDec(totalCost, 2),
+      bill_charges: toDec(form.billCharges || 0, 2),
+      vat_percentage: toDec(form.vatPercentage || 0, 2),
+      vat_cost: toDec(vatCost, 2),
+      net_total: toDec(netTotal, 2),
+      total_weight: toDec(totalWeight, 3),
+        box_weight: boxWeights,
+      // DO NOT send box_weight at top-level (backend likely computes it)
       boxes: ordered,
     };
 
     try {
       setLoading(true);
+      // console.debug("Submit payload:", payload);
       const created = await createCargo(payload);
       const normalized = normalizeCargoToInvoice(created);
+
+      // fallback booking number derivation if missing
       if ((!normalized.booking_no || String(normalized.booking_no).trim() === "") && normalized.boxes) {
         const keys = Object.keys(normalized.boxes).filter((k) => String(k).trim() !== "");
         if (keys.length) {
@@ -749,7 +792,19 @@ export default function CreateCargo() {
       showToast("Cargo created. Invoice ready.", "success");
       resetFormAfterSubmit();
     } catch (e2) {
-      setMsg({ text: e2?.message || "Failed to create cargo.", variant: "error" });
+      const details =
+        e2?.response?.data?.errors ??
+        e2?.response?.data ??
+        e2?.details ??
+        e2?.message;
+      // eslint-disable-next-line no-console
+      console.error("Create cargo failed:", details);
+      const msgText = typeof details === "string"
+        ? details
+        : Array.isArray(details)
+          ? details.join(", ")
+          : Object.entries(details || {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(" | ");
+      setMsg({ text: msgText || "Failed to create cargo (422).", variant: "error" });
     } finally {
       setLoading(false);
     }
@@ -774,7 +829,7 @@ export default function CreateCargo() {
     setBoxes([
       {
         box_number: "1",
-        weight: 0,
+        box_weight: 0,
         items: [{ name: "", pieces: 1, unitPrice: 0 }],
       },
     ]);
@@ -1188,9 +1243,10 @@ export default function CreateCargo() {
                           <span className="text-slate-600">Box Weight (kg)</span>
                           <input
                             type="number" min="0" step="0.001" title="Enter after packing"
-                            className={`w-32 rounded-lg border px-2 py-1 text-right ${Number(box.weight || 0) <= 0 ? "border-rose-300" : "border-slate-300"
-                              }`}
-                            value={box.weight}
+                            className={`w-32 rounded-lg border px-2 py-1 text-right ${
+                              Number(box.box_weight || 0) <= 0 ? "border-rose-300" : "border-slate-300"
+                            }`}
+                            value={box.box_weight ?? 0}
                             onChange={(e) => setBoxWeight(boxIndex, e.target.value)}
                             placeholder="0.000"
                           />
@@ -1230,7 +1286,7 @@ export default function CreateCargo() {
                               <td className="px-3 py-2 text-center text-slate-500">{itemIndex + 1}</td>
 
                               <td className="px-3 py-2">
-                               <ItemAutosuggest value={it.name} onChange={(v) => setBoxItem(boxIndex, itemIndex, "name", v)} options={options} />
+                                <ItemAutosuggest value={it.name} onChange={(v) => setBoxItem(boxIndex, itemIndex, "name", v)} options={options} />
                               </td>
 
                               <td className="px-3 py-2">
@@ -1312,7 +1368,6 @@ export default function CreateCargo() {
                     + Add Box
                   </button>
                 </div>
-
 
                 <div className="flex items-center justify-end gap-3">
                   <button

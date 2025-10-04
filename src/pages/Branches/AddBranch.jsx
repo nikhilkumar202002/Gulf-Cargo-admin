@@ -43,6 +43,7 @@ export default function AddBranch() {
   // form state (trimmed to what your backend actually uses)
   const [form, setForm] = useState({
     branchName: "",
+    branchNamear: "",
     location: "",
     branchCode: "",
     branchAddress: "",
@@ -126,6 +127,7 @@ export default function AddBranch() {
 
       const payload = {
         branch_name: form.branchName.trim(),
+        branch_name_ar: form.branchNamear.trim(),
         branch_code: form.branchCode.trim(),
         branch_contact_number: composeE164(form.contactDial, form.contactNumber),
         branch_alternative_number: form.altNumber ? composeE164(form.altDial, form.altNumber) : null,
@@ -157,6 +159,7 @@ export default function AddBranch() {
       // Reset form (keep last selected dials)
       setForm((p) => ({
         branchName: "",
+        branchNamear: "",
         location: "",
         branchCode: "",
         branchAddress: "",
@@ -224,9 +227,10 @@ export default function AddBranch() {
             </div>
           ) : null}
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <form onSubmit={handleSubmit}>
             {/* Branch Name */}
-            <div>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+      <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Branch Name</label>
               <input
                 name="branchName"
@@ -237,9 +241,18 @@ export default function AddBranch() {
                 required
               />
             </div>
-
-            {/* Location */}
-            <div>
+             <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Branch Name In Arabic</label>
+              <input
+                name="branchNamear"
+                value={form.branchNamear}
+                onChange={handleChange}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none ring-emerald-500 focus:ring"
+                placeholder="e.g., شركة سواحل الخليج "
+                required
+              />
+            </div>
+             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Location</label>
               <input
                 name="location"
@@ -250,9 +263,11 @@ export default function AddBranch() {
                 required
               />
             </div>
+            </div>
 
-            {/* Branch Code */}
-            <div>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 my-4">
+ 
+              <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Branch Code</label>
               <input
                 name="branchCode"
@@ -263,9 +278,7 @@ export default function AddBranch() {
                 required
               />
             </div>
-
-            {/* Branch Email */}
-            <div>
+                 <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Branch Email</label>
               <input
                 type="email"
@@ -276,9 +289,10 @@ export default function AddBranch() {
                 placeholder="branch@company.com"
               />
             </div>
+            </div>
 
             {/* Address */}
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 my-4">
               <label className="mb-1 block text-sm font-medium text-slate-700">Address</label>
               <textarea
                 name="branchAddress"
@@ -303,7 +317,7 @@ export default function AddBranch() {
             </div>
 
             {/* Contact: Dial + Number */}
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 my-4">
               <label className="mb-1 block text-sm font-medium text-slate-700">Primary Contact</label>
               <div className="flex gap-2">
                 <select
@@ -366,7 +380,7 @@ export default function AddBranch() {
             </div>
 
             {/* Status */}
-            <div>
+            <div className="my-4">
               <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
               <select
                 name="status"
@@ -386,6 +400,7 @@ export default function AddBranch() {
                 onClick={() =>
                   setForm((p) => ({
                     branchName: "",
+                    branchNamear: "",
                     location: "",
                     branchCode: "",
                     branchAddress: "",

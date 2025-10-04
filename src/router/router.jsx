@@ -127,6 +127,7 @@ const LoadingList = lazy(() => import("../pages/All Excels/LoadingList"));
 const PackingList = lazy(() => import("../pages/All Excels/PackingList"));
 const ListInvoicePrefix = lazy(() => import("../pages/Invoice Number/ListInvoicePrefix"));
 const ListDeliveryType = lazy(() => import("../pages/Delivery Type/ListDeliveryType"));
+const InvoiceOnly = lazy(() => import("../components/InvoiceOnly"));
 
 /* ---------------- helpers ---------------- */
 const AuthRedirect = () => {
@@ -230,7 +231,8 @@ const router = createBrowserRouter([
       { path: "shipments/:id/deliverylist", element: <DeliveryList /> },
       { path: "invoiceprevix/list", element: <ListInvoicePrefix /> },
       { path: "deliverytype/list", element: <ListDeliveryType /> },
-
+      { path: "invoice/:id", element: <InvoiceOnly /> },
+      
       {
         path: "roles/allroles",
         element: (

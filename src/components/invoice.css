@@ -187,3 +187,32 @@
   font-family: "Inter";
   font-weight: 600;
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #invoice-sheet, #invoice-sheet * {
+    visibility: visible;
+  }
+
+  #invoice-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Optional: Remove background or other app UI */
+  header, nav, footer, .sidebar {
+    display: none !important;
+  }
+}

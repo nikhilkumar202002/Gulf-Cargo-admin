@@ -227,13 +227,10 @@ export default function AllCargoList() {
   };
 
   // NOTE: assumes you have a handler; keep as-is if defined elsewhere
-  const handleInvoice = (id) => {
-    // implement/integrate your invoice flow here
-    alert(`Invoice for cargo #${id}`);
-  };
+  const handleInvoice = (cargo) => {
+    if (!cargo?.id) return;
 
-  const handleInvoiceDownload = (cargo) => {
-    window.open(`/invoice/${cargo.id}?download=1`, "_blank", "noopener");
+    navigate(`/invoice/${cargo.id}`, { state: { cargo } });
   };
 
   /* ---------------- UI ---------------- */
@@ -421,17 +418,6 @@ export default function AllCargoList() {
                             <LiaFileInvoiceDollarSolid className="h-3 w-3" />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleInvoiceDownload(c)}
-                            aria-label="Download invoice"
-                            title="Download invoice"
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-md
-             bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200
-             hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition">
-                            {/* any download icon you prefer; using same for demo */}
-                            <LiaFileInvoiceDollarSolid className="h-3 w-3" />
-                          </button>
                         </div>
                       </td>
 
