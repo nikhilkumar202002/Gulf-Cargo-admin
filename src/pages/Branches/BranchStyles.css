@@ -49,7 +49,7 @@
 .ipx-table-wrap{ width:100%; overflow:auto; }
 .ipx-table{ width:100%; border-collapse:separate; border-spacing:0; }
 .ipx-table-sticky thead th{ position:sticky; top:0; z-index:1; background:#f8fafc; border-bottom:1px solid #e2e8f0; }
-.ipx-table-compact thead th{ padding:12px 14px; font-size:12.5px; color:#475569; font-weight:700; }
+.ipx-table-compact thead th{ padding:12px 14px; font-size:12.5px; color:#475569; font-weight:700; text-align: left;}
 .ipx-table-compact tbody td{ padding:11px 14px; font-size:13.25px; color:#0f172a; border-bottom:1px solid #eef2f7; }
 .ipx-table-compact tfoot td{ padding:12px 14px; }
 .ipx-table-hover tbody tr{ transition:background .15s ease; }
@@ -191,3 +191,20 @@
   background:linear-gradient(90deg,rgba(229,231,235,0) 0%,rgba(255,255,255,.75) 50%,rgba(229,231,235,0) 100%);
   animation:skel-shimmer 1.2s infinite}
 @keyframes skel-shimmer{100%{transform:translateX(100%)}}
+
+.add-cargo-header{
+  padding-bottom: 20px;
+  margin-bottom: 30px;
+  border-bottom: 1px solid #c9c9c9;
+}
+.header-cargo-icon{
+  font-size: 30px;
+  font-weight: 600;
+  color: black;
+}
+.header-cargo-heading{
+  font-size: 25px;
+  font-weight: 600;
+  font-family: "Inter";
+  color: var(--secondary-color);
+}

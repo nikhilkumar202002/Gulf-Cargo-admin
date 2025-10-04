@@ -52,6 +52,8 @@ const flattenBoxesToItems = (boxes) => {
   for (const k of ordered) {
     const box = boxes[k];
     const list = Array.isArray(box?.items) ? box.items : [];
+    const inferredItemWeight = list?.length ? (list[0]?.weight ?? list[0]?.weight_kg ?? "") : "";
+    const boxWeight = box?.weight ?? box?.box_weight ?? box?.weight_kg ?? inferredItemWeight;
     for (const it of list) {
       const rawBox = it?.box_number ?? it?.box_no ?? k; // fallback to key if item doesn’t have it
       const qty = it?.piece_no ?? it?.qty ?? it?.quantity ?? it?.pieces ?? "";
@@ -61,6 +63,7 @@ const flattenBoxesToItems = (boxes) => {
         name: it?.name ?? it?.description ?? "Item",
         qty,
         weight: it?.weight ?? it?.weight_kg ?? "",
+        boxWeight,
         unitPrice: it?.unit_price ?? it?.price ?? it?.rate ?? "",
         amount:
           it?.total_price ??
@@ -312,27 +315,28 @@ const items = useMemo(() => {
 
   // Fallback: legacy flat items shape
   const raw = Array.isArray(shipment?.items) ? shipment.items : [];
-  return raw.map((it, i) => {
-    const qty =
-      it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces ?? it?.count ?? it?.piece_no ?? "";
 
-    const rawBox = it?.box_number ?? it?.box_no ?? it?.box ?? it?.package_no ?? "";
-    const boxLabel = rawBox ? `B${Number(rawBox) || String(rawBox)}` : "";
+return raw.map((it, i) => {
+  const qty =
+    it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces ?? it?.count ?? it?.piece_no ?? "";
+  const rawBox = it?.box_number ?? it?.box_no ?? it?.box ?? it?.package_no ?? "";
+  const boxLabel = rawBox ? `B${Number(rawBox) || String(rawBox)}` : "";
 
-    return {
-      idx: i + 1,
-      name: pick(it, ["description", "name", "item_name", "cargo_name", "title", "item"], "Item"),
-      qty,
-      weight: pick(it, ["weight", "weight_kg", "kg"], ""),
-      unitPrice: pick(it, ["unit_price", "price", "rate"], ""),
-      amount:
-        it?.total_price ??
-        it?.amount ??
-        it?.line_total ??
-        (Number(it?.unit_price ?? it?.price ?? it?.rate ?? 0) * Number(qty || 0)),
-      boxLabel,
-    };
-  });
+  return {
+    idx: i + 1,
+    name: pick(it, ["description", "name", "item_name", "cargo_name", "title", "item"], "Item"),
+    qty,
+    weight: pick(it, ["weight", "weight_kg", "kg"], ""),
+    boxWeight: "",              // <— add this line
+    unitPrice: pick(it, ["unit_price", "price", "rate"], ""),
+    amount:
+      it?.total_price ??
+      it?.amount ??
+      it?.line_total ??
+      (Number(it?.unit_price ?? it?.price ?? it?.rate ?? 0) * Number(qty || 0)),
+    boxLabel,
+  };
+});
 }, [shipment]);
 
   const getName = (p, side, shipment) =>
@@ -650,52 +654,32 @@ const items = useMemo(() => {
               {/* Column A */}
               <div className="lg:col-span-1">
                 <table className="min-w-full border-separate border-spacing-0 avoid-break">
-                  <thead className="invoice-table-header">
-                    <tr>
-                      <th className="w-12 border border-slate-200 px-1 py-1 text-left uppercase tracking-wider">
-                        Sl.No
-                      </th>
-                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left uppercase tracking-wider">
-                        Items
-                      </th>
-                       <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">
-                        Box No.
-                      </th>
-                      <th className=" border border-slate-200 px-1 py-1 text-right uppercase tracking-wider">
-                        Qty
-                      </th>
-                    </tr>
-                  </thead>
+                 <thead className="invoice-table-header">
+  <tr>
+    <th className="w-12 border border-slate-200 px-1 py-1 text-left uppercase tracking-wider">Sl.No</th>
+    <th className="border-t border-b border-slate-200 px-1 py-1 text-left uppercase tracking-wider">Items</th>
+    <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider">Box No.</th>
+    <th className="border border-slate-200 px-1 py-1 text-right uppercase tracking-wider">Qty</th>
+    {/* NEW */}
+    <th className="border border-slate-200 px-1 py-1 text-right uppercase tracking-wider">Weight (kg)</th>
+  </tr>
+</thead>
+
                   <tbody className="invoice-table-content">
-                    {colA.map((it, idx) => (
-                      <tr key={`A-${idx}`} className="align-top">
-                        <td className="border-x border-b border-slate-200 px-1 py-1">
-                          {it ? it.idx : ""}
-                        </td>
-                        <td className="border-b border-slate-200 px-1 py-1 ">
-                          {it ? (
-                            <>
-                              {it.name || "—"}
-                              {/* Weight chip (row-level highlight) */}
-                              {/* {it.weight ? (
-                                <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 px-1.5 py-1.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">
-                                  {it.weight} kg
-                                </span>
-                              ) : null} */}
-                            </>
-                          ) : (
-                            <span className="opacity-0">pad</span>
-                          )}
-                        </td>
-                          <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
-                              {it ? (it.boxLabel || "—") : ""}
-                            </td>
-                        <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
-                          {it ? it.qty || "—" : ""}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
+  {colA.map((it, idx) => (
+    <tr key={`A-${idx}`} className="align-top">
+      <td className="border-x border-b border-slate-200 px-1 py-1">{it ? it.idx : ""}</td>
+      <td className="border-b border-slate-200 px-1 py-1 ">{it ? (it.name || "—") : <span className="opacity-0">pad</span>}</td>
+      <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">{it ? (it.boxLabel || "—") : ""}</td>
+      <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">{it ? it.qty || "—" : ""}</td>
+      {/* NEW */}
+      <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
+        {it ? (it.boxWeight || it.weight || "—") : ""}
+      </td>
+    </tr>
+  ))}
+</tbody>
+
                 </table>
               </div>
 
@@ -703,51 +687,31 @@ const items = useMemo(() => {
               <div className="lg:col-span-1">
                 <table className="min-w-full border-separate border-spacing-0">
                   <thead className="invoice-table-header">
-                    <tr>
-                      <th className="w-12 border px-1 py-1 text-left uppercase tracking-wider ">
-                        S.No
-                      </th>
-                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider ">
-                        Items
-                      </th>
-                      <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">
-                        Box No.
-                      </th>
-                        <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">
-                        Qty
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="invoice-table-content">
-                    {colB.map((it, idx) => (
-                      <tr key={`B-${idx}`} className="align-top">
-                        <td className="border-x border-b border-slate-200 px-1 py-1">
-                          {it ? it.idx : ""}
-                        </td>
-                        <td className="border-b border-slate-200 ppx-1 py-1">
-                          {it ? (
-                            <>
-                              {it.name || "—"}
-                              {it.weight ? (
-                                <span className="ml-2 inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">
-                                  {it.weight} kg
-                                </span>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className="opacity-0">pad</span>
-                          )}
-                        </td>
-                        <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right">
-                          {it ? (it.boxLabel || "—") : ""}
-                        </td>
-                        
-                        <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right ">
-                          {it ? it.qty || "—" : ""}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
+  <tr>
+    <th className="w-12 border px-1 py-1 text-left uppercase tracking-wider ">S.No</th>
+    <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider ">Items</th>
+    <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">Box No.</th>
+    <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">Qty</th>
+    {/* NEW */}
+    <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider ">Weight (kg)</th>
+  </tr>
+</thead>
+
+               <tbody className="invoice-table-content">
+  {colB.map((it, idx) => (
+    <tr key={`B-${idx}`} className="align-top">
+      <td className="border-x border-b border-slate-200 px-1 py-1">{it ? it.idx : ""}</td>
+      <td className="border-b border-slate-200 ppx-1 py-1">{it ? (it.name || "—") : <span className="opacity-0">pad</span>}</td>
+      <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right">{it ? (it.boxLabel || "—") : ""}</td>
+      <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right ">{it ? it.qty || "—" : ""}</td>
+      {/* NEW */}
+      <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right ">
+        {it ? (it.boxWeight || it.weight || "—") : ""}
+      </td>
+    </tr>
+  ))}
+</tbody>
+
                 </table>
 
                 {overflowCount > 0 && (

@@ -130,7 +130,7 @@ const AllBranches = () => {
   return (
     <>
       {/* HEADER */}
-      <div className="ipx-head ipx-head-bar">
+      <div className="ipx-head ipx-head-bar max-w-6xl mx-auto">
         <div className="ipx-brand">
           <h2 className="ipx-title">Branch List</h2>
           <p className="ipx-sub">Manage branches, contacts and status.</p>
@@ -188,7 +188,7 @@ const AllBranches = () => {
       </div>
 
       {/* CARD */}
-      <div className="ipx-card p-0" aria-busy={loading}>
+      <div className="ipx-card p-0 max-w-6xl mx-auto" aria-busy={loading}>
         {/* Error banner */}
         {error && (
           <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">

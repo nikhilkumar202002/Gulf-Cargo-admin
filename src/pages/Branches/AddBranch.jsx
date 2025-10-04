@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { storeBranch } from "../../api/branchApi";
 import { getPhoneCodes } from "../../api/phoneCodeApi";
 import { Link } from "react-router-dom";
-
 import { IoGitBranch } from "react-icons/io5";
+import BranchModal from "./components/BranchModal";
+import { Toaster, toast } from "react-hot-toast";
+import "./BranchStyles.css";
 
 // --- small helpers ---
 const onlyDigits = (s = "") => (s || "").replace(/\D+/g, "");
@@ -35,6 +37,9 @@ export default function AddBranch() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalData, setModalData] = useState(null);
+
   // form state (trimmed to what your backend actually uses)
   const [form, setForm] = useState({
     branchName: "",
@@ -63,7 +68,6 @@ export default function AddBranch() {
       try {
         const token = localStorage.getItem("token");
         const list = await getPhoneCodes({}, token);
-        // Normalize each item to {label, dial}
         const norm = (list || [])
           .map((it) => {
             const dial =
@@ -72,39 +76,25 @@ export default function AddBranch() {
             return dial ? { label: `${name ? `${name} ` : ""}(${dial})`, dial } : null;
           })
           .filter(Boolean)
-          // unique by dial, keep first label
-          .reduce((acc, cur) => {
-            if (!acc.find((x) => x.dial === cur.dial)) acc.push(cur);
-            return acc;
-          }, [])
-          // sort by country name (falls back to dial)
+          .reduce((acc, cur) => { if (!acc.find((x) => x.dial === cur.dial)) acc.push(cur); return acc; }, [])
           .sort((a, b) => a.label.localeCompare(b.label));
         setCodes(norm);
-      } catch (e) {
-        
-        setCodes([{ label: "India (+91)", dial: "+91" }]); // graceful fallback
+      } catch {
+        setCodes([{ label: "India (+91)", dial: "+91" }]);
       }
     })();
   }, []);
 
   const update = (patch) => setForm((p) => ({ ...p, ...patch }));
 
-  // auto-sniff code if user types +<code> at the start of the input
   const onNumberInput = (fieldDial, fieldNum) => (e) => {
     const raw = e.target.value;
-    // If they paste/typed with +<code>..., detect and set the dial
     const found = sniffDialFromTyped(raw, dialSet);
     if (found) {
-      // strip the dial from the beginning when we set the number
       const stripped = raw.replace(new RegExp(`^\\${found}`), "");
-      // keep only digits in number part
-      update({
-        [fieldDial]: found,
-        [fieldNum]: onlyDigits(stripped),
-      });
+      update({ [fieldDial]: found, [fieldNum]: onlyDigits(stripped) });
       return;
     }
-    // Otherwise just keep digits in the number field
     update({ [fieldNum]: onlyDigits(raw) });
   };
 
@@ -134,16 +124,11 @@ export default function AddBranch() {
         return;
       }
 
-      // build e164 numbers
-      const contact = composeE164(form.contactDial, form.contactNumber);
-      const alt = form.altNumber ? composeE164(form.altDial, form.altNumber) : "";
-
-      // backend keys (snake_case) — keeping your existing payload names
       const payload = {
         branch_name: form.branchName.trim(),
         branch_code: form.branchCode.trim(),
-        branch_contact_number: contact,
-        branch_alternative_number: alt || null,
+        branch_contact_number: composeE164(form.contactDial, form.contactNumber),
+        branch_alternative_number: form.altNumber ? composeE164(form.altDial, form.altNumber) : null,
         branch_email: form.branchEmail.trim() || null,
         branch_address: form.branchAddress.trim(),
         branch_location: form.location.trim(),
@@ -151,15 +136,26 @@ export default function AddBranch() {
         status: Number(form.status) || 0,
       };
 
-      // minimal client-side validation
       if (!payload.branch_name) throw new Error("Branch name is required.");
       if (!payload.branch_code) throw new Error("Branch code is required.");
-      if (!onlyDigits(form.contactNumber)) throw new Error("Enter a valid contact number.");
+      if (!form.contactNumber) throw new Error("Enter a valid contact number.");
 
-      await storeBranch(payload);
+      // Call API
+      const created = await storeBranch(payload);
 
-      setMessage("✅ Branch created successfully!");
-      setForm({
+      // Prefer API-returned record; fallback to payload
+      const record =
+        created?.data ||
+        created?.branch ||
+        created ||
+        payload;
+
+      toast.success("Branch created successfully");
+      setModalData(record);
+      setModalOpen(true);
+
+      // Reset form (keep last selected dials)
+      setForm((p) => ({
         branchName: "",
         location: "",
         branchCode: "",
@@ -167,17 +163,16 @@ export default function AddBranch() {
         branchEmail: "",
         website: "",
         status: 1,
-        contactDial: form.contactDial, // keep last used dial for convenience
+        contactDial: p.contactDial,
         contactNumber: "",
-        altDial: form.altDial,
+        altDial: p.altDial,
         altNumber: "",
-      });
+      }));
     } catch (error) {
       const msg =
         error?.response?.data?.message ||
         error?.message ||
         "Failed to create branch.";
-    
       setMessage("❌ " + msg);
     } finally {
       setLoading(false);
@@ -421,6 +416,14 @@ export default function AddBranch() {
           </form>
         </div>
       </div>
+
+<Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+
+       <BranchModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        data={modalData}
+      />
     </section>
   );
 }

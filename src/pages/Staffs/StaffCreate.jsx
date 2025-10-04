@@ -1,9 +1,8 @@
 // src/pages/Staffs/StaffCreate.jsx
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { IoEye, IoEyeOff } from "react-icons/io5";
 import { useSelector } from "react-redux";
 import "../Styles.css";
-
 import { getPhoneCodes } from "../../api/phoneCodeApi";
 import { getActiveBranches } from "../../api/branchApi";
 import { getActiveVisaTypes } from "../../api/visaType";
@@ -11,9 +10,9 @@ import { getAllRoles } from "../../api/rolesApi";
 import { getActiveDocumentTypes } from "../../api/documentTypeApi";
 import { staffRegister } from "../../api/accountApi";
 import { FaUserCheck } from "react-icons/fa";
-
+import { Toaster, toast } from "react-hot-toast";
+import StaffModal from "./components/StaffModal";
 import { Link } from "react-router-dom";
-
 import "./StaffStyles.css";
 
 /* ---------- helpers ---------- */
@@ -32,7 +31,12 @@ const getDocTypeLabel = (d) =>
   d?.name ?? d?.document_name ?? d?.document_type ?? d?.type_name ?? d?.title ?? `Doc #${d?.id ?? d?._id}`;
 const getVisaTypeLabel = (v) => v?.type_name ?? v?.name ?? v?.title ?? `Visa #${v?.id ?? v?._id}`;
 const extractDial = (c) => {
-  const raw = c?.code ?? c?.dial_code ?? c?.phone_code ?? c?.prefix ?? (c?.calling_code ? `+${c.calling_code}` : "");
+  const raw =
+    c?.code ??
+    c?.dial_code ??
+    c?.phone_code ??
+    c?.prefix ??
+    (c?.calling_code ? `+${c.calling_code}` : "");
   if (!raw) return "";
   const s = String(raw).trim();
   return s.startsWith("+") ? s : `+${s}`;
@@ -42,8 +46,33 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const tooBig = (f) => f && f.size > MAX_FILE_BYTES;
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRe = /^[0-9]{6,15}$/;
+// Allow 6–15 digits (E.164 max 15). If you want 10–15, change {6,15} to {10,15}.
+const phoneRe = /^[0-9]{9,15}$/;
 const passwordRe = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/; // >=6 chars, at least 1 letter & 1 digit
+
+// --- phone helpers (same approach as AddBranch) ---
+const onlyDigits = (s = "") => (s || "").replace(/\D+/g, "");
+
+const normalizeCode = (code) => {
+  if (!code) return "";
+  const c = String(code).trim();
+  if (!c) return "";
+  if (c.startsWith("+")) return c;
+  if (c.startsWith("00")) return `+${c.slice(2)}`;
+  return `+${c}`;
+};
+
+// find the longest matching dial code at the start of a typed string
+const sniffDialFromTyped = (val, dialSet) => {
+  if (!val?.startsWith("+")) return null;
+  const m = val.match(/^\+(\d{1,5})/);
+  if (!m) return null;
+  for (let len = m[1].length; len >= 1; len--) {
+    const tryCode = `+${m[1].slice(0, len)}`;
+    if (dialSet.has(tryCode)) return tryCode;
+  }
+  return null;
+};
 
 /* ---------- component ---------- */
 const StaffCreate = () => {
@@ -90,9 +119,32 @@ const StaffCreate = () => {
   const [phoneCode, setPhoneCode] = useState("+91");
   const [phoneCodeId, setPhoneCodeId] = useState("");
 
+  // Build dial sets/maps from API list
+  const dialSet = useMemo(() => {
+    const s = new Set();
+    (phoneCodes || []).forEach((c) => {
+      const dial = normalizeCode(c?.dial_code || c?.dialCode || c?.code || c?.prefix || c?.phone_code);
+      if (dial) s.add(dial);
+    });
+    return s;
+  }, [phoneCodes]);
+
+  const dialToId = useMemo(() => {
+    const m = new Map();
+    (phoneCodes || []).forEach((c) => {
+      const dial = normalizeCode(c?.dial_code || c?.dialCode || c?.code || c?.prefix || c?.phone_code);
+      const id = getId(c);
+      if (dial && id && !m.has(dial)) m.set(dial, String(id));
+    });
+    return m;
+  }, [phoneCodes]);
+
   // validation state
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalData, setModalData] = useState(null);
 
   // file refs
   const photoRef = useRef(null);
@@ -165,8 +217,10 @@ const StaffCreate = () => {
     if (!selectedDocType) next.selectedDocType = "Select a document type.";
     if (!documentNumber.trim()) next.documentNumber = "Enter document number.";
     if (!phoneCodeId) next.phoneCodeId = "Select a country code.";
-    if (contactNumber && !phoneRe.test(contactNumber)) {
-      next.contactNumber = "Digits only (6–15).";
+
+    // Phone validation (digits only, 6–15)
+    if (!phoneRe.test(contactNumber)) {
+       next.contactNumber = "Enter 9–15 digits.";
     }
 
     const photo = photoRef.current?.files?.[0];
@@ -196,24 +250,19 @@ const StaffCreate = () => {
 
   const scrollToFirstError = (obj) => {
     const order = [
-      "name","email","password",
-      "selectedRole","selectedBranch",
-      "appointmentDate","visaExpiryDate",
-      "selectedVisaType","visaStatus",
-      "selectedDocType","documentNumber",
-      "phoneCodeId","contactNumber",
-      "profile_pic","documents"
+      "name", "email", "password",
+      "selectedRole", "selectedBranch",
+      "appointmentDate", "visaExpiryDate",
+      "selectedVisaType", "visaStatus",
+      "selectedDocType", "documentNumber",
+      "phoneCodeId", "contactNumber",
+      "profile_pic", "documents"
     ];
     const firstKey = order.find((k) => obj[k]);
     if (!firstKey) return;
     const el = document.querySelector(`[data-field="${firstKey}"]`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   };
-
-  // const requiredOk = () => {
-  //   const { next } = validateAll();
-  //   return !hasErrors(next);
-  // };
 
   const resetFields = () => {
     setName("");
@@ -234,113 +283,115 @@ const StaffCreate = () => {
     setFormKey((k) => k + 1); // resets file inputs
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setSubmitMsg({ text: "", variant: "" });
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitMsg({ text: "", variant: "" });
 
-  const { next, photo, docFiles } = validateAll();
-  setErrors(next);
-  if (hasErrors(next)) {
-    setTouched((t) => {
-      const all = { ...t };
-      Object.keys(next).forEach((k) => (all[k] = true));
-      return all;
-    });
-    scrollToFirstError(next);
-    setSubmitMsg({ text: "Please fix the highlighted fields.", variant: "error" });
-    return;
-  }
+    const { next, photo, docFiles } = validateAll();
+    setErrors(next);
+    if (hasErrors(next)) {
+      setTouched((t) => {
+        const all = { ...t };
+        Object.keys(next).forEach((k) => (all[k] = true));
+        return all;
+      });
+      scrollToFirstError(next);
+      setSubmitMsg({ text: "Please fix the highlighted fields.", variant: "error" });
+      return;
+    }
 
-  // Resolve role name from the roles array
-  const roleObj = roles.find((r) => String(getId(r)) === String(selectedRole));
-  const roleName = (roleObj?.role_name ?? roleObj?.name ?? roleObj?.title ?? "").trim() || "Staff";
+    // Resolve role display name for backend if needed
+    const roleObj = roles.find((r) => String(getId(r)) === String(selectedRole));
+    const roleName = (roleObj?.role_name ?? roleObj?.name ?? roleObj?.title ?? "").trim() || "Staff";
 
-  // Build FormData
-  const formData = new FormData();
-  formData.append("name", name.trim());
-  formData.append("email", email.trim());
-  formData.append("password", password);
-  formData.append("role", roleName);  // Now roleName is defined
-  formData.append("role_id", String(selectedRole));
-  formData.append("phone_code_id", String(phoneCodeId));  // Phone code ID is included
-  formData.append("contact_number", contactNumber || "");  // Phone number is included
-  formData.append("branch_id", String(selectedBranch));
-  formData.append("status", status === "" ? "1" : String(status));
-  formData.append("appointment_date", appointmentDate);
-  formData.append("visa_expiry_date", visaExpiryDate);
-  formData.append("visa_type_id", String(selectedVisaType));
-  formData.append("visa_status", visaStatus === "" ? "1" : String(visaStatus));
+    // Build FormData
+    const formData = new FormData();
+    formData.append("name", name.trim());
+    formData.append("email", email.trim());
+    formData.append("password", password);
+    formData.append("role", roleName);
+    formData.append("role_id", String(selectedRole));
 
-  // document meta
-  formData.append("document_type_id", String(selectedDocType));
-  formData.append("document_id", String(selectedDocType));
-  formData.append("document_number", documentNumber.trim());
+    // ☑ PHONE CODE FIX — send both selected code id and the code itself
+    formData.append("phone_code_id", String(phoneCodeId));
+    formData.append("phone_code", phoneCode);
+    formData.append("contact_number", contactNumber); // national digits only (code is separate)
 
-  if (photo) {
-    formData.append("profile_pic", photo, photo.name);
-  }
-  docFiles.forEach((f) => formData.append("documents[]", f, f.name));
+    formData.append("branch_id", String(selectedBranch));
+    formData.append("status", status === "" ? "1" : String(status));
+    formData.append("appointment_date", appointmentDate);
+    formData.append("visa_expiry_date", visaExpiryDate);
+    formData.append("visa_type_id", String(selectedVisaType));
+    formData.append("visa_status", visaStatus === "" ? "1" : String(visaStatus));
 
-  // Submit
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
+    // document meta
+    formData.append("document_type_id", String(selectedDocType));
+    formData.append("document_id", String(selectedDocType));
+    formData.append("document_number", documentNumber.trim());
 
-  try {
-    setSubmitting(true);
-    const res = await staffRegister(formData, token, { signal: controller.signal });
-    setSubmitMsg({ text: res?.message || "User registered successfully.", variant: "success" });
-    resetFields();
-  } catch (err) {
-    const apiErrors = err?.response?.data?.errors || err?.data?.errors || {};
-    const flat = Object.entries(apiErrors).map(([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`);
-    setSubmitMsg({
-      text: [err?.response?.data?.message || err?.message || "Registration failed.", ...flat].join(" "),
-      variant: "error",
-    });
+    
+    if (photo) formData.append("profile_pic", photo, photo.name);
+    docFiles.forEach((f) => formData.append("documents[]", f, f.name));
 
-  } finally {
-    clearTimeout(timeoutId);
-    setSubmitting(false);
-  }
-};
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
+    try {
+      setSubmitting(true);
+      const res = await staffRegister(formData, token, { signal: controller.signal });
+      const user = res?.user;
+      if (!user) throw new Error("Unexpected response from server.");
 
+      toast.success(res?.message || "Staff registered successfully");
+      setModalData(user);
+      setModalOpen(true);
+      setSubmitMsg({ text: res?.message || "User registered successfully.", variant: "success" });
+      resetFields();
+    } catch (err) {
+      const apiErrors = err?.response?.data?.errors || err?.data?.errors || {};
+      const flat = Object.entries(apiErrors).map(([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`);
+      setSubmitMsg({
+        text: [err?.response?.data?.message || err?.message || "Registration failed.", ...flat].join(" "),
+        variant: "error",
+      });
+      toast.error(err?.response?.data?.message || err?.message || "Registration failed.");
+    } finally {
+      clearTimeout(timeoutId);
+      setSubmitting(false);
+    }
+  };
 
   // helper ui bits
   const err = (k) => touched[k] && errors[k];
   const inputClass = (k) =>
     `mt-1 w-full rounded-lg border px-3 py-2 shadow-sm focus:ring ${
-      err(k) ? "border-red-500 focus:border-red-500 focus:ring-red-200" : "border-gray-300 focus:border-indigo-500 focus:ring-indigo-200"
+      err(k)
+        ? "border-red-500 focus:border-red-500 focus:ring-red-200"
+        : "border-gray-300 focus:border-indigo-500 focus:ring-indigo-200"
     }`;
 
   return (
     <div className="flex justify-center items-center w-full">
       <div className="w-full max-w-4xl bg-white rounded-2xl p-8">
-          <div className="add-cargo-header flex justify-between items-center">
-            <h2 className="header-cargo-heading flex items-center gap-2">
-              <span className="header-cargo-icon"><FaUserCheck /></span>
-                Staff Registration
-            </h2>
-            <nav aria-label="Breadcrumb" className="">
-              <ol className="flex items-center gap-2 text-sm">
-                <li>
-                  <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">
-                    Home
-                  </Link>
-                </li>
-                <li className="text-gray-400">/</li>
-                <li>
-                  <Link to="/hr&staff/allstaffs" className="text-gray-500 hover:text-gray-700 hover:underline">
-                    Staffs
-                  </Link>
-                </li>
-                <li className="text-gray-400">/</li>
-                <li aria-current="page" className="text-gray-800 font-medium">
-                  Add Staff
-                </li>
-              </ol>
-            </nav>
-          </div>
+        <div className="add-cargo-header flex justify-between items-center">
+          <h2 className="header-cargo-heading flex items-center gap-2">
+            <span className="header-cargo-icon"><FaUserCheck /></span>
+            Staff Registration
+          </h2>
+          <nav aria-label="Breadcrumb" className="">
+            <ol className="flex items-center gap-2 text-sm">
+              <li>
+                <Link to="/dashboard" className="text-gray-500 hover:text-gray-700 hover:underline">Home</Link>
+              </li>
+              <li className="text-gray-400">/</li>
+              <li>
+                <Link to="/hr&staff/allstaffs" className="text-gray-500 hover:text-gray-700 hover:underline">Staffs</Link>
+              </li>
+              <li className="text-gray-400">/</li>
+              <li aria-current="page" className="text-gray-800 font-medium">Add Staff</li>
+            </ol>
+          </nav>
+        </div>
 
         <form key={formKey} className="space-y-6" onSubmit={handleSubmit} noValidate>
           {/* Row 1 */}
@@ -437,14 +488,20 @@ const handleSubmit = async (e) => {
                       const id = e.target.value;
                       setPhoneCodeId(id);
                       const obj = phoneCodes.find((c) => String(getId(c)) === String(id));
-                      setPhoneCode(extractDial(obj) || "+");
+                      const dial =
+                        normalizeCode(
+                          obj?.dial_code || obj?.dialCode || obj?.code || obj?.prefix || obj?.phone_code
+                        ) || extractDial(obj) || "+";
+                      setPhoneCode(dial);
                     }}
                     onBlur={() => markTouched("phoneCodeId")}
                     aria-invalid={!!err("phoneCodeId")}
                     aria-describedby="phonecode-err"
                     required
                   >
-                    <option value="">{Array.isArray(phoneCodes) && phoneCodes.length ? "Select code" : "Loading codes…"}</option>
+                    <option value="">
+                      {Array.isArray(phoneCodes) && phoneCodes.length ? "Select code" : "Loading codes…"}
+                    </option>
                     {Array.isArray(phoneCodes) && phoneCodes.map((c, i) => {
                       const dial = extractDial(c);
                       const name = c?.name ?? c?.country ?? c?.country_name ?? c?.iso2 ?? "";
@@ -464,8 +521,37 @@ const handleSubmit = async (e) => {
                     placeholder="Phone number"
                     className={inputClass("contactNumber")}
                     value={contactNumber}
-                    onChange={(e) => setContactNumber(e.target.value)}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      let payload = raw;
+
+                      // auto-select & strip +<dial> if pasted/typed
+                      if (raw && raw[0] === "+") {
+                        try {
+                          const found = sniffDialFromTyped(raw, dialSet || new Set());
+                          if (found) {
+                            const id = dialToId.get(found);
+                            if (id) {
+                              setPhoneCodeId(id);
+                              setPhoneCode(found);
+                            }
+                            const escaped = found.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                            payload = raw.replace(new RegExp("^" + escaped), "");
+                          }
+                        } catch {
+                          payload = raw; // fail safe
+                        }
+                      }
+
+                      const digits = (payload || "").replace(/\D+/g, "");
+                      // hard cap at E.164 max 15 national digits (we validate 6–15 later)
+                      setContactNumber(digits.slice(0, 15));
+                    }}
                     onBlur={() => markTouched("contactNumber")}
+                    inputMode="numeric"
+                    pattern="\d*"
+                    minLength={9}
+                    maxLength={15}
                     aria-invalid={!!err("contactNumber")}
                     aria-describedby="phone-err"
                   />
@@ -607,9 +693,7 @@ const handleSubmit = async (e) => {
                 required
               >
                 <option value="">{loadingVisas ? "Loading visa types..." : "Select Visa Type"}</option>
-                {!loadingVisas && visas.length === 0 && (
-                  <option value="">No visa types available</option>
-                )}
+                {!loadingVisas && visas.length === 0 && <option value="">No visa types available</option>}
                 {!loadingVisas && visas.map((v) => (
                   <option key={getId(v)} value={String(getId(v))}>
                     {getVisaTypeLabel(v)}
@@ -696,16 +780,15 @@ const handleSubmit = async (e) => {
           </div>
 
           {submitMsg.text && (
-            <p
-              className={`mt-2 text-sm ${
-                submitMsg.variant === "success" ? "text-green-600" : "text-red-600"
-              }`}
-            >
+            <p className={`mt-2 text-sm ${submitMsg.variant === "success" ? "text-green-600" : "text-red-600"}`}>
               {submitMsg.text}
             </p>
           )}
         </form>
       </div>
+
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+      <StaffModal open={modalOpen} onClose={() => setModalOpen(false)} data={modalData} />
     </div>
   );
 };

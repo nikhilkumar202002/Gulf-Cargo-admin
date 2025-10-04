@@ -325,11 +325,11 @@ export default function CreateCargo() {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceShipment, setInvoiceShipment] = useState(null);
 
-  // Boxes: each has box_number (auto), box_weight (kg), and items[]
+  // Boxes: each has box_number (auto), weight (kg), and items[]
   const [boxes, setBoxes] = useState([
     {
       box_number: "1",
-      box_weight: 0,
+      weight: 0,
       items: [{ name: "", pieces: 1, unitPrice: 0 }],
     },
   ]);
@@ -369,7 +369,7 @@ export default function CreateCargo() {
   // total weight = sum of box weights (entered after packing)
   const totalWeight = useMemo(() => {
     let sum = 0;
-    for (const b of boxes) sum += Number(b.box_weight || 0);
+    for (const b of boxes) sum += Number(b.weight || 0);
     return Number(sum.toFixed(3));
   }, [boxes]);
 
@@ -529,7 +529,7 @@ export default function CreateCargo() {
       ...prev,
       {
         box_number: nextNo,
-        box_weight: 0, // entered after packing
+        weight: 0, // entered after packing
         items: [{ name: "", pieces: 1, unitPrice: 0 }],
       },
     ]);
@@ -548,7 +548,7 @@ export default function CreateCargo() {
       const b = next[boxIndex];
       if (!b) return prev;
       const n = Number.parseFloat(val || 0);
-      b.box_weight = Number.isNaN(n) ? 0 : Math.max(0, n);
+      b.weight = Number.isNaN(n) ? 0 : Math.max(0, n);
       return next;
     });
   }, []);
@@ -644,7 +644,7 @@ export default function CreateCargo() {
     }
 
     // require each box to have weight > 0
-    const anyZeroBox = boxes.some((b) => Number(b.box_weight || 0) <= 0);
+    const anyZeroBox = boxes.some((b) => Number(b.weight || 0) <= 0);
     if (anyZeroBox) {
       missing.push("Each box needs a weight > 0");
     }
@@ -659,7 +659,7 @@ export default function CreateCargo() {
     setBoxes([
       {
         box_number: "1",
-        box_weight: 0,
+        weight: 0,
         items: [{ name: "", pieces: 1, unitPrice: 0 }],
       },
     ]);
@@ -688,7 +688,7 @@ export default function CreateCargo() {
     const grouped = {};
     boxes.forEach((box, bIdx) => {
       const bn = String(box.box_number ?? bIdx + 1);
-      if (!grouped[bn]) grouped[bn] = { items: [], box_weight: Number(box.box_weight || 0).toFixed(3) };
+      if (!grouped[bn]) grouped[bn] = { items: [], weight: Number(box.weight || 0).toFixed(3) };
 
       (box.items || []).forEach((it) => {
         grouped[bn].items.push({
@@ -774,7 +774,7 @@ export default function CreateCargo() {
     setBoxes([
       {
         box_number: "1",
-        box_weight: 0,
+        weight: 0,
         items: [{ name: "", pieces: 1, unitPrice: 0 }],
       },
     ]);
@@ -1188,9 +1188,9 @@ export default function CreateCargo() {
                           <span className="text-slate-600">Box Weight (kg)</span>
                           <input
                             type="number" min="0" step="0.001" title="Enter after packing"
-                            className={`w-32 rounded-lg border px-2 py-1 text-right ${Number(box.box_weight || 0) <= 0 ? "border-rose-300" : "border-slate-300"
+                            className={`w-32 rounded-lg border px-2 py-1 text-right ${Number(box.weight || 0) <= 0 ? "border-rose-300" : "border-slate-300"
                               }`}
-                            value={box.box_weight}
+                            value={box.weight}
                             onChange={(e) => setBoxWeight(boxIndex, e.target.value)}
                             placeholder="0.000"
                           />
