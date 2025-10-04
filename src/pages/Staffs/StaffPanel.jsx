@@ -1,10 +1,15 @@
 // src/pages/StaffPanel.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { FaUsers } from "react-icons/fa6";
 import { useNavigate } from "react-router-dom";
 import { MdClose } from "react-icons/md";
 import "../Styles.css";
-import { listStaffs } from "../../api/accountApi";
+import { listStaffs,deleteStaff  } from "../../api/accountApi";
+import { Toaster, toast } from "react-hot-toast";
+import { FaEye } from "react-icons/fa";
+import { FaEdit } from "react-icons/fa";
+import { MdOutlineDeleteForever } from "react-icons/md";
+import "./StaffStyles.css";
 
 const PAGE_SIZE = 10;
 
@@ -28,27 +33,31 @@ const SkelBtn = ({ w = 120 }) => <Skel w={w} h={36} rounded={10} />;
 const SkelInput = () => <Skel w={224} h={40} rounded={10} />;
 const SkelPill = () => <Skel w={64} h={22} rounded={999} />;
 const SkelRow = ({ idx }) => (
-  <tr className={idx % 2 ? "bg-white" : ""}>
-    <td className="px-6 py-4"><Skel w={24} /></td>
-    <td className="px-6 py-4">
+  <tr className={idx % 2 ? "bg-white" : "bg-gray-50/30"}>
+    <td className="px-5 py-3"><Skel w={24} /></td>
+    <td className="px-5 py-3">
       <div className="space-y-2">
         <Skel w="60%" h={16} />
         <Skel w="40%" h={12} />
       </div>
     </td>
-    <td className="px-6 py-4"><Skel w="40%" h={14} /></td>
-    <td className="px-6 py-4"><SkelPill /></td>
+    <td className="px-5 py-3"><Skel w="40%" h={14} /></td>
+    <td className="px-5 py-3"><SkelPill /></td>
   </tr>
 );
 
 const StaffPanel = () => {
   const [filter, setFilter] = useState({ name: "", email: "", status: "" });
+  const [filterInput, setFilterInput] = useState({ name: "", email: "", status: "" });
   const [staff, setStaff] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState("");
   const [dropdownId, setDropdownId] = useState(null);
   const [page, setPage] = useState(1);
+  const [serverMeta, setServerMeta] = useState(null);
   const navigate = useNavigate();
+  const [deletingId, setDeletingId] = useState(null);
 
   // map any backend shape to UI-safe fields
   const mapStaff = (s, idx) => {
@@ -65,22 +74,46 @@ const StaffPanel = () => {
     };
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError("");
-      try {
-        const raw = await listStaffs();
-        const normalized = (Array.isArray(raw) ? raw : []).map(mapStaff);
-        setStaff(normalized);
-      } catch (e) {
-        setError(e?.message || "Failed to load staff.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
+  const fetchData = useCallback(async (pageNum, f) => {
+    if (!serverMeta) setIsLoading(true);
+   else setIsFetching(true);
+    setError("");
+    try {
+      const statusFlag =
+      f?.status ? (f.status === "Active" ? 1 : 0) : undefined;
+      const params = {
+        page: pageNum,
+        
+        ...(f?.name ? { name: f.name } : {}),
+        ...(f?.email ? { email: f.email } : {}),
+              ...(statusFlag !== undefined ? { status: statusFlag, is_active: statusFlag } : {}),
+       // optional: some backends support a generic q
+     ...(f?.name && f?.email ? { q: `${f.name} ${f.email}` } : {}),
+        
+      };
+      const { items, meta } = await listStaffs(params);
+      const normalized = (Array.isArray(items) ? items : []).map(mapStaff);
+      setStaff(normalized);
+      setServerMeta(meta || null);
+    } catch (e) {
+      setError(e?.message || "Failed to load staff.");
+    } finally {
+      setIsLoading(false);
+      setIsFetching(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData(page, filter);
+  }, [page, filter, fetchData]);
+
+   useEffect(() => {
+   const t = setTimeout(() => {
+     setPage(1);           // reset on new applied filters
+     setFilter(filterInput);
+   }, 400);
+   return () => clearTimeout(t);
+ }, [filterInput]);
 
   // Close dropdown on outside click & ESC
   useEffect(() => {
@@ -109,15 +142,12 @@ const StaffPanel = () => {
     });
   }, [staff, filter]);
 
-  // Reset to page 1 when filters change
-  useEffect(() => setPage(1), [filter]);
-
-  const total = filteredStaff.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageSafe = Math.min(Math.max(1, page), totalPages);
-  const startIdx = (pageSafe - 1) * PAGE_SIZE;
-  const endIdx = Math.min(total, startIdx + PAGE_SIZE);
-  const pageRows = filteredStaff.slice(startIdx, endIdx);
+  const pageSafe = serverMeta?.current_page || page || 1;
+  const totalPages = serverMeta?.last_page || 1;
+  const perPage = serverMeta?.per_page || PAGE_SIZE;
+  const total = serverMeta?.total ?? staff.length; // fallback if meta missing
+  const startIdx = total ? (pageSafe - 1) * perPage : 0;
+  const pageRows = filteredStaff; // server already sent just this page
 
   const goFirst = () => setPage(1);
   const goPrev = () => setPage((p) => Math.max(1, p - 1));
@@ -135,17 +165,52 @@ const StaffPanel = () => {
     return out;
   }, [pageSafe, totalPages]);
 
-  const handleClear = () => setFilter({ name: "", email: "", status: "" });
+   const handleClear = () => {
+   setFilterInput({ name: "", email: "", status: "" });
+   setFilter({ name: "", email: "", status: "" });
+   setPage(1);
+ }
+
+const handleDelete = async (id) => {
+  if (!id) return;
+  if (!window.confirm("Delete this staff member? This cannot be undone.")) return;
+
+  setDeletingId(id);
+  try {
+    const p = deleteStaff(id);
+
+    await toast.promise(p, {
+      loading: "Deleting user…",
+      success: "User deleted successfully.",
+      error: (err) => err?.message || "Failed to delete user.",
+    });
+
+    setStaff((prev) => prev.filter((s) => s.id !== id));
+    setServerMeta((m) => (m ? { ...m, total: Math.max(0, (m.total || 1) - 1) } : m));
+  } catch (e) {
+    // toast already showed server message via error: callback
+  } finally {
+    setDeletingId(null);
+  }
+};
+
+
 
   return (
     <div className="p-6" aria-busy={isLoading}>
+      <Toaster position="top-right" toastOptions={{ duration: 2500 }} />
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <h2 className="staff-panel-heading flex items-center gap-3">
-          <span className="staff-panel-heading-icon">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-inset ring-blue-100">
             <FaUsers />
           </span>
-          {isLoading ? <Skel w={180} h={24} /> : "All Staff Members"}
+          {isLoading ? <Skel w={200} h={24} /> : "All Staff Members"}
+          {!isLoading && typeof total === "number" && (
+            <span className="ml-2 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+              {total} total
+            </span>
+          )}
         </h2>
         {isLoading ? (
           <SkelBtn w={150} />
@@ -160,46 +225,46 @@ const StaffPanel = () => {
       </div>
 
       {/* Filters */}
-      <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg bg-white p-4">
+      <div className="mb-5 rounded-xl border border-gray-200 bg-white/80 p-4 shadow-sm backdrop-blur">
         {isLoading ? (
-          <>
+          <div className="flex flex-wrap items-center gap-4">
             <SkelInput />
             <SkelInput />
             <Skel w={176} h={40} rounded={10} />
             <SkelBtn w={100} />
-          </>
+          </div>
         ) : (
-          <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto_auto]">
             <input
               type="text"
-              placeholder="Filter by Name"
-              value={filter.name}
-              onChange={(e) => setFilter((p) => ({ ...p, name: e.target.value }))}
-              className="w-56 rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-400"
+              placeholder="Search by name"
+              value={filterInput.name}
+              onChange={(e) => setFilterInput((p) => ({ ...p, name: e.target.value }))}
+              className="h-10 rounded-lg border border-gray-300 px-3 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
             />
             <input
               type="text"
-              placeholder="Filter by Email"
-              value={filter.email}
-              onChange={(e) => setFilter((p) => ({ ...p, email: e.target.value }))}
-              className="w-56 rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-400"
+              placeholder="Filter by email"
+              value={filterInput.email}
+              onChange={(e) => setFilterInput((p) => ({ ...p, email: e.target.value }))}
+              className="h-10 rounded-lg border border-gray-300 px-3 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
             />
             <select
-              value={filter.status}
-              onChange={(e) => setFilter((p) => ({ ...p, status: e.target.value }))}
-              className="w-44 rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-400"
+              value={filterInput.status}
+              onChange={(e) => setFilterInput((p) => ({ ...p, status: e.target.value }))}
+              className="h-10 rounded-lg border border-gray-300 px-3 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
             >
-              <option value="">All Status</option>
+              <option value="">All status</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
             <button
               onClick={handleClear}
-              className="flex items-center gap-1 rounded-lg bg-[#ED2624] px-4 py-2 text-white transition hover:bg-[#d32724]"
+              className="flex h-10 items-center justify-center gap-1 rounded-lg bg-[#ED2624] px-4 text-white transition hover:bg-[#d32724]"
             >
               <MdClose /> Clear
             </button>
-          </>
+          </div>
         )}
       </div>
 
@@ -210,16 +275,17 @@ const StaffPanel = () => {
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-lg bg-white">
+      {/* Table Card */}
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="max-h-[70vh] overflow-auto">
           <table className="min-w-full text-left">
-            <thead className="sticky top-0 z-10 bg-gray-50">
-              <tr className="text-xs uppercase text-gray-600">
-                <th className="px-6 py-3 font-semibold">#</th>
-                <th className="px-6 py-3 font-semibold">Details</th>
-                <th className="px-6 py-3 font-semibold">Role</th>
-                <th className="px-6 py-3 font-semibold">Status</th>
+            <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
+              <tr className="text-[11px] uppercase tracking-wide text-gray-600">
+                <th className="px-5 py-3 font-semibold">#</th>
+                <th className="px-5 py-3 font-semibold">Member</th>
+                <th className="px-5 py-3 font-semibold">Role</th>
+                <th className="px-5 py-3 font-semibold">Status</th>
+                <th className="px-5 py-3 font-semibold">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -227,30 +293,124 @@ const StaffPanel = () => {
                 Array.from({ length: PAGE_SIZE }).map((_, i) => <SkelRow key={`sk-${i}`} idx={i} />)
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
-                    No staff found.
+                  <td colSpan={4} className="px-6 py-14 text-center">
+                    <div className="mx-auto w-fit rounded-xl border border-dashed border-gray-300 bg-gray-50 px-5 py-6 text-gray-600">
+                      No staff found for the current filters.
+                    </div>
                   </td>
                 </tr>
               ) : (
                 pageRows.map((user, idx) => (
-                  <tr key={user.id} className="hover:bg-gray-50/60">
-                    <td className="px-6 py-4 text-gray-800">{startIdx + idx + 1}</td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{user.name}</div>
-                      <div className="text-sm text-gray-500">{user.email}</div>
+                  <tr
+                    key={user.id ?? `${startIdx}-${idx}`}
+                    className="group hover:bg-blue-50/30"
+                  >
+                    <td className="px-5 py-3 align-middle text-sm text-gray-800">
+                      {startIdx + idx + 1}
                     </td>
-                    <td className="px-6 py-4 text-gray-700">{user.role}</td>
-                    <td className="px-6 py-4">
+
+                    <td className="px-5 py-3 align-middle">
+                      <div className="flex items-center gap-3">
+                        {/* Faux avatar from initials */}
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-blue-200 text-sm font-semibold text-blue-700 ring-1 ring-inset ring-blue-300/50">
+                          {String(user.name || "U")
+                            .trim()
+                            .split(" ")
+                            .map((w) => w[0])
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900 leading-tight">
+                            {user.name}
+                          </div>
+                          <a
+                            href={`mailto:${user.email}`}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            {user.email}
+                          </a>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-3 align-middle">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-700">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-400" />
+                        {user.role}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-3 align-middle">
                       <span
                         className={cn(
-                          "rounded-full px-3 py-1 text-xs font-medium",
+                          "inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
                           user.status === "Active"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                            : "bg-rose-50 text-rose-700 ring-rose-200"
                         )}
                       >
+                        <span
+                          className={cn(
+                            "inline-block h-1.5 w-1.5 rounded-full",
+                            user.status === "Active" ? "bg-emerald-500" : "bg-rose-500"
+                          )}
+                        />
                         {user.status}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 align-middle flex gap-2  ">
+<div className="flex items-center gap-2">
+  {/* View */}
+  <span
+    className="inline-flex h-8 w-8 items-center justify-center rounded-full
+               bg-blue-50 text-blue-700 border border-blue-200
+               hover:bg-blue-100 hover:border-blue-300
+               focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200
+               transition-colors cursor-pointer"
+    title="View"
+  >
+    <FaEye />
+  </span>
+
+  {/* Edit */}
+  <span
+    className="inline-flex h-8 w-8 items-center justify-center rounded-full
+               bg-emerald-50 text-emerald-700 border border-emerald-200
+               hover:bg-emerald-100 hover:border-emerald-300
+               focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200
+               transition-colors cursor-pointer"
+    title="Edit"
+  >
+    <FaEdit />
+  </span>
+
+  {/* Delete */}
+ <span
+  onClick={() => (deletingId ? null : handleDelete(user.id))}
+  title={deletingId === user.id ? "Deleting..." : "Delete"}
+  className={cn(
+    "inline-flex h-8 w-8 items-center justify-center rounded-full border cursor-pointer transition",
+    "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:border-rose-300",
+    deletingId === user.id && "opacity-60 pointer-events-none"
+  )}
+  aria-disabled={deletingId === user.id}
+>
+  {deletingId === user.id ? (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+    </svg>
+  ) : (
+    <MdOutlineDeleteForever />
+  )}
+</span>
+
+
+</div>
+
+
                     </td>
                   </tr>
                 ))
@@ -260,17 +420,15 @@ const StaffPanel = () => {
         </div>
 
         {/* Footer: pagination summary + controls */}
-        <div className="flex flex-col items-center justify-between gap-3 border-t border-gray-100 p-4 md:flex-row">
+        <div className="flex flex-col items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/70 p-4 md:flex-row">
           <div className="text-sm text-gray-600">
-            {isLoading ? (
-              <Skel w={190} />
-            ) : (
-              <>
-                Showing <span className="font-medium">{total === 0 ? 0 : startIdx + 1}</span>–
-                <span className="font-medium">{endIdx}</span> of{" "}
-                <span className="font-medium">{total}</span>
-              </>
-            )}
+         {pageRows.length ? (
+   <>
+     Showing <span className="font-medium">{startIdx + 1}</span>–
+     <span className="font-medium">{startIdx + pageRows.length}</span> of{" "}
+     <span className="font-medium">{total}</span>
+   </>
+ ) : "No results"}
           </div>
 
           <div className="flex items-center gap-1">
@@ -318,7 +476,7 @@ const StaffPanel = () => {
                     <button
                       onClick={() => setPage(p)}
                       className={cn(
-                        "min-w-[2.2rem] rounded-md border px-3 py-1.5 text-sm",
+                        "min-w-[2.2rem] rounded-md border px-3 py-1.5 text-sm transition",
                         isCurrent
                           ? "border-blue-600 bg-blue-600 text-white"
                           : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
