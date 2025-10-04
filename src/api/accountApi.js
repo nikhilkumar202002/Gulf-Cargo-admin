@@ -133,7 +133,6 @@ export const listStaffs = async (params = {}) => {
   return { items, meta };
 };
 
-
 export const deleteStaff = async (id, axiosOpts = {}) => {
   const url = buildDeleteUrl(id);
 

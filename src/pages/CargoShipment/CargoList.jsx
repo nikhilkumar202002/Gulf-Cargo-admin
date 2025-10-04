@@ -1,5 +1,6 @@
-// src/pages/AllCargoList.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { GiCargoCrate } from "react-icons/gi";
 import { IoIosSearch } from "react-icons/io";
@@ -12,27 +13,27 @@ import { Link } from "react-router-dom";
 /* ---------------- helpers ---------------- */
 const unwrapArray = (o) =>
   Array.isArray(o) ? o :
-  Array.isArray(o?.data?.data) ? o.data.data :
-  Array.isArray(o?.data) ? o.data :
-  Array.isArray(o?.items) ? o.items :
-  Array.isArray(o?.results) ? o.results : [];
+    Array.isArray(o?.data?.data) ? o.data.data :
+      Array.isArray(o?.data) ? o.data :
+        Array.isArray(o?.items) ? o.items :
+          Array.isArray(o?.results) ? o.results : [];
 
 const initialFilter = { sender: "", receiver: "", fromDate: "", tillDate: "", status: "" };
 
 const COLOR = {
-  slate:   "bg-slate-100 text-slate-800 ring-1 ring-slate-200",
-  indigo:  "bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200",
-  violet:  "bg-violet-100 text-violet-800 ring-1 ring-violet-200",
-  sky:     "bg-sky-100 text-sky-800 ring-1 ring-sky-200",
-  cyan:    "bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200",
-  teal:    "bg-teal-100 text-teal-800 ring-1 ring-teal-200",
+  slate: "bg-slate-100 text-slate-800 ring-1 ring-slate-200",
+  indigo: "bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200",
+  violet: "bg-violet-100 text-violet-800 ring-1 ring-violet-200",
+  sky: "bg-sky-100 text-sky-800 ring-1 ring-sky-200",
+  cyan: "bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200",
+  teal: "bg-teal-100 text-teal-800 ring-1 ring-teal-200",
   emerald: "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200",
-  lime:    "bg-lime-100 text-lime-800 ring-1 ring-lime-200",
-  amber:   "bg-amber-100 text-amber-800 ring-1 ring-amber-200",
-  orange:  "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
-  yellow:  "bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200",
-  rose:    "bg-rose-100 text-rose-800 ring-1 ring-rose-200",
-  red:     "bg-red-100 text-red-800 ring-1 ring-red-200",
+  lime: "bg-lime-100 text-lime-800 ring-1 ring-lime-200",
+  amber: "bg-amber-100 text-amber-800 ring-1 ring-amber-200",
+  orange: "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
+  yellow: "bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200",
+  rose: "bg-rose-100 text-rose-800 ring-1 ring-rose-200",
+  red: "bg-red-100 text-red-800 ring-1 ring-red-200",
 };
 
 /* ---------------- skeleton components ---------------- */
@@ -93,6 +94,8 @@ export default function AllCargoList() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
+  const navigate = useNavigate();
+
   // statuses
   useEffect(() => {
     (async () => {
@@ -117,8 +120,8 @@ export default function AllCargoList() {
       });
       const arr =
         Array.isArray(rows?.data) ? rows.data :
-        Array.isArray(rows?.items) ? rows.items :
-        Array.isArray(rows) ? rows : [];
+          Array.isArray(rows?.items) ? rows.items :
+            Array.isArray(rows) ? rows : [];
       setAllCargos(arr);
       setPage(1);
     } catch (e) {
@@ -176,6 +179,8 @@ export default function AllCargoList() {
     if (page > totalPages) setPage(totalPages);
   }, [totalPages, page]);
 
+  
+
   // handlers
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -225,6 +230,10 @@ export default function AllCargoList() {
   const handleInvoice = (id) => {
     // implement/integrate your invoice flow here
     alert(`Invoice for cargo #${id}`);
+  };
+
+  const handleInvoiceDownload = (cargo) => {
+    window.open(`/invoice/${cargo.id}?download=1`, "_blank", "noopener");
   };
 
   /* ---------------- UI ---------------- */
@@ -354,7 +363,7 @@ export default function AllCargoList() {
               <table className="min-w-[1200px] whitespace-nowrap">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-xs font-semibold tracking-wide text-slate-600">
-                
+
                     <th className="px-3 py-3">Actions</th>
                     <th className="px-3 py-3">Booking No.</th>
                     <th className="px-3 py-3">Branch</th>
@@ -381,10 +390,10 @@ export default function AllCargoList() {
 
                   {paged.map((c) => (
                     <tr key={c.id} className="hover:bg-slate-50/60">
-               
+
 
                       <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-2">
                           <Link
                             to={`/cargo/view/${c.id}`}
                             aria-label="View"
@@ -400,7 +409,7 @@ export default function AllCargoList() {
 
                           <button
                             type="button"
-                            onClick={() => handleInvoice(c.id)}
+                            onClick={() => handleInvoice(c)}
                             aria-label="Invoice"
                             title="Invoice"
                             className="inline-flex h-6 w-6 items-center justify-center rounded-md
@@ -409,6 +418,18 @@ export default function AllCargoList() {
                                focus:outline-none focus:ring-2 focus:ring-emerald-400
                                transition disabled:opacity-40 disabled:pointer-events-none"
                           >
+                            <LiaFileInvoiceDollarSolid className="h-3 w-3" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleInvoiceDownload(c)}
+                            aria-label="Download invoice"
+                            title="Download invoice"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md
+             bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200
+             hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition">
+                            {/* any download icon you prefer; using same for demo */}
                             <LiaFileInvoiceDollarSolid className="h-3 w-3" />
                           </button>
                         </div>
@@ -467,9 +488,8 @@ export default function AllCargoList() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className={`rounded-md border px-3 py-1 text-sm ${
-                    page === 1 ? "cursor-not-allowed border-slate-200 text-slate-400" : "border-slate-200 hover:bg-slate-50"
-                  }`}
+                  className={`rounded-md border px-3 py-1 text-sm ${page === 1 ? "cursor-not-allowed border-slate-200 text-slate-400" : "border-slate-200 hover:bg-slate-50"
+                    }`}
                 >
                   Prev
                 </button>
@@ -479,11 +499,10 @@ export default function AllCargoList() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className={`rounded-md border px-3 py-1 text-sm ${
-                    page === totalPages
+                  className={`rounded-md border px-3 py-1 text-sm ${page === totalPages
                       ? "cursor-not-allowed border-slate-200 text-slate-400"
                       : "border-slate-200 hover:bg-slate-50"
-                  }`}
+                    }`}
                 >
                   Next
                 </button>

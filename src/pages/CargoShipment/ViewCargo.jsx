@@ -5,9 +5,16 @@ import { BsFillBoxSeamFill } from "react-icons/bs";
 import { IoLocationSharp } from "react-icons/io5";
 import { MdAddIcCall } from "react-icons/md";
 import { getCargoById } from "../../api/createCargoApi";
+import { getPartyByIdFlexible } from "../../api/partiesApi";
 import "./ShipmentStyles.css";
 
 /* ---------------- formatting helpers ---------------- */
+
+// unwrap parties that might come back as { data: {...} } or { party: {...} }
+const unwrapParty = (p) =>
+  (p && typeof p === "object" && (p.data?.party || p.data || p.party || p.result || p)) || null;
+
+
 const money = (v) => {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
@@ -35,23 +42,59 @@ const statusClass = (s) => {
 
 /* ---------------- value pickers ---------------- */
 const pickOne = (obj, keys, d = undefined) => {
+  if (!obj || typeof obj !== "object") return d;
   for (const k of keys) {
-    const v = k.split(".").reduce((acc, kk) => (acc ? acc[kk] : undefined), obj);
+    const v = k.split(".").reduce((acc, kk) => (acc && typeof acc === "object" ? acc[kk] : undefined), obj);
     if (v !== undefined && v !== null && v !== "") return v;
   }
   return d;
 };
 
-const formatPhones = (p = {}) => {
-  const phones = [p.contact_number, p.phone, p.mobile, p.mobile_number, p.contact].filter(Boolean);
-  const whats = p.whatsapp_number ?? p.whatsapp;
+const formatPhones = (party = {}, cargo = {}, role = "") => {
+  if (!party || typeof party !== "object") return "—";
+  const norm = (v) => (v === undefined || v === null ? "" : String(v).trim());
+  const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)));
+
+  // party-level candidates
+  const callCandidates = [
+    party.contact_number,
+    party.contact_no,
+    party.phone_number,
+    party.phone_no,
+    party.phone,
+    party.mobile_number,
+    party.mobile_no,
+    party.mobile,
+    party.telephone,
+    party.tel,
+    party.contact,
+  ].map(norm);
+
+  const waCandidates = [
+    party.whatsapp_number,
+    party.whats_app,
+    party.whatsapp,
+    party.wa_number,
+  ].map(norm);
+
+  // cargo-level fallbacks (e.g., sender_phone, receiver_whatsapp)
+  const r = (k) => norm(cargo?.[k]);
+  if (role) {
+    callCandidates.push(r(`${role}_phone`), r(`${role}_mobile`), r(`${role}_contact_number`));
+    waCandidates.push(r(`${role}_whatsapp`), r(`${role}_whatsapp_number`));
+  }
+
+  const phones = uniq(callCandidates);
+  const whats = uniq(waCandidates);
+
   const chunks = [];
   if (phones.length) chunks.push(`Call: ${phones.join(" / ")}`);
-  if (whats) chunks.push(`WhatsApp: ${whats}`);
+  if (whats.length) chunks.push(`WhatsApp: ${whats.join(" / ")}`);
   return chunks.join("  •  ") || "—";
 };
 
 const joinAddress = (p = {}) => {
+  if (!p || typeof p !== "object") return "—";
   const parts = [
     p.address, p.address_line1, p.address_line2,
     p.street, p.locality, p.area, p.district, p.city, p.state,
@@ -72,7 +115,7 @@ const CopyBtn = ({ text }) => {
           await navigator.clipboard.writeText(text || "");
           setOk(true);
           setTimeout(() => setOk(false), 900);
-        } catch {}
+        } catch { }
       }}
     >
       {ok ? "Copied" : "Copy"}
@@ -80,50 +123,47 @@ const CopyBtn = ({ text }) => {
   );
 };
 
-/* ---------------- stat line ---------------- */
-const Stat = ({ label, value, after }) => (
-  <div>
-    <div className="text-xs text-gray-500">{label}</div>
-    <div className="font-medium break-words">
-      {value ?? "—"} {after}
-    </div>
-  </div>
-);
-
 /* ---------------- normalize helpers for boxes ---------------- */
 function normalizeBoxes(cargo) {
   const raw = cargo?.boxes;
 
-  // API sample: { "1": { items: [...] }, "2": { items: [...] } }
+  // Object-shaped: { "1": { items: [...] }, "": { items: [...] } }
   if (raw && !Array.isArray(raw) && typeof raw === "object") {
     const out = [];
     for (const [k, v] of Object.entries(raw)) {
       const items = Array.isArray(v?.items) ? v.items : [];
-      const pieces = items.reduce(
-        (sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0),
-        0
-      );
-      // your payload doesn't include box_weight at this level; default 0
-      const weight = Number(v?.box_weight ?? v?.weight ?? 0);
-      out.push({ box_number: k, weight, pieces, items });
+      const pieces = items.reduce((sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0), 0);
+      const weight =
+        Number(v?.box_weight ?? v?.weight ?? 0) ||
+        items.reduce((s, it) => s + Number(it?.weight ?? 0), 0);
+      const bn = k && String(k).trim() !== "" ? k : 1;
+      const patched = items.map((it) => ({
+        ...it,
+        box_number: it?.box_number ?? bn,
+      }));
+      out.push({ box_number: bn, weight, pieces, items: patched });
     }
     return out;
   }
 
+  // Array-shaped: [{ box_number, items: [...] }, ...]
   if (Array.isArray(raw)) {
     return raw.map((b, i) => {
       const box_number = b?.box_number ?? b?.boxNo ?? b?.box ?? (i + 1);
       const items = Array.isArray(b?.items) ? b.items : [];
-      const pieces = items.reduce(
-        (sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0),
-        0
-      );
-      const weight = Number(b?.box_weight ?? b?.weight ?? 0);
-      return { box_number, weight, pieces, items };
+      const pieces = items.reduce((sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0), 0);
+      const weight =
+        Number(b?.box_weight ?? b?.weight ?? 0) ||
+        items.reduce((s, it) => s + Number(it?.weight ?? 0), 0);
+      const patched = items.map((it) => ({
+        ...it,
+        box_number: it?.box_number ?? box_number,
+      }));
+      return { box_number, weight, pieces, items: patched };
     });
   }
 
-  // fallback: try flat items
+  // Fallback: flat items on cargo
   const flat = Array.isArray(cargo?.items) ? cargo.items : [];
   if (flat.length) {
     const byBox = new Map();
@@ -133,10 +173,7 @@ function normalizeBoxes(cargo) {
       byBox.get(bn).push(it);
     });
     return Array.from(byBox.entries()).map(([box_number, items]) => {
-      const pieces = items.reduce(
-        (sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0),
-        0
-      );
+      const pieces = items.reduce((sum, it) => sum + Number(it?.piece_no ?? it?.pieces ?? 0), 0);
       return { box_number, weight: 0, pieces, items };
     });
   }
@@ -167,18 +204,16 @@ export default function ViewCargo() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
+  const [senderParty, setSenderParty] = useState(null);
+  const [receiverParty, setReceiverParty] = useState(null);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
       setErr("");
       try {
         const res = await getCargoById(id);
-        // ✅ unwrap the API shape you shared
-        const c =
-          res?.cargo ??
-          res?.data?.cargo ??
-          (res?.success && res?.cargo) ? res.cargo : res;
-
+        const c = res?.cargo ?? res?.data?.cargo ?? (res?.success && res?.cargo ? res.cargo : res);
         setCargo(c || {});
       } catch (e) {
         setErr(e?.message || "Failed to fetch cargo.");
@@ -188,18 +223,48 @@ export default function ViewCargo() {
     })();
   }, [id]);
 
+  // fetch parties by id for full details (phones/address)
+  useEffect(() => {
+    if (!cargo) return;
+    const sId = cargo?.sender_id ?? cargo?.senderId;
+    const rId = cargo?.receiver_id ?? cargo?.receiverId ?? cargo?.consignee_id;
+    (async () => {
+      try {
+        if (sId != null) {
+          const s = await getPartyByIdFlexible(sId);
+          if (s) setSenderParty(unwrapParty(s));
+        }
+        if (rId != null) {
+          const r = await getPartyByIdFlexible(rId);
+          if (r) setReceiverParty(unwrapParty(r));
+        }
+      } catch {
+        // swallow; UI still shows names from cargo
+      }
+    })();
+  }, [cargo]);
+
   /* ---------- derive fields ---------- */
-  const sender = cargo?.sender || {};
-  const receiver = cargo?.receiver || {};
+  const senderP   = unwrapParty(senderParty)   ?? cargo?.sender ?? null;
+const receiverP = unwrapParty(receiverParty) ?? cargo?.receiver ?? null;
 
-  const senderName = pickOne(cargo, ["sender_name", "sender.name"], "—");
-  const receiverName = pickOne(cargo, ["receiver_name", "consignee_name", "receiver.name"], "—");
+const senderName =
+  pickOne(senderP, ["name"]) ??
+  pickOne(cargo, ["sender_name", "sender.name"], "—");
 
-  // In your sample these are plain strings; keep .name fallback for other shapes
-  const shippingText = pickOne(cargo, ["shipping_method.name", "shipping_method"], "—");
-  const paymentText  = pickOne(cargo, ["payment_method.name", "payment_method"], "—");
-  const deliveryText = pickOne(cargo, ["delivery_type.name", "delivery_type"], "—");
-  const statusText   = pickOne(cargo, ["status.name", "status"], "—");
+const receiverName =
+  pickOne(receiverP, ["name"]) ??
+  pickOne(cargo, ["receiver_name", "consignee_name", "receiver.name"], "—");
+
+ // These are what address/phone helpers will use
+const sender   = senderP   ?? { name: senderName };
+const receiver = receiverP ?? { name: receiverName };
+
+// In your sample these are plain strings; keep .name fallback for other shapes
+const shippingText = pickOne(cargo, ["shipping_method.name", "shipping_method"], "—");
+const paymentText  = pickOne(cargo, ["payment_method.name", "payment_method"], "—");
+const deliveryText = pickOne(cargo, ["delivery_type.name", "delivery_type"], "—");
+const statusText   = pickOne(cargo, ["status.name", "status"], "—");
 
   /* ---------- boxes & items ---------- */
   const boxList = useMemo(() => normalizeBoxes(cargo), [cargo]);
@@ -222,6 +287,15 @@ export default function ViewCargo() {
       total_weight: weight3(totalWeight),
     };
   }, [cargo, boxList]);
+
+  const Stat = ({ label, value, after }) => (
+    <div>
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="font-medium break-words">
+        {value ?? "—"} {after}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -292,14 +366,18 @@ export default function ViewCargo() {
                 <div className="text-base font-semibold mb-2">Sender</div>
                 <div className="text-sm">{senderName}</div>
                 <div className="mt-2 space-y-1 text-sm text-gray-700">
-                  <p className="flex items-center gap-1">
-                    <IoLocationSharp className="text-red-500" />
-                    {joinAddress(sender)}
-                  </p>
-                  <p className="flex items-center gap-1">
-                    <MdAddIcCall className="text-emerald-600" />
-                    {formatPhones(sender)}
-                  </p>
+                  {joinAddress(sender) !== "—" && (
+                    <p className="flex items-center gap-1">
+                      <IoLocationSharp className="text-red-500" />
+                      {joinAddress(sender)}
+                    </p>
+                  )}
+                  {formatPhones(sender, cargo, "sender") !== "—" && (
+                    <p className="flex items-center gap-1">
+                      <MdAddIcCall className="text-emerald-600" />
+                      {formatPhones(sender, cargo, "sender")}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -308,14 +386,18 @@ export default function ViewCargo() {
                 <div className="text-base font-semibold mb-2">Receiver</div>
                 <div className="text-sm">{receiverName}</div>
                 <div className="mt-2 space-y-1 text-sm text-gray-700">
-                  <p className="flex items-center gap-1">
-                    <IoLocationSharp className="text-red-500" />
-                    {joinAddress(receiver)}
-                  </p>
-                  <p className="flex items-center gap-1">
-                    <MdAddIcCall className="text-emerald-600" />
-                    {formatPhones(receiver)}
-                  </p>
+                  {joinAddress(receiver) !== "—" && (
+                    <p className="flex items-center gap-1">
+                      <IoLocationSharp className="text-red-500" />
+                      {joinAddress(receiver)}
+                    </p>
+                  )}
+                  {formatPhones(receiver, cargo, "receiver") !== "—" && (
+                    <p className="flex items-center gap-1">
+                      <MdAddIcCall className="text-emerald-600" />
+                      {formatPhones(receiver, cargo, "receiver")}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -325,6 +407,7 @@ export default function ViewCargo() {
               <div className="rounded-xl bg-white p-4 border">
                 <div className="text-base font-semibold mb-2">Shipment</div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
+
                   <Stat label="Date" value={cargo?.date || "—"} />
                   <Stat label="Time" value={timeHHMM(cargo?.time)} />
                   <Stat label="Shipping Method" value={shippingText} />
@@ -365,9 +448,7 @@ export default function ViewCargo() {
             <div className="rounded-xl border bg-white overflow-hidden">
               <div className="px-4 py-3 border-b bg-gray-50 font-semibold flex items-center justify-between">
                 <span>Boxes</span>
-                <span className="text-sm text-gray-500">
-                  Total Boxes: {boxList.length || 0}
-                </span>
+                <span className="text-sm text-gray-500">Total Boxes: {boxList.length || 0}</span>
               </div>
 
               {boxList.length === 0 ? (
@@ -379,9 +460,7 @@ export default function ViewCargo() {
                     .map((b, bi) => (
                       <div key={`box-${bi}`}>
                         <div className="px-4 py-3 bg-white flex flex-wrap items-center justify-between gap-3">
-                          <div className="text-base font-semibold">
-                            Box #{b.box_number}
-                          </div>
+                          <div className="text-base font-semibold">Box #{b.box_number}</div>
                           <div className="flex items-center gap-4 text-sm text-gray-700">
                             <span>Pieces: <b className="tabular-nums">{b.pieces || 0}</b></span>
                             <span>Weight: <b className="tabular-nums">{weight3(b.weight)} kg</b></span>
