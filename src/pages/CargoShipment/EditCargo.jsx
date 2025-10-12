@@ -1,4 +1,4 @@
-// src/pages/EditCargo.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {

@@ -21,6 +21,25 @@
     }
   };
 
+  // Safe numeric picker from multiple paths (no "—" fallback)
+const pickNum = (obj, paths) => {
+  for (const p of paths) {
+    const segs = String(p).split(".");
+    let cur = obj;
+    let ok = true;
+    for (const s of segs) {
+      if (cur == null || cur[s] == null || cur[s] === "") { ok = false; break; }
+      cur = cur[s];
+    }
+    if (ok) {
+      const n = Number(String(cur).replace(/,/g, "").trim());
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return 0;
+};
+
+
   const getTrackCode = (s) =>
   s?.track_code ?? s?.tracking_code ?? s?.tracking_no ?? s?.trackingNumber ?? "";
 
@@ -428,13 +447,31 @@
 
     const ROWS_PER_COL = 15;
 
-    const computedSubtotal = 0; // you removed amounts in the item table display
-    const apiSubtotalNum = toNum(shipment?.subtotal);
-    const subtotal = apiSubtotalNum > 0 ? apiSubtotalNum : computedSubtotal;
+// --- DIRECT from API fields (robust, no math here) ---
+const num = (v) =>
+  v === null || v === undefined || v === "" ? 0 : Number(String(v).replace(/,/g, "")) || 0;
 
-    const tax = toNum(shipment?.tax ?? shipment?.tax_amount ?? shipment?.vat_cost ?? 0);
-    const bill = toNum(shipment?.bill_charges ?? shipment?.bill ?? 0);
-    const total = toNum(shipment?.total_cost ?? shipment?.net_total ?? subtotal + bill + tax);
+const subtotal = num(
+  pickNum(shipment, [
+    "amount_total_weight",
+    "charges.amount_total_weight",
+    "total_cost",                 // sent from CreateCargo
+    "subtotal",                   // any backend alias
+    "summary.subtotal",           // nested alias (defensive)
+  ])
+);
+
+// Bill charges, VAT, and final total — read directly, but with aliases
+const bill  = num(pickNum(shipment, ["bill_charges", "summary.bill_charges", "charges.bill"]));
+const tax   = num(pickNum(shipment, ["vat_cost", "vat_amount", "summary.vat_cost"]));
+const total = num(
+  pickNum(shipment, [
+    "total_amount",               // preferred final
+    "net_total",                  // alt
+    "grand_total",                // alias
+    "summary.total",
+  ])
+);
 
     const colA = items.slice(0, ROWS_PER_COL);
     const colB = items.slice(ROWS_PER_COL, ROWS_PER_COL * 2);
@@ -492,7 +529,7 @@
           </div>
         )}
 
-        <main className="mx-auto max-w-5xl p-4">
+        <main className="mx-auto max-w-5xl p-4 flex justify-center items-center">
           <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm uppercase">
             {/* Header */}
             <div className="px-1 pt-1">
@@ -718,22 +755,24 @@
                 {/* Totals */}
                 <div className="lg:col-span-1 avoid-break">
                   <div className="mx-auto w-full rounded-xl border-slate-200 p-1 ">
-                    <div className="total-card-list flex justify-between text-sm text-slate-700">
-                      <div className="invoice-bill-content">Subtotal</div>
-                      <div className="font-medium text-slate-900">{fmtMoney(subtotal, currency)}</div>
-                    </div>
-                    <div className="total-card-list flex justify-between text-sm text-slate-700">
-                      <div className="invoice-bill-content">Bill Charges</div>
-                      <div className="total-card-list font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
-                    </div>
-                    <div className="flex justify-between text-sm text-slate-700">
-                      <div className="invoice-bill-content">Vat%</div>
-                      <div className="total-card-list text-slate-900">{fmtMoney(tax, currency)}</div>
-                    </div>
-                    <div className="total-card-money mt-1 flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
-                      <div className="invoice-bill-total">Net Total</div>
-                      <div>{fmtMoney(shipment?.total_cost ?? shipment?.net_total ?? total, currency)}</div>
-                    </div>
+<div className="total-card-list flex justify-between text-sm text-slate-700">
+  <div>SUBTOTAL</div>
+  <div className="font-medium text-slate-900">{fmtMoney(subtotal, currency)}</div>
+</div>
+
+<div className="total-card-list flex justify-between text-sm text-slate-700">
+  <div>BILL CHARGES</div>
+  <div className="font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
+</div>
+<div className="total-card-list flex justify-between text-sm text-slate-700">
+  <div>VAT</div>
+  <div className="text-slate-900">{fmtMoney(tax, currency)}</div>
+</div>
+<div className=" total-card-list mt-1 flex justify-between border-t border-slate-200 pt-1 text-sm font-semibold text-slate-900">
+  <div>NET TOTAL</div>
+  <div>{fmtMoney(total, currency)}</div>
+</div>
+
                   </div>
                 </div>
               </div>

@@ -1,14 +1,13 @@
-
 import "./LoginRegisterStyles.css";
 import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@radix-ui/themes";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { setToken, fetchProfile } from "../../store/slices/authSlice";
 import { loginUser } from "../../api/accountApi";
 import AdminImage from "../../assets/bg/admin-bg.webp";
 import Logo from "../../assets/Logo.png";
-import { FiEye,FiEyeOff  } from "react-icons/fi";
+import { FiEye, FiEyeOff } from "react-icons/fi";
 
 /* ---------------- Top toast (slide down) ---------------- */
 function TopToast({ open, message = "", variant = "error", onClose, duration = 2500 }) {
@@ -89,6 +88,8 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const token = useSelector((s) => s.auth.token);
+
   const [values, setValues] = useState({ email: "", password: "" });
   const [touched, setTouched] = useState({ email: false, password: false });
   const [submitting, setSubmitting] = useState(false);
@@ -117,6 +118,14 @@ export default function Login() {
     setToastOpen(true);
   };
 
+  // If an authenticated user lands on /login, push them to dashboard (or back).
+  useEffect(() => {
+    if (token) {
+      const redirectTo = location.state?.from?.pathname || "/dashboard";
+      navigate(redirectTo, { replace: true });
+    }
+  }, [token, navigate, location.state]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
 
@@ -132,25 +141,28 @@ export default function Login() {
     setSubmitting(true);
     try {
       const data = await loginUser(
-          { email: values.email.trim(), password: values.password },
-          { persist: true } 
-        );
+        { email: values.email.trim(), password: values.password },
+        { persist: true }
+      );
 
       const token =
         data?.token || data?.access_token || data?.data?.token || data?.result?.token;
       if (!token) throw new Error("No token returned from login API");
 
+      // Persist token synchronously so guards see it immediately,
+      // then navigate right away (no artificial timeout).
       dispatch(setToken(token));
+
+      // Best-effort profile load (don't block navigation)
       try {
         await dispatch(fetchProfile()).unwrap();
       } catch {
         /* ignore; header can fetch later */
       }
 
-      // success toast + short delay so it's visible before redirect
-      openToast("Logged in successfully! Redirecting…", "success");
+      openToast("Logged in successfully!", "success");
       const redirectTo = location.state?.from?.pathname || "/dashboard";
-      setTimeout(() => navigate(redirectTo, { replace: true }), 900);
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       const apiMsg =
         err?.response?.data?.message ||
@@ -244,7 +256,7 @@ export default function Login() {
                       color: "#666",
                     }}
                   >
-                    {showPwd ? <FiEyeOff className="eye-color" size={20} /> : <FiEye size={20} className="eye-color"/>}
+                    {showPwd ? <FiEyeOff className="eye-color" size={20} /> : <FiEye size={20} className="eye-color" />}
                   </button>
                 </div>
                 {touched.password && errors.password && (

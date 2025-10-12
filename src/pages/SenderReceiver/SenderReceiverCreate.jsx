@@ -1,28 +1,48 @@
-// src/pages/SenderCreate.jsx
-import React, { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { FaUserTie } from "react-icons/fa";
-import { FiAlertCircle, FiPaperclip } from "react-icons/fi";
+// src/pages/SenderReceiver/SenderReceiverCreate.jsx
+import React from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Toaster, toast } from "react-hot-toast";
+import { FaUserTie } from "react-icons/fa";
 
-import { getCustomerTypes } from "../../api/customerTypeApi";
+/* APIs */
+import { getProfile } from "../../api/accountApi";
 import { getDocumentTypes } from "../../api/documentTypeApi";
 import {
   getCountries,
   getStatesByCountry,
-  getDistrictsByState,
-  getActiveDistrictsByState,
+  getDistrictsByState
 } from "../../api/worldApi";
-import { getAllBranches } from "../../api/branchApi";
-import { createParty } from "../../api/partiesApi";
 import { getPhoneCodes } from "../../api/phoneCodeApi";
+import { createParty } from "../../api/partiesApi";
 
+/* Components */
 import CreateReceiverSenderModal from "../../components/CreateReceiverSenderModal";
 import ErrorBoundary from "../../components/ErrorBoundary";
 
+/* Styles */
 import "./CustomerStyles.css";
 
-/* ───────────────────────────── Helpers ───────────────────────────── */
+/* ---------------- constants / utils ---------------- */
+const fieldBase =
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none ring-emerald-500 focus:ring";
+const fieldDisabled = "disabled:cursor-not-allowed disabled:bg-slate-50";
+
+const labelOf = (obj) =>
+  obj?.name ?? obj?.country ?? obj?.state ?? obj?.district_name ?? obj?.title ?? `#${getId(obj)}`;
+
+const Label = ({ children, required }) => (
+  <label className="mb-1 block text-sm font-medium text-slate-700">
+    {children} {required ? <span className="text-rose-600">*</span> : null}
+  </label>
+);
+const ErrorMsg = ({ children }) =>
+  children ? <p className="mt-1 text-sm text-rose-700">{children}</p> : null;
+const Skel = ({ h = 40, w = "100%", className = "" }) => (
+  <div className={`animate-pulse rounded-lg bg-slate-200/80 ${className}`} style={{ height: h, width: w }} />
+);
+
+const CUSTOMER_TYPE = { sender: 1, receiver: 2 };
+
 const normalizeList = (p) => {
   if (Array.isArray(p)) return p;
   if (Array.isArray(p?.data)) return p.data;
@@ -30,158 +50,21 @@ const normalizeList = (p) => {
   if (Array.isArray(p?.districts)) return p.districts;
   if (Array.isArray(p?.states)) return p.states;
   if (Array.isArray(p?.countries)) return p.countries;
-  if (p && typeof p === "object") {
-    const firstArray = Object.values(p).find(Array.isArray);
-    if (Array.isArray(firstArray)) return firstArray;
-  }
-  return [];
+  const firstArray = p && typeof p === "object" ? Object.values(p).find(Array.isArray) : null;
+  return Array.isArray(firstArray) ? firstArray : [];
 };
-const debugNormalize = (label, res) => normalizeList(res);
-const pickLabel = (obj, keys) => {
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (typeof v === "string" && v.trim()) return v;
-  }
-  return null;
-};
-const getId = (o) =>
-  typeof o === "string" ? o : String(o?.id ?? o?._id ?? o?.code ?? o?.uuid ?? "");
-
-/* Country / State / District label getters */
-const getCountryLabel = (c) =>
-  typeof c === "string"
-    ? c
-    : pickLabel(c, ["name", "country", "country_name", "title", "label"]) ||
-      `Country ${getId(c)}`;
-const getStateLabel = (s) =>
-  typeof s === "string"
-    ? s
-    : pickLabel(s, ["name", "state", "state_name", "title", "label"]) ||
-      `State ${getId(s)}`;
-const getDistrictLabel = (d) =>
-  typeof d === "string"
-    ? d
-    : pickLabel(d, ["district_name", "district", "name", "title", "label"]) ||
-      `District ${getId(d)}`;
-
-/* Customer Type getters */
-const getTypeId = (t) => String(t?.id ?? t?._id ?? t?.value ?? "");
-const getTypeLabel = (t) =>
-  t?.customer_type ?? t?.name ?? t?.type ?? t?.title ?? t?.label ?? `Type ${getTypeId(t)}`;
-
-/* Document Type getters */
-const DOC_LABEL_CANDIDATES = [
-  "document_type",
-  "doc_type",
-  "type_name",
-  "documentName",
-  "document",
-  "name",
-  "title",
-  "label",
-  "type",
-];
+const getId = (o) => String(o?.id ?? o?._id ?? o?.code ?? o?.uuid ?? o?.value ?? "");
+const DOC_LABELS = ["document_type","doc_type","type_name","documentName","document","name","title","label","type"];
 const getDocId = (d) => String(d?.id ?? d?._id ?? d?.code ?? d?.uuid ?? d?.value ?? "");
-const getDocLabel = (d) => {
-  for (const k of DOC_LABEL_CANDIDATES) {
-    const v = d?.[k];
-    if (typeof v === "string" && v.trim()) return v;
-  }
-  const entries = Object.entries(d ?? {}).filter(
-    ([k, v]) =>
-      typeof v === "string" &&
-      v.trim() &&
-      !/^(id|_id|code|uuid|status|active|created_at|updated_at)$/i.test(k)
-  );
-  if (entries.length) {
-    entries.sort((a, b) => b[1].length - a[1].length);
-    return entries[0][1];
-  }
-  return `Doc ${getDocId(d)}`;
-};
+const getDocLabel = (d) => DOC_LABELS.map(k => d?.[k]).find(v => typeof v === "string" && v.trim()) || `Doc ${getDocId(d)}`;
 
-/* Branch getters */
-const getBranchId = (b) =>
-  typeof b === "string" ? b : String(b?.id ?? b?._id ?? b?.code ?? b?.uuid ?? "");
-const getBranchLabel = (b) =>
-  typeof b === "string"
-    ? b
-    : b?.branch_name ?? b?.name ?? b?.title ?? b?.label ?? `Branch ${getBranchId(b)}`;
-
-/* Resolve ID → label */
-const resolveLabel = (id, list, getLabelFn) => {
-  if (!id) return "";
-  const item = list.find((x) => String(getId(x)) === String(id));
-  return item ? getLabelFn(item) : String(id);
-};
-
-/* Upload limits */
-const MAX_FILE_MB = 8;
-const MAX_TOTAL_MB = 24;
-const MAX_DIMENSION = 2000;
-const WEBP_QUALITY = 0.82;
-const bytesToMB = (b) => b / (1024 * 1024);
-const loadImageFromFile = (file) =>
-  new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = (e) => {
-      URL.revokeObjectURL(url);
-      reject(e);
-    };
-    img.src = url;
-  });
-async function compressIfImage(file) {
-  if (!file.type.startsWith("image/")) return file;
-  try {
-    const img = await loadImageFromFile(file);
-    let { width, height } = img;
-    const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height));
-    if (scale < 1) {
-      width = Math.round(width * scale);
-      height = Math.round(height * scale);
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, width, height);
-    const blob = await new Promise((res) => canvas.toBlob(res, "image/webp", WEBP_QUALITY));
-    if (!blob) return file;
-    if (blob.size >= file.size) return file;
-    return new File([blob], file.name.replace(/\.\w+$/, "") + ".webp", {
-      type: "image/webp",
-      lastModified: Date.now(),
-    });
-  } catch {
-    return file;
-  }
-}
-
-/* ─────────────── Phone code helpers ─────────────── */
+/* phone code helpers */
 const getDialCode = (o) =>
-  String(
-    o?.dial_code ?? o?.phone_code ?? o?.code ?? o?.calling_code ?? o?.isd ?? o?.prefix ?? ""
-  ).replace(/\s+/g, "");
+  String(o?.dial_code ?? o?.phone_code ?? o?.code ?? o?.calling_code ?? o?.isd ?? o?.prefix ?? "").replace(/\s+/g, "");
 const getDialLabel = (o) => {
   const name = o?.country ?? o?.country_name ?? o?.name ?? o?.title ?? o?.label ?? "—";
   const dc = getDialCode(o);
   return dc ? `${name} (${dc})` : name;
-};
-const pickDialCodeByNumber = (num = "", codes = []) => {
-  if (!num?.startsWith("+")) return null;
-  const only = num.replace(/[^\d+]/g, "");
-  let best = null;
-  for (const c of codes) {
-    const dc = getDialCode(c);
-    if (!dc || !dc.startsWith("+")) continue;
-    if (only.startsWith(dc) && (!best || dc.length > getDialCode(best).length)) best = c;
-  }
-  return best;
 };
 const composeE164 = (code, local) => {
   const c = String(code || "").trim();
@@ -192,236 +75,205 @@ const composeE164 = (code, local) => {
   return (cc + n.replace(/[^\d]/g, "")).replace(/\s+/g, "");
 };
 
-/* ───────────────────────────── UI bits ───────────────────────────── */
-const Section = ({ title, subtitle, children, icon }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm">
-    <div className="mb-4 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-900 text-white">
-          {icon}
-        </div>
-        <div>
-          <h3 className="text-base font-semibold text-slate-800">{title}</h3>
-          {subtitle ? <p className="text-xs text-slate-500">{subtitle}</p> : null}
-        </div>
-      </div>
-    </div>
-    {children}
-  </div>
+/* uploads */
+const MAX_FILE_MB = 8, MAX_TOTAL_MB = 24, MAX_DIMENSION = 2000, WEBP_QUALITY = 0.82;
+const bytesToMB = (b) => b / (1024 * 1024);
+const loadImageFromFile = (file) =>
+  new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+async function compressIfImage(file) {
+  if (!file.type.startsWith("image/")) return file;
+  try {
+    const img = await loadImageFromFile(file);
+    let { width, height } = img;
+    const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height));
+    if (scale < 1) { width = Math.round(width * scale); height = Math.round(height * scale); }
+    const canvas = document.createElement("canvas");
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext("2d"); ctx.drawImage(img, 0, 0, width, height);
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/webp", WEBP_QUALITY));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, "") + ".webp", { type: "image/webp", lastModified: Date.now() });
+  } catch { return file; }
+}
+
+/* profile → branch helpers */
+const safeDecodeJwt = (jwt) => {
+  if (!jwt || typeof jwt !== "string" || !jwt.includes(".")) return null;
+  try { return JSON.parse(atob(jwt.split(".")[1])); } catch { return null; }
+};
+const pickBranchId = (profileLike) => {
+  const x = profileLike?.data ?? profileLike ?? null;
+  const user = x?.user ?? x ?? null;
+  return user?.branch_id ?? user?.branchId ?? user?.branch?.id ?? null;
+};
+const branchNameFromProfileObj = (profile) =>
+  profile?.user?.branch?.name ||
+  profile?.branch?.name ||
+  profile?.user?.branch_name ||
+  profile?.branch_name ||
+  "";
+
+/* ---------------- component ---------------- */
+export default function SenderReceiverCreate({
+  asModal = false,
+  initialRole,
+  lockRole = false,
+  onClose,
+  onCreated,
+} = {}) {
+  /* routing: derive role from URL/state */
+const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+const normalizedRole = (val) =>
+  (String(val || "").toLowerCase() === "receiver" ? "receiver" : "sender");
+
+const [role, setRole] = React.useState(() =>
+  normalizedRole(initialRole || searchParams.get("role") || location?.state?.role || "sender")
 );
+  React.useEffect(() => {
+    const next = normalizedRole(searchParams.get("role") || location?.state?.role || role);
+    if (next !== role) setRole(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, location?.state]);
 
-const Label = ({ children, required }) => (
-  <label className="mb-1 block text-sm font-medium text-slate-700">
-    {children} {required ? <span className="text-rose-600">*</span> : null}
-  </label>
-);
-
-const fieldBase =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none ring-emerald-500 focus:ring";
-const fieldDisabled = "disabled:cursor-not-allowed disabled:bg-slate-50";
-
-const ErrorMsg = ({ children }) =>
-  children ? (
-    <p className="mt-1 flex items-center gap-1 text-sm text-rose-700">
-      {/* simple icon spacing without importing another icon */}
-      <span className="inline-block h-4 w-4 rounded-full bg-rose-600/10 ring-1 ring-rose-200" />
-      {children}
-    </p>
-  ) : null;
-
-/* Skeleton atom */
-const Skel = ({ h = 40, w = "100%", className = "" }) => (
-  <div
-    className={`animate-pulse rounded-lg bg-slate-200/80 ${className}`}
-    style={{ height: h, width: w }}
-  />
-);
-
-/* ─────────────────────────── Main Component ─────────────────────────── */
-const makeInitialForm = () => ({
-  name: "",
-  email: "",
-  branch: "",
-  customerType: "",
-  whatsappNumber: "",
-  contactNumber: "",
-  senderIdType: "",
-  senderId: "",
-  documents: [],
-  country: "",
-  state: "",
-  district: "",
-  city: "",
-  zipCode: "",
-  address: "",
-});
-
-const SenderCreate = () => {
-  // selects
-  const [customerTypes, setCustomerTypes] = useState([]);
-  const [docTypes, setDocTypes] = useState([]);
-  const [branches, setBranches] = useState([]);
-  const [countries, setCountries] = useState([]);
-  const [states, setStates] = useState([]);
-  const [districts, setDistricts] = useState([]);
-
-  // phone codes
-  const [phoneCodes, setPhoneCodes] = useState([]);
-  const [phoneCodesLoading, setPhoneCodesLoading] = useState(true);
-  const [phoneCodesError, setPhoneCodesError] = useState("");
-
-  // selected dial codes
-  const [contactCode, setContactCode] = useState("+");
-  const [whatsappCode, setWhatsappCode] = useState("+");
-
-  // loaders/errors
-  const [typesLoading, setTypesLoading] = useState(true);
-  const [docsLoading, setDocsLoading] = useState(true);
-  const [branchLoading, setBranchLoading] = useState(true);
-  const [typesError, setTypesError] = useState("");
-  const [docsError, setDocsError] = useState("");
-  const [branchError, setBranchError] = useState("");
-  const [countryLoading, setCountryLoading] = useState(true);
-  const [stateLoading, setStateLoading] = useState(false);
-  const [districtLoading, setDistrictLoading] = useState(false);
-  const [countryError, setCountryError] = useState("");
-  const [stateError, setStateError] = useState("");
-  const [districtError, setDistrictError] = useState("");
-
-  // form + submit
-  const [formData, setFormData] = useState(makeInitialForm());
-  const [fileKey, setFileKey] = useState(0);
-  const [submitLoading, setSubmitLoading] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-  const [submitNotice, setSubmitNotice] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [createdData, setCreatedData] = useState(null);
-  const [displayDetails, setDisplayDetails] = useState(null);
-
-  const resetForm = () => {
-    setFormData(makeInitialForm());
+  const onRoleChange = (e) => {
+    const v = e.target.value;
+    setRole(v);
     setFieldErrors({});
     setSubmitError("");
-    setSubmitNotice("");
-    setCreatedData(null);
-    setDisplayDetails(null);
-    setFileKey((k) => k + 1);
+    const sp = new URLSearchParams(searchParams);
+    sp.set("role", v);
+    setSearchParams(sp, { replace: true });
   };
 
-  const handleChange = async (e) => {
-    const { name, value, files } = e.target;
+  /* profile / branch */
+  const [userProfile, setUserProfile] = React.useState(null);
+  const [branchId, setBranchId] = React.useState("");
+  const [branchName, setBranchName] = React.useState("");
+  const token = React.useMemo(() => localStorage.getItem("token") || "", []);
+  const tokenClaims = React.useMemo(() => safeDecodeJwt(token), [token]);
 
-    // cascading clears
-    if (name === "country") {
-      setStates([]);
-      setDistricts([]);
-      return setFormData((prev) => ({ ...prev, country: value, state: "", district: "" }));
-    }
-    if (name === "state") {
-      setDistricts([]);
-      return setFormData((prev) => ({ ...prev, state: value, district: "" }));
-    }
-
-    // phone numbers → auto-pick dial code if "+…"
-    if (name === "whatsappNumber" || name === "contactNumber") {
-      if (value?.startsWith("+") && phoneCodes.length) {
-        const match = pickDialCodeByNumber(value, phoneCodes);
-        if (match) {
-          const code = getDialCode(match);
-          if (name === "whatsappNumber") setWhatsappCode(code);
-          if (name === "contactNumber") setContactCode(code);
-        }
-      }
-      setFormData((prev) => ({ ...prev, [name]: value }));
-      return;
-    }
-
-    // files
-    if (name === "documents") {
-      setSubmitNotice("");
-      const picked = Array.from(files || []);
-      const processed = await Promise.all(picked.map(compressIfImage));
-      const overs = processed.filter((f) => bytesToMB(f.size) > MAX_FILE_MB);
-      if (overs.length) {
-        setSubmitNotice(`Some files exceed ${MAX_FILE_MB}MB: ${overs.map((f) => f.name).join(", ")}`);
-      }
-      const kept = processed.filter((f) => bytesToMB(f.size) <= MAX_FILE_MB);
-
-      const totalMB = kept.reduce((s, f) => s + bytesToMB(f.size), 0);
-      if (totalMB > MAX_TOTAL_MB) {
-        let running = 0;
-        const trimmed = [];
-        for (const f of kept) {
-          const next = running + bytesToMB(f.size);
-          if (next > MAX_TOTAL_MB) break;
-          running = next;
-          trimmed.push(f);
-        }
-        setFormData((prev) => ({ ...prev, documents: trimmed }));
-        setSubmitNotice(
-          `Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length} file(s).`
-        );
-        return;
-      }
-      setFormData((prev) => ({ ...prev, documents: kept }));
-      return;
-    }
-
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const fetchStamp = useRef(0);
-
-  /* first fetch: branches/types/docs */
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setTypesLoading(true);
-        setDocsLoading(true);
-        setBranchLoading(true);
-        setTypesError("");
-        setDocsError("");
-        setBranchError("");
-        const [branchesRes, docsRes, custTypesRes] = await Promise.all([
-          getAllBranches({ per_page: 500 }),
-          getDocumentTypes({ per_page: 1000 }),
-          getCustomerTypes({ per_page: 1000 }),
-        ]);
-        if (!mounted) return;
-        setBranches(normalizeList(branchesRes));
-        setDocTypes(normalizeList(docsRes));
-        setCustomerTypes(normalizeList(custTypesRes));
-      } catch (err) {
-        if (!mounted) return;
-        setTypesError("Failed to load customer types.");
-        setDocsError("Failed to load document types.");
-        setBranchError("Failed to load branches.");
-      } finally {
-        if (!mounted) return;
-        setTypesLoading(false);
-        setDocsLoading(false);
-        setBranchLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  /* phone codes (once) */
-  useEffect(() => {
+  React.useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        setPhoneCodesLoading(true);
-        setPhoneCodesError("");
-        const token = localStorage.getItem("token");
+        const me = await getProfile();
+        if (!alive) return;
+        setUserProfile(me?.data ?? me ?? null);
+      } catch {
+        setUserProfile(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+  React.useEffect(() => {
+    const bidRaw = pickBranchId(userProfile) ?? tokenClaims?.branch_id ?? tokenClaims?.branchId ?? null;
+    const bid = bidRaw != null ? String(bidRaw) : "";
+    const bname = branchNameFromProfileObj(userProfile) || (bid ? `Branch #${bid}` : "");
+    setBranchId(bid);
+    setBranchName(bname);
+  }, [userProfile, tokenClaims]);
+
+  /* selects, codes, loaders */
+  const [docTypes, setDocTypes] = React.useState([]);
+  const [docsLoading, setDocsLoading] = React.useState(true);
+  const [docsError, setDocsError] = React.useState("");
+
+  const [countries, setCountries] = React.useState([]);
+  const [states, setStates] = React.useState([]);
+  const [districts, setDistricts] = React.useState([]);
+  const [countryLoading, setCountryLoading] = React.useState(false);
+  const [stateLoading, setStateLoading] = React.useState(false);
+  const [districtLoading, setDistrictLoading] = React.useState(false);
+  const [countryError, setCountryError] = React.useState("");
+  const [stateError, setStateError] = React.useState("");
+  const [districtError, setDistrictError] = React.useState("");
+
+  const [phoneCodes, setPhoneCodes] = React.useState([]);
+  const [phoneCodesLoading, setPhoneCodesLoading] = React.useState(true);
+  const [phoneCodesError, setPhoneCodesError] = React.useState("");
+  const [contactCode, setContactCode] = React.useState("+966");   // Saudi default
+  const [whatsappCode, setWhatsappCode] = React.useState("+966"); // Saudi default
+
+  // Unique dial codes for selects (codes only, keep +966 first)
+  const allDialCodes = React.useMemo(() => {
+    const raw = (Array.isArray(phoneCodes) ? phoneCodes : [])
+      .map((pc) =>
+        String(
+          pc?.dial_code ??
+          pc?.phone_code ??
+          pc?.code ??
+          pc?.calling_code ??
+          pc?.isd ??
+          pc?.prefix ??
+          ""
+        )
+          .trim()
+          .replace(/\s+/g, "")
+      )
+      .filter(Boolean);
+
+    const uniq = Array.from(new Set(raw));
+    if (uniq.length === 0) return ["+966"];
+    const withoutSaudi = uniq.filter((c) => c !== "+966");
+    return ["+966", ...withoutSaudi];
+  }, [phoneCodes]);
+
+  /* forms */
+  const initSender = React.useMemo(() => ({
+    role: "sender",
+    name: "", contactNumber: "", whatsappNumber: "",
+    senderIdType: "", senderId: "", documents: [],
+  }), []);
+  const initReceiver = React.useMemo(() => ({
+    role: "receiver",
+    name: "", whatsappNumber: "", useSameForContact: true,
+    contactNumber: "",
+    receiverIdType: "", receiverId: "", documents: [],
+    country: "", state: "", district: "", city: "", zipCode: "", address: "",
+  }), []);
+
+  const [sender, setSender] = React.useState(initSender);
+  const [receiver, setReceiver] = React.useState(initReceiver);
+
+  const [fileKey, setFileKey] = React.useState(0);
+  const [submitLoading, setSubmitLoading] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState("");
+  const [fieldErrors, setFieldErrors] = React.useState({});
+  const [submitNotice, setSubmitNotice] = React.useState("");
+
+  const [showSuccess, setShowSuccess] = React.useState(false);
+  const [createdData, setCreatedData] = React.useState(null);
+  const [displayDetails, setDisplayDetails] = React.useState(null);
+
+  /* bootstrap */
+  React.useEffect(() => {
+    (async () => {
+      try {
+        setDocsLoading(true); setDocsError("");
+        const docsRes = await getDocumentTypes({ per_page: 1000 });
+        setDocTypes(normalizeList(docsRes));
+      } catch {
+        setDocTypes([]); setDocsError("Failed to load document types.");
+      } finally { setDocsLoading(false); }
+    })();
+  }, []);
+
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setPhoneCodesLoading(true); setPhoneCodesError("");
         const list = await getPhoneCodes({ per_page: 1000 }, token);
         if (!alive) return;
         setPhoneCodes(Array.isArray(list) ? list : []);
-      } catch (e) {
+      } catch {
         if (!alive) return;
         setPhoneCodesError("Failed to load phone codes.");
         setPhoneCodes([]);
@@ -430,106 +282,211 @@ const SenderCreate = () => {
         setPhoneCodesLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-    };
-  }, []);
+    return () => { alive = false; };
+  }, [token]);
 
-  /* countries / states / districts cascade */
-  useEffect(() => {
-    let mounted = true;
-    const myStamp = ++fetchStamp.current;
+  // Countries
+  React.useEffect(() => {
+    if (role !== "receiver") return;
+    let alive = true;
     (async () => {
       try {
-        if (countries.length === 0) {
-          setCountryLoading(true);
-          try {
-            const cRes = await getCountries({ per_page: 500 });
-            if (!mounted || fetchStamp.current !== myStamp) return;
-            setCountries(debugNormalize("countries", cRes));
-            setCountryError("");
-          } catch (e) {
-            if (!mounted || fetchStamp.current !== myStamp) return;
-            setCountryError("Failed to load countries.");
-          } finally {
-            if (mounted && fetchStamp.current === myStamp) setCountryLoading(false);
-          }
-        }
-
-        if (formData.country) {
-          setStateLoading(true);
-          try {
-            const sRes = await getStatesByCountry(Number(formData.country));
-            if (!mounted || fetchStamp.current !== myStamp) return;
-            setStates(debugNormalize("states", sRes));
-            setStateError("");
-          } catch (e) {
-            if (!mounted || fetchStamp.current !== myStamp) return;
-            setStateError("Failed to load states.");
-          } finally {
-            if (mounted && fetchStamp.current === myStamp) setStateLoading(false);
-          }
-        }
-
-        if (formData.state) {
-          setDistrictLoading(true);
-          try {
-            const stateId = Number(formData.state);
-            let dRes = await getDistrictsByState(stateId);
-            let list = normalizeList(dRes);
-            if (Array.isArray(list) && list.length === 0) {
-              dRes = await getActiveDistrictsByState(stateId);
-            }
-            if (!mounted || fetchStamp.current !== myStamp) return;
-            setDistricts(debugNormalize("districts", dRes));
-            setDistrictError("");
-          } catch (e) {
-            if (!mounted || fetchStamp.current !== myStamp) return;
-            setDistrictError("Failed to load districts.");
-          } finally {
-            if (mounted && fetchStamp.current === myStamp) setDistrictLoading(false);
-          }
-        }
-      } catch {}
+        setCountryLoading(true); setCountryError("");
+        const res = await getCountries({ per_page: 500 }, token);
+        if (!alive) return;
+        setCountries(normalizeList(res));
+      } catch (e) {
+        if (!alive) return;
+        const msg =
+          e?.response?.data?.message ||
+          e?.message ||
+          "Failed to load countries.";
+        setCountries([]);
+        setCountryError(msg);
+        console.error("Countries fetch failed:", e);
+      } finally {
+        if (alive) setCountryLoading(false);
+      }
     })();
-    return () => {
-      mounted = false;
-    };
-  }, [formData.country, formData.state]);
+    return () => { alive = false; };
+  }, [role, token]);
 
-  /* payload (JSON or multipart) */
-  const buildPartyPayload = (fd) => {
-    const files = Array.isArray(fd.documents) ? fd.documents : [];
-    const hasFiles = files.length > 0;
+  // States
+  React.useEffect(() => {
+    if (role !== "receiver") return;
+    if (!receiver.country) { setStates([]); return; }
+    let alive = true;
+    (async () => {
+      try {
+        setStateLoading(true); setStateError(""); setStates([]);
+        const res = await getStatesByCountry(Number(receiver.country), { per_page: 1000 }, token);
+        if (!alive) return;
+        let list = normalizeList(res);
+        list = list.filter(s => String(s.country_id ?? s.countryId ?? s?.country?.id ?? s?.country?._id) === String(receiver.country));
+        setStates(list);
+      } catch (e) {
+        if (!alive) return;
+        const msg = e?.response?.data?.message || e?.message || "Failed to load states.";
+        setStates([]);
+        setStateError(msg);
+        console.error("States fetch failed:", e);
+      } finally {
+        if (alive) setStateLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, receiver.country, token]);
 
-    // compose full numbers
-    const whatsappFull = composeE164(whatsappCode, fd.whatsappNumber);
-    const contactFull = composeE164(contactCode, fd.contactNumber);
+  // Districts
+  React.useEffect(() => {
+    if (role !== "receiver") return;
+    if (!receiver.state) { setDistricts([]); return; }
+    let alive = true;
+    (async () => {
+      try {
+        setDistrictLoading(true); setDistrictError(""); setDistricts([]);
+        const res = await getDistrictsByState(Number(receiver.state), { per_page: 1000 }, token);
+        if (!alive) return;
+        let list = normalizeList(res);
+        list = list.filter(d => String(d.state_id ?? d.stateId ?? d?.state?.id ?? d?.state?._id) === String(receiver.state));
+        setDistricts(list);
+      } catch (e) {
+        if (!alive) return;
+        const msg = e?.response?.data?.message || e?.message || "Failed to load districts.";
+        setDistricts([]);
+        setDistrictError(msg);
+        console.error("Districts fetch failed:", e);
+      } finally {
+        if (alive) setDistrictLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, receiver.state, token]);
 
+  /* handlers */
+  const onSenderChange = async (e) => {
+    const { name, value, files } = e.target;
+
+    // PHONE: pure setter to avoid caret jump
+    if (name === "contactNumber" || name === "whatsappNumber") {
+      return setSender((p) => ({ ...p, [name]: value }));
+    }
+
+    if (name === "documents") {
+      setSubmitNotice("");
+      const picked = Array.from(files || []);
+      const processed = await Promise.all(picked.map(compressIfImage));
+      const overs = processed.filter((f) => bytesToMB(f.size) > MAX_FILE_MB);
+      if (overs.length) setSubmitNotice(`Some files exceed ${MAX_FILE_MB}MB: ${overs.map(f => f.name).join(", ")}`);
+      const kept = processed.filter((f) => bytesToMB(f.size) <= MAX_FILE_MB);
+      const totalMB = kept.reduce((s, f) => s + bytesToMB(f.size), 0);
+      if (totalMB > MAX_TOTAL_MB) {
+        let running = 0, trimmed = [];
+        for (const f of kept) { const next = running + bytesToMB(f.size); if (next > MAX_TOTAL_MB) break; running = next; trimmed.push(f); }
+        setSender((p) => ({ ...p, documents: trimmed }));
+        setSubmitNotice(`Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length}.`);
+        return;
+      }
+      return setSender((p) => ({ ...p, documents: kept }));
+    }
+
+    setSender((p) => ({ ...p, [name]: value }));
+  };
+
+  const onReceiverChange = async (e) => {
+    const { name, value, type, checked, files } = e.target;
+
+    if (name === "useSameForContact") {
+      return setReceiver((p) => {
+        const next = { ...p, useSameForContact: checked };
+        if (checked) next.contactNumber = p.whatsappNumber;
+        return next;
+      });
+    }
+
+    // PHONE: pure setters (no code auto-detect while typing)
+    if (name === "whatsappNumber" || name === "contactNumber") {
+      return setReceiver((p) => {
+        const next = { ...p, [name]: value };
+        if (p.useSameForContact && name === "whatsappNumber") next.contactNumber = value;
+        return next;
+      });
+    }
+
+    if (name === "country") {
+      setStates([]); setDistricts([]);
+      return setReceiver((p) => ({ ...p, country: value || "", state: "", district: "" }));
+    }
+    if (name === "state") {
+      setDistricts([]);
+      return setReceiver((p) => ({ ...p, state: value || "", district: "" }));
+    }
+
+    if (name === "documents") {
+      setSubmitNotice("");
+      const picked = Array.from(files || []);
+      const processed = await Promise.all(picked.map(compressIfImage));
+      const overs = processed.filter((f) => bytesToMB(f.size) > MAX_FILE_MB);
+      if (overs.length) setSubmitNotice(`Some files exceed ${MAX_FILE_MB}MB: ${overs.map(f => f.name).join(", ")}`);
+      const kept = processed.filter((f) => bytesToMB(f.size) <= MAX_FILE_MB);
+      const totalMB = kept.reduce((s, f) => s + bytesToMB(f.size), 0);
+      if (totalMB > MAX_TOTAL_MB) {
+        let running = 0, trimmed = [];
+        for (const f of kept) { const next = running + bytesToMB(f.size); if (next > MAX_TOTAL_MB) break; running = next; trimmed.push(f); }
+        setReceiver((p) => ({ ...p, documents: trimmed }));
+        setSubmitNotice(`Total attachments trimmed to ${MAX_TOTAL_MB}MB. Kept ${trimmed.length}/${processed.length}.`);
+        return;
+      }
+      return setReceiver((p) => ({ ...p, documents: kept }));
+    }
+
+    setReceiver((p) => ({ ...p, [name]: type === "checkbox" ? checked : value }));
+  };
+
+  /* payloads */
+  const buildSenderPayload = () => {
+    const files = Array.isArray(sender.documents) ? sender.documents : [];
     const map = {
-      name: fd.name,
-      email: fd.email,
-      contact_number: contactFull, // E.164
-      whatsapp_number: whatsappFull, // E.164
-      customer_type_id: fd.customerType ? Number(fd.customerType) : "",
-      document_type_id: fd.senderIdType ? Number(fd.senderIdType) : "",
-      document_id: fd.senderId,
-      branch_id: fd.branch ? Number(fd.branch) : "",
-      country_id: fd.country ? Number(fd.country) : "",
-      state_id: fd.state ? Number(fd.state) : "",
-      district_id: fd.district ? Number(fd.district) : "",
-      city: fd.city,
-      postal_code: fd.zipCode,
-      address: fd.address,
+      name: sender.name,
+      customer_type_id: CUSTOMER_TYPE.sender, // 1
+      contact_number: composeE164(contactCode, sender.contactNumber),
+      whatsapp_number: composeE164(whatsappCode, sender.whatsappNumber),
+      document_type_id: sender.senderIdType ? Number(sender.senderIdType) : "",
+      document_id: sender.senderId,
+      branch_id: branchId ? Number(branchId) : "",
     };
-
-    if (!hasFiles) {
-      return Object.fromEntries(Object.entries(map).filter(([, v]) => v !== "" && v != null));
-    }
+    const filtered = Object.fromEntries(Object.entries(map).filter(([, v]) => v !== "" && v != null));
+    if (!files.length) return filtered;
     const f = new FormData();
-    for (const [k, v] of Object.entries(map)) {
-      if (v !== "" && v != null) f.append(k, v);
-    }
+    for (const [k, v] of Object.entries(filtered)) f.append(k, v);
+    files.forEach((file) => f.append("documents[]", file, file.name));
+    if (files.length === 1) f.append("document", files[0], files[0].name);
+    return f;
+  };
+
+  const buildReceiverPayload = () => {
+    const files = Array.isArray(receiver.documents) ? receiver.documents : [];
+    const map = {
+      name: receiver.name,
+      customer_type_id: CUSTOMER_TYPE.receiver, // 2
+      contact_number: composeE164(contactCode, receiver.contactNumber || receiver.whatsappNumber),
+      whatsapp_number: composeE164(whatsappCode, receiver.whatsappNumber),
+      document_type_id: receiver.receiverIdType ? Number(receiver.receiverIdType) : "",
+      document_id: receiver.receiverId,
+      branch_id: branchId ? Number(branchId) : "",
+      country_id: receiver.country ? Number(receiver.country) : "",
+      state_id: receiver.state ? Number(receiver.state) : "",
+      district_id: receiver.district ? Number(receiver.district) : "",
+      city: receiver.city,
+      postal_code: receiver.zipCode,
+      address: receiver.address,
+    };
+    const filtered = Object.fromEntries(Object.entries(map).filter(([, v]) => v !== "" && v != null));
+    if (!files.length) return filtered;
+    const f = new FormData();
+    for (const [k, v] of Object.entries(filtered)) f.append(k, v);
     files.forEach((file) => f.append("documents[]", file, file.name));
     if (files.length === 1) f.append("document", files[0], files[0].name);
     return f;
@@ -538,56 +495,65 @@ const SenderCreate = () => {
   /* submit */
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitError("");
-    setFieldErrors({});
+    setSubmitError(""); setFieldErrors({});
 
-    if (!formData.name || !formData.customerType || !formData.senderIdType || !formData.senderId) {
-      setSubmitError("Name, Customer Type, ID Type, and Document ID are required.");
-      return;
+    if (role === "sender") {
+      if (!sender.name || !sender.senderIdType || !sender.senderId) {
+        return setSubmitError("Sender: Name, ID Type and Document ID are required.");
+      }
+    } else {
+      if (!receiver.name || !receiver.receiverIdType || !receiver.receiverId || !receiver.address) {
+        return setSubmitError("Receiver: Name, ID Type, Document ID and Address are required.");
+      }
     }
 
     try {
       setSubmitLoading(true);
-      const payload = buildPartyPayload(formData);
+      const payload = role === "sender" ? buildSenderPayload() : buildReceiverPayload();
 
       const created = await toast.promise(
         createParty(payload),
-        {
-          loading: "Submitting…",
-          success: "Customer created successfully",
-          error: (e) => e?.response?.data?.message || "Failed to submit form.",
-        },
+        { loading: "Submitting…", success: "Saved successfully", error: (e) => e?.response?.data?.message || "Failed to submit form." },
         { position: "top-right" }
       );
 
-      const details = {
-        Name: formData.name,
-        Email: formData.email,
-        WhatsApp: composeE164(whatsappCode, formData.whatsappNumber),
-        Phone: composeE164(contactCode, formData.contactNumber),
-        "Customer Type": resolveLabel(formData.customerType, customerTypes, getTypeLabel),
-        "Document Type": resolveLabel(formData.senderIdType, docTypes, getDocLabel),
-        "Document ID": formData.senderId,
-        Branch: resolveLabel(formData.branch, branches, getBranchLabel),
-        Country: resolveLabel(formData.country, countries, getCountryLabel),
-        State: resolveLabel(formData.state, states, getStateLabel),
-        District: resolveLabel(formData.district, districts, getDistrictLabel),
-        City: formData.city,
-        "Zip Code": formData.zipCode,
-        Address: formData.address,
-        Attachments:
-          formData.documents?.length > 0 ? formData.documents.map((f) => f.name).join(", ") : "—",
-      };
+      const details = role === "sender"
+        ? {
+            Role: "Sender",
+            Name: sender.name,
+            Phone: composeE164(contactCode, sender.contactNumber),
+            WhatsApp: composeE164(whatsappCode, sender.whatsappNumber),
+            "ID Type": (docTypes.find(d => getDocId(d) === String(sender.senderIdType)) && getDocLabel(docTypes.find(d => getDocId(d) === String(sender.senderIdType)))) || sender.senderIdType,
+            "Document ID": sender.senderId,
+            Branch: branchName || branchId || "—",
+            Attachments: sender.documents?.length ? sender.documents.map(f => f.name).join(", ") : "—",
+          }
+        : {
+            Role: "Receiver",
+            Name: receiver.name,
+            Phone: composeE164(contactCode, receiver.contactNumber || receiver.whatsappNumber),
+            WhatsApp: composeE164(whatsappCode, receiver.whatsappNumber),
+            "ID Type": (docTypes.find(d => getDocId(d) === String(receiver.receiverIdType)) && getDocLabel(docTypes.find(d => getDocId(d) === String(receiver.receiverIdType)))) || receiver.receiverIdType,
+            "Document ID": receiver.receiverId,
+            Branch: branchName || branchId || "—",
+            Country: receiver.country || "—",
+            State: receiver.state || "—",
+            District: receiver.district || "—",
+            City: receiver.city || "—",
+            "Zip Code": receiver.zipCode || "—",
+            Address: receiver.address || "—",
+            Attachments: receiver.documents?.length ? receiver.documents.map(f => f.name).join(", ") : "—",
+          };
 
       setCreatedData(created ?? null);
       setDisplayDetails(details);
       setShowSuccess(true);
+      setFileKey((k) => k + 1);
+
+try {
+  if (typeof onCreated === "function") onCreated(created);
+} catch {}
     } catch (err) {
-      if (err?.response?.status === 413) {
-        setSubmitError("Attachments exceed server limit (413). Trim or upload fewer files.");
-        toast.error("Attachments too large (413)", { position: "top-right" });
-        return;
-      }
       const apiMsg = err?.response?.data?.message || "Failed to submit form.";
       setSubmitError(apiMsg);
       const apiErrors = err?.response?.data?.errors;
@@ -597,471 +563,365 @@ const SenderCreate = () => {
     }
   };
 
-  const handleCloseSuccess = () => {
-    setShowSuccess(false);
-    resetForm();
+  const resetForm = () => {
+    setSender(initSender); setReceiver(initReceiver);
+    setFieldErrors({}); setSubmitError(""); setSubmitNotice("");
+    setFileKey((k) => k + 1);
   };
 
-  /* options */
-  const renderCountryOptions = () =>
-    countries.map((c) => (
-      <option key={getId(c)} value={getId(c)}>
-        {getCountryLabel(c)}
-      </option>
-    ));
-  const renderStateOptions = () =>
-    states.map((s) => (
-      <option key={getId(s)} value={getId(s)}>
-        {getStateLabel(s)}
-      </option>
-    ));
-  const renderDistrictOptions = () =>
-    districts.map((d) => (
-      <option key={getId(d)} value={getId(d)}>
-        {getDistrictLabel(d)}
-      </option>
-    ));
-
+  /* ---------------- render ---------------- */
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-8">
-      {/* Toaster */}
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3500,
-          success: {
-            style: { background: "#10B981", color: "white" },
-            iconTheme: { primary: "white", secondary: "#10B981" },
-          },
-          error: {
-            style: { background: "#EF4444", color: "white" },
-            iconTheme: { primary: "white", secondary: "#EF4444" },
-          },
-        }}
-      />
-
-      <div className="mx-auto w-full max-w-6xl px-4">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-rose-600 text-white shadow-sm">
-              <FaUserTie />
+      <Toaster position="top-right" />
+      <div className="mx-auto w-full max-w-5xl px-4">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {/* header */}
+          <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-rose-600 text-white shadow-sm"><FaUserTie /></div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-slate-900">Create Sender / Receiver</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Branch is auto-filled from your profile. Forms switch dynamically by role.</p>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900">Create Sender / Receiver</h2>
-              <div className="mt-0.5 text-xs text-slate-500">
-                Add a new customer party with identity, contact, and address.
-              </div>
-            </div>
+            <nav aria-label="Breadcrumb" className="text-sm">
+              <ol className="flex items-center gap-2">
+                <li><Link to="/dashboard" className="text-slate-500 hover:text-slate-700 hover:underline">Home</Link></li>
+                <li className="text-slate-400">/</li>
+                <li aria-current="page" className="font-medium text-slate-800">Add Party</li>
+              </ol>
+            </nav>
           </div>
 
-          <nav aria-label="Breadcrumb" className="text-sm">
-            <ol className="flex items-center gap-2">
-              <li>
-                <Link to="/dashboard" className="text-slate-500 hover:text-slate-700 hover:underline">
-                  Home
-                </Link>
-              </li>
-              <li className="text-slate-400">/</li>
-              <li>
-                <Link to="/cargo/allcargolist" className="text-slate-500 hover:text-slate-700 hover:underline">
-                  Customers
-                </Link>
-              </li>
-              <li className="text-slate-400">/</li>
-              <li aria-current="page" className="font-medium text-slate-800">
-                Add Customer
-              </li>
-            </ol>
-          </nav>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Identity */}
-          <Section title="Identity" subtitle="Basic info & classification" icon={<FaUserTie size={16} />}>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div>
-                <Label required>Name</Label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className={fieldBase}
-                  placeholder="Enter full name"
-                  aria-invalid={!!fieldErrors.name}
-                />
-                <ErrorMsg>{fieldErrors.name?.[0]}</ErrorMsg>
-              </div>
-
-              <div>
-                <Label>Email</Label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={fieldBase}
-                  placeholder="name@example.com"
-                  aria-invalid={!!fieldErrors.email}
-                />
-                <ErrorMsg>{fieldErrors.email?.[0]}</ErrorMsg>
-              </div>
-
-              <div>
+          {/* single form body */}
+          <form onSubmit={handleSubmit} className="space-y-6 px-5 py-5">
+            {/* role + branch */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+           {!lockRole ? (
+  <div>
+    <Label required>Party Role</Label>
+    <select value={role} onChange={onRoleChange} className={fieldBase}>
+      <option value="sender">Sender</option>
+      <option value="receiver">Receiver</option>
+    </select>
+  </div>
+) : (
+  <input type="hidden" name="role" value={role} />
+)}
+              <div className="md:col-span-2">
                 <Label required>Branch</Label>
-                {branchLoading ? (
-                  <Skel />
-                ) : (
-                  <select
-                    name="branch"
-                    value={String(formData.branch ?? "")}
-                    onChange={handleChange}
-                    className={`${fieldBase} ${fieldDisabled}`}
-                    disabled={branchLoading}
-                    aria-invalid={!!fieldErrors.branch_id}
-                  >
-                    <option value="">{branchLoading ? "Loading..." : "Select Branch"}</option>
-                    {!branchLoading &&
-                      branches.map((b) => (
-                        <option key={getBranchId(b)} value={getBranchId(b)}>
-                          {getBranchLabel(b)}
-                        </option>
-                      ))}
-                  </select>
-                )}
-                {branchError && <ErrorMsg>{branchError}</ErrorMsg>}
-                <ErrorMsg>{fieldErrors.branch_id?.[0]}</ErrorMsg>
-              </div>
-
-              <div>
-                <Label required>Customer Type</Label>
-                {typesLoading ? (
-                  <Skel />
-                ) : (
-                  <select
-                    name="customerType"
-                    value={String(formData.customerType ?? "")}
-                    onChange={handleChange}
-                    className={`${fieldBase} ${fieldDisabled}`}
-                    disabled={typesLoading}
-                    aria-invalid={!!fieldErrors.customer_type_id}
-                  >
-                    <option value="">{typesLoading ? "Loading..." : "Select Customer Type"}</option>
-                    {!typesLoading &&
-                      customerTypes.map((t) => (
-                        <option key={getTypeId(t)} value={getTypeId(t)}>
-                          {getTypeLabel(t)}
-                        </option>
-                      ))}
-                  </select>
-                )}
-                {typesError && <ErrorMsg>{typesError}</ErrorMsg>}
-                <ErrorMsg>{fieldErrors.customer_type_id?.[0]}</ErrorMsg>
-              </div>
-            </div>
-          </Section>
-
-          {/* Contact with phone codes */}
-          <Section
-            title="Contact"
-            subtitle="Reachability details"
-            icon={<FiAlertCircle size={16} className="rotate-180 opacity-70" />}
-          >
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              {/* WhatsApp */}
-              <div>
-                <Label>WhatsApp Number</Label>
-                <div className="grid grid-cols-[150px,1fr] gap-2">
-                  {phoneCodesLoading ? (
-                    <Skel />
-                  ) : (
-                    <select
-                      value={whatsappCode}
-                      onChange={(e) => setWhatsappCode(e.target.value)}
-                      disabled={phoneCodesLoading}
-                      className={`${fieldBase} ${fieldDisabled}`}
-                    >
-                      <option value="+">{phoneCodesLoading ? "Loading…" : "Code"}</option>
-                      {!phoneCodesLoading &&
-                        phoneCodes.map((pc, i) => (
-                          <option key={i} value={getDialCode(pc)}>
-                            {getDialLabel(pc)}
-                          </option>
-                        ))}
-                    </select>
-                  )}
-                  <input
-                    type="text"
-                    name="whatsappNumber"
-                    placeholder="WhatsApp number"
-                    value={formData.whatsappNumber}
-                    onChange={handleChange}
-                    className={fieldBase}
-                  />
-                </div>
-                {phoneCodesError && <p className="mt-1 text-sm text-rose-700">{phoneCodesError}</p>}
-                <ErrorMsg>{fieldErrors.whatsapp?.[0] ?? fieldErrors.whatsapp_number?.[0]}</ErrorMsg>
-              </div>
-
-              {/* Contact */}
-              <div>
-                <Label>Contact Number</Label>
-                <div className="grid grid-cols-[150px,1fr] gap-2">
-                  {phoneCodesLoading ? (
-                    <Skel />
-                  ) : (
-                    <select
-                      value={contactCode}
-                      onChange={(e) => setContactCode(e.target.value)}
-                      disabled={phoneCodesLoading}
-                      className={`${fieldBase} ${fieldDisabled}`}
-                    >
-                      <option value="+">{phoneCodesLoading ? "Loading…" : "Code"}</option>
-                      {!phoneCodesLoading &&
-                        phoneCodes.map((pc, i) => (
-                          <option key={i} value={getDialCode(pc)}>
-                            {getDialLabel(pc)}
-                          </option>
-                        ))}
-                    </select>
-                  )}
-                  <input
-                    type="text"
-                    name="contactNumber"
-                    placeholder="Contact number"
-                    value={formData.contactNumber}
-                    onChange={handleChange}
-                    className={fieldBase}
-                  />
-                </div>
-                <ErrorMsg>{fieldErrors.phone?.[0] ?? fieldErrors.contact_number?.[0]}</ErrorMsg>
-              </div>
-            </div>
-
-            <p className="mt-2 text-xs text-slate-500">
-              Tip: paste a full <span className="font-mono">+CC…</span> number; the dial code will auto-select.
-            </p>
-          </Section>
-
-          {/* Identification */}
-          <Section title="Identification" subtitle="Government ID / document" icon={<FiPaperclip size={16} />}>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-              <div>
-                <Label required>ID Type</Label>
-                {docsLoading ? (
-                  <Skel />
-                ) : (
-                  <select
-                    name="senderIdType"
-                    value={String(formData.senderIdType ?? "")}
-                    onChange={handleChange}
-                    className={`${fieldBase} ${fieldDisabled}`}
-                    disabled={docsLoading}
-                    aria-invalid={!!fieldErrors.document_type_id}
-                  >
-                    <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
-                    {!docsLoading &&
-                      docTypes.map((d) => (
-                        <option key={getDocId(d)} value={getDocId(d)}>
-                          {getDocLabel(d)}
-                        </option>
-                      ))}
-                  </select>
-                )}
-                {docsError && <ErrorMsg>{docsError}</ErrorMsg>}
-                <ErrorMsg>{fieldErrors.document_type_id?.[0]}</ErrorMsg>
-              </div>
-
-              <div>
-                <Label required>Document ID</Label>
                 <input
                   type="text"
-                  name="senderId"
-                  value={formData.senderId}
-                  onChange={handleChange}
-                  className={fieldBase}
-                  placeholder="e.g., ABC12345"
-                  aria-invalid={!!(fieldErrors.document_id || fieldErrors["document id"])}
+                  readOnly
+                  className={[
+                    fieldBase,
+                    "border border-slate-300/70",
+                    "read-only:bg-slate-100 read-only:text-slate-700 read-only:placeholder-slate-400",
+                    "read-only:cursor-default read-only:shadow-inner",
+                    "focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-0",
+                    "read-only:focus:border-slate-400",
+                    "transition-colors"
+                  ].join(" ")}
+                  value={branchName || (branchId ? `Branch #${branchId}` : "")}
+                  placeholder="No branch in profile"
                 />
-                <ErrorMsg>{fieldErrors.document_id?.[0] ?? fieldErrors["document id"]?.[0]}</ErrorMsg>
+                <input type="hidden" name="branch_id" value={branchId || ""} />
+                {!branchId && <ErrorMsg>No branch found on profile.</ErrorMsg>}
               </div>
+            </div>
 
-              <div>
-                <Label>Attachments</Label>
-                <input
-                  key={fileKey}
-                  type="file"
-                  name="documents"
-                  multiple
-                  accept="image/*,application/pdf"
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-black"
-                />
+            {/* sender */}
+            {role === "sender" && (
+              <>
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div>
+                    <Label required>Name</Label>
+                    <input name="name" value={sender.name} onChange={onSenderChange} className={fieldBase} placeholder="Full name" />
+                    <ErrorMsg>{fieldErrors.name?.[0]}</ErrorMsg>
+                  </div>
+
+                  {/* Sender Contact: code select + number input */}
+                  <div>
+                    <Label>Contact Number</Label>
+                    <div className="grid grid-cols-[120px,1fr] gap-2">
+                      {phoneCodesLoading ? (
+                        <Skel />
+                      ) : (
+                        <select
+                          value={contactCode}
+                          onChange={(e) => setContactCode(e.target.value)}
+                          className={`${fieldBase} ${fieldDisabled}`}
+                          disabled={phoneCodesLoading}
+                        >
+                          {allDialCodes.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      )}
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        name="contactNumber"
+                        value={sender.contactNumber ?? ""}
+                        onChange={onSenderChange}
+                        className={fieldBase}
+                        placeholder="e.g., 5XXXXXXXX"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                  <div>
+                    <Label required>ID Type</Label>
+                    {docsLoading ? <Skel /> : (
+                      <select name="senderIdType" value={String(sender.senderIdType || "")} onChange={onSenderChange} className={`${fieldBase} ${fieldDisabled}`} disabled={docsLoading}>
+                        <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
+                        {!docsLoading && docTypes.map((d) => <option key={getDocId(d)} value={getDocId(d)}>{getDocLabel(d)}</option>)}
+                      </select>
+                    )}
+                    {docsError && <ErrorMsg>{docsError}</ErrorMsg>}
+                    <ErrorMsg>{fieldErrors.document_type_id?.[0]}</ErrorMsg>
+                  </div>
+                  <div>
+                    <Label required>Document ID</Label>
+                    <input name="senderId" value={sender.senderId} onChange={onSenderChange} className={fieldBase} placeholder="e.g., ABC12345" />
+                    <ErrorMsg>{fieldErrors.document_id?.[0]}</ErrorMsg>
+                  </div>
+                  <div>
+                    <Label>Attachments</Label>
+                    <input key={fileKey} type="file" name="documents" multiple accept="image/*,application/pdf" onChange={onSenderChange}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-black" />
+                  </div>
+                </div>
                 {submitNotice && <p className="mt-1 text-xs text-amber-700">{submitNotice}</p>}
-                {formData.documents?.length > 0 && (
-                  <p className="mt-1 line-clamp-2 break-all text-xs text-slate-600">
-                    {formData.documents.length} file(s): {formData.documents.map((f) => f.name).join(", ")}
-                  </p>
-                )}
-                <ErrorMsg>{fieldErrors["documents.0"]?.[0]}</ErrorMsg>
-              </div>
+              </>
+            )}
+
+            {/* receiver */}
+            {role === "receiver" && (
+              <>
+                {/* Receiver – Identity (3 columns, code selects + plain inputs) */}
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                  {/* 1) Name */}
+                  <div>
+                    <Label required>Name</Label>
+                    <input
+                      name="name"
+                      value={receiver.name}
+                      onChange={onReceiverChange}
+                      className={fieldBase}
+                      placeholder="Full name"
+                    />
+                    <ErrorMsg>{fieldErrors.name?.[0]}</ErrorMsg>
+                  </div>
+
+                  {/* 2) WhatsApp (code + number) + checkbox */}
+                  <div>
+                    <Label>WhatsApp Number</Label>
+                    <div className="grid grid-cols-[120px,1fr] gap-2">
+                      {phoneCodesLoading ? (
+                        <Skel />
+                      ) : (
+                        <select
+                          value={whatsappCode}
+                          onChange={(e) => setWhatsappCode(e.target.value)}
+                          className={`${fieldBase} ${fieldDisabled}`}
+                          disabled={phoneCodesLoading}
+                        >
+                          {allDialCodes.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      )}
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        name="whatsappNumber"
+                        value={receiver.whatsappNumber ?? ""}
+                        onChange={onReceiverChange}
+                        className={fieldBase}
+                        placeholder="e.g., 5XXXXXXXX"
+                      />
+                    </div>
+
+                    <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        name="useSameForContact"
+                        checked={receiver.useSameForContact}
+                        onChange={onReceiverChange}
+                      />
+                      Use same as Contact Number
+                    </label>
+                  </div>
+
+                  {/* 3) Contact (code + number; mirrors WhatsApp when checked) */}
+                  <div>
+                    <Label>Contact Number</Label>
+                    <div className="grid grid-cols-[120px,1fr] gap-2">
+                      {phoneCodesLoading ? (
+                        <Skel />
+                      ) : (
+                        <select
+                          value={contactCode}
+                          onChange={(e) => setContactCode(e.target.value)}
+                          className={`${fieldBase} ${fieldDisabled}`}
+                          disabled={phoneCodesLoading || receiver.useSameForContact}
+                        >
+                          {allDialCodes.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      )}
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        name="contactNumber"
+                        value={(receiver.useSameForContact ? receiver.whatsappNumber : receiver.contactNumber) ?? ""}
+                        onChange={onReceiverChange}
+                        className={fieldBase}
+                        placeholder="e.g., 5XXXXXXXX"
+                        readOnly={receiver.useSameForContact}
+                      />
+                    </div>
+                    {receiver.useSameForContact && (
+                      <p className="mt-1 text-xs text-slate-500">Mirrors WhatsApp number</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                  <div>
+                    <Label required>ID Type</Label>
+                    {docsLoading ? <Skel /> : (
+                      <select name="receiverIdType" value={String(receiver.receiverIdType || "")} onChange={onReceiverChange} className={`${fieldBase} ${fieldDisabled}`} disabled={docsLoading}>
+                        <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
+                        {!docsLoading && docTypes.map((d) => <option key={getDocId(d)} value={getDocId(d)}>{getDocLabel(d)}</option>)}
+                      </select>
+                    )}
+                    {docsError && <ErrorMsg>{docsError}</ErrorMsg>}
+                    <ErrorMsg>{fieldErrors.document_type_id?.[0]}</ErrorMsg>
+                  </div>
+                  <div>
+                    <Label required>Document ID</Label>
+                    <input name="receiverId" value={receiver.receiverId} onChange={onReceiverChange} className={fieldBase} placeholder="e.g., XYZ98765" />
+                    <ErrorMsg>{fieldErrors.document_id?.[0]}</ErrorMsg>
+                  </div>
+                  <div>
+                    <Label>Attachments</Label>
+                    <input key={fileKey} type="file" name="documents" multiple accept="image/*,application/pdf" onChange={onReceiverChange}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-black" />
+                  </div>
+                </div>
+
+                {/* address */}
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                  <div>
+                    <Label>Country</Label>
+                    {countryLoading ? <Skel /> : (
+                      <select
+                        name="country"
+                        value={String(receiver.country || "")}
+                        onChange={onReceiverChange}
+                        className={`${fieldBase} ${fieldDisabled}`}
+                        disabled={countryLoading}
+                      >
+                        <option value="">{countryLoading ? "Loading..." : "Select Country"}</option>
+                        {!countryLoading &&
+                          countries.map((c) => (
+                            <option key={getId(c)} value={getId(c)}>
+                              {labelOf(c)}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    {countryError && <ErrorMsg>{countryError}</ErrorMsg>}
+                  </div>
+                  <div>
+                    <Label>State</Label>
+                    {stateLoading ? <Skel /> : (
+                      <select
+                        name="state"
+                        value={String(receiver.state || "")}
+                        onChange={onReceiverChange}
+                        className={`${fieldBase} ${fieldDisabled}`}
+                        disabled={!receiver.country || stateLoading}
+                      >
+                        <option value="">
+                          {!receiver.country ? "Select Country first" : stateLoading ? "Loading..." : "Select State"}
+                        </option>
+                        {!stateLoading && receiver.country &&
+                          states.map((s) => (
+                            <option key={getId(s)} value={getId(s)}>
+                              {labelOf(s)}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    {stateError && <ErrorMsg>{stateError}</ErrorMsg>}
+                  </div>
+                  <div>
+                    <Label>District</Label>
+                    {districtLoading ? <Skel /> : (
+                      <select
+                        name="district"
+                        value={String(receiver.district || "")}
+                        onChange={onReceiverChange}
+                        className={`${fieldBase} ${fieldDisabled}`}
+                        disabled={!receiver.state || districtLoading}
+                      >
+                        <option value="">
+                          {!receiver.state ? "Select State first" : districtLoading ? "Loading..." : "Select District"}
+                        </option>
+                        {!districtLoading && receiver.state &&
+                          districts.map((d) => (
+                            <option key={getId(d)} value={getId(d)}>
+                              {labelOf(d)}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    {districtError && <ErrorMsg>{districtError}</ErrorMsg>}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div>
+                    <Label>City</Label>
+                    <input name="city" value={receiver.city} onChange={onReceiverChange} className={fieldBase} placeholder="City" />
+                  </div>
+                  <div>
+                    <Label>Zip / Postal Code</Label>
+                    <input name="zipCode" value={receiver.zipCode} onChange={onReceiverChange} className={`${fieldBase} font-mono`} placeholder="e.g., 682001" />
+                  </div>
+                </div>
+
+                <div>
+                  <Label required>Address</Label>
+                  <textarea name="address" value={receiver.address} onChange={onReceiverChange} className={`${fieldBase} min-h-[96px]`} placeholder="Street, Building, Landmark" />
+                </div>
+              </>
+            )}
+
+            {/* actions + errors */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button type="button" className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-slate-700 hover:bg-slate-50" onClick={resetForm} disabled={submitLoading}>Cancel</button>
+              <button type="submit" disabled={submitLoading} className={`rounded-lg px-5 py-2 text-white transition ${submitLoading ? "cursor-not-allowed bg-rose-400" : "bg-rose-600 hover:bg-rose-700"}`}>{submitLoading ? "Submitting…" : "Submit"}</button>
             </div>
-          </Section>
 
-          {/* Address */}
-          <Section title="Address" subtitle="Location details" icon={<FiAlertCircle size={16} />}>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-              <div>
-                <Label>Country</Label>
-                {countryLoading ? (
-                  <Skel />
-                ) : (
-                  <select
-                    name="country"
-                    value={String(formData.country ?? "")}
-                    onChange={handleChange}
-                    className={`${fieldBase} ${fieldDisabled}`}
-                    disabled={countryLoading}
-                    aria-invalid={!!fieldErrors.country_id}
-                  >
-                    <option value="">{countryLoading ? "Loading..." : "Select Country"}</option>
-                    {!countryLoading && renderCountryOptions()}
-                  </select>
-                )}
-                {countryError && <ErrorMsg>{countryError}</ErrorMsg>}
-                <ErrorMsg>{fieldErrors.country_id?.[0]}</ErrorMsg>
-              </div>
-
-              <div>
-                <Label>State</Label>
-                {stateLoading ? (
-                  <Skel />
-                ) : (
-                  <select
-                    name="state"
-                    value={String(formData.state ?? "")}
-                    onChange={handleChange}
-                    className={`${fieldBase} ${fieldDisabled}`}
-                    disabled={!formData.country || stateLoading}
-                    aria-invalid={!!fieldErrors.state_id}
-                  >
-                    <option value="">
-                      {!formData.country ? "Select Country first" : stateLoading ? "Loading..." : "Select State"}
-                    </option>
-                    {!stateLoading && formData.country && renderStateOptions()}
-                  </select>
-                )}
-                {stateError && <ErrorMsg>{stateError}</ErrorMsg>}
-                <ErrorMsg>{fieldErrors.state_id?.[0]}</ErrorMsg>
-              </div>
-
-              <div>
-                <Label>District</Label>
-                {districtLoading ? (
-                  <Skel />
-                ) : (
-                  <select
-                    name="district"
-                    value={String(formData.district ?? "")}
-                    onChange={handleChange}
-                    className={`${fieldBase} ${fieldDisabled}`}
-                    disabled={!formData.state || districtLoading}
-                    aria-invalid={!!fieldErrors.district_id}
-                  >
-                    <option value="">
-                      {!formData.state ? "Select State first" : districtLoading ? "Loading..." : "Select District"}
-                    </option>
-                    {!districtLoading && formData.state && renderDistrictOptions()}
-                  </select>
-                )}
-                {districtError && <ErrorMsg>{districtError}</ErrorMsg>}
-                <ErrorMsg>{fieldErrors.district_id?.[0]}</ErrorMsg>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div>
-                <Label>City</Label>
-                <input
-                  type="text"
-                  name="city"
-                  value={formData.city}
-                  onChange={handleChange}
-                  className={fieldBase}
-                  placeholder="City"
-                  aria-invalid={!!fieldErrors.city}
-                />
-                <ErrorMsg>{fieldErrors.city?.[0]}</ErrorMsg>
-              </div>
-              <div>
-                <Label>Zip / Postal Code</Label>
-                <input
-                  type="text"
-                  name="zipCode"
-                  value={formData.zipCode}
-                  onChange={handleChange}
-                  className={`${fieldBase} font-mono`}
-                  placeholder="e.g., 682001"
-                  aria-invalid={!!fieldErrors.zip_code}
-                />
-                <ErrorMsg>{fieldErrors.zip_code?.[0]}</ErrorMsg>
-              </div>
-            </div>
-
-            <div>
-              <Label>Address</Label>
-              <textarea
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                className={`${fieldBase} min-h-[96px]`}
-                placeholder="Street, Building, Landmark"
-                aria-invalid={!!fieldErrors.address}
-              />
-              <ErrorMsg>{fieldErrors.address?.[0]}</ErrorMsg>
-            </div>
-
-            <div className="mx-auto flex max-w-6xl items-center justify-end gap-3 py-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-slate-700 hover:bg-slate-50"
-                onClick={resetForm}
-                disabled={submitLoading}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitLoading}
-                className={`rounded-lg px-5 py-2 text-white transition ${
-                  submitLoading ? "cursor-not-allowed bg-rose-400" : "bg-rose-600 hover:bg-rose-700"
-                }`}
-              >
-                {submitLoading ? "Submitting…" : "Submit"}
-              </button>
-            </div>
-          </Section>
-
-          {/* Global submit error */}
-          {submitError && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {submitError}
-            </div>
-          )}
-        </form>
+            {submitError && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{submitError}</div>
+            )}
+          </form>
+        </div>
       </div>
 
-      <ErrorBoundary onClose={handleCloseSuccess}>
-        <CreateReceiverSenderModal
-          open={showSuccess}
-          onClose={handleCloseSuccess}
-          data={createdData}
-          details={displayDetails}
-        />
+      {/* success modal */}
+      <ErrorBoundary onClose={() => setShowSuccess(false)}>
+        <CreateReceiverSenderModal open={showSuccess} onClose={() => setShowSuccess(false)} data={createdData} details={displayDetails} />
       </ErrorBoundary>
     </div>
   );
-};
-
-export default SenderCreate;
+}

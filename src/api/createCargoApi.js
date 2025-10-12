@@ -1,7 +1,3 @@
-// createCargoApi.js
-// API helpers for cargos: create, read, update, delete, normalize.
-// Exports both named and default for compatibility with different import styles.
-
 import axiosInstance from "./axiosInstance";
 
 /* ---------- small helpers ---------- */
@@ -94,13 +90,6 @@ function buildRequestBody(payload = {}) {
   return body;
 }
 
-/* ---------- CRUD API functions ---------- */
-
-/**
- * createCargo(payload)
- * - Accepts payload (can include boxes grouped or a flat items array).
- * - Returns server response data or throws Error with details.
- */
 async function createCargo(payload = {}) {
   const body = buildRequestBody(payload);
   const endpoints = ["/cargo", "/cargos", "/public/api/cargo", "/public/api/cargos"];

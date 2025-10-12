@@ -93,3 +93,10 @@ input.react-autosuggest__input {
 .box-add-btn-icon{
     font-size: 25px;
 }
+.party-add-btn{
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 16px;
+    font-family: "Inter";
+    font-weight: 600;
+}

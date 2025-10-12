@@ -106,20 +106,12 @@ const RevenueExpenseReport = lazy(() => import("../pages/Shipment Reports/Revenu
 /* Note: folder name has spaces in your structure */
 const ShipmentMethodCreate = lazy(() => import("../pages/Shipment Method/ShipmentMethodCreate"));
 const ShipmentMethodView = lazy(() => import("../pages/Shipment Method/ShipmentMethodView"));
-
 const PortCreate = lazy(() => import("../pages/Ports/portCreate"));
 const PortView = lazy(() => import("../pages/Ports/portView"));
-
-/* Note: folder name has a space in your structure */
 const ShipmentStatusView = lazy(() => import("../pages/Shipment Status/ShipmentStatusView"));
-
-/* Note: folder “Licence type” has a space */
 const LicenceCreate = lazy(() => import("../pages/Licence type/LicenceCreate"));
 const LicenceView = lazy(() => import("../pages/Licence type/LicenceView"));
-
-/* Note: folder “Payment Types” has a space */
 const PaymentTypeList = lazy(() => import("../pages/Payment Types/PaymentTypeList"));
-
 const InvoiceView = lazy(() => import("../components/InvoiceView"));
 const CustomerManifest = lazy(() => import("../pages/All Excels/CustomManifest"));
 const DeliveryList = lazy(() => import("../pages/All Excels/DeliveryList"));
@@ -128,6 +120,10 @@ const PackingList = lazy(() => import("../pages/All Excels/PackingList"));
 const ListInvoicePrefix = lazy(() => import("../pages/Invoice Number/ListInvoicePrefix"));
 const ListDeliveryType = lazy(() => import("../pages/Delivery Type/ListDeliveryType"));
 const InvoiceOnly = lazy(() => import("../components/InvoiceOnly"));
+const CreateBills = lazy(() => import("../pages/Bills/CreateBills"));
+const BillsViews = lazy(() => import("../pages/Bills/BillsViews"));
+const CreateShipmentBill = lazy(() => import("../pages/Bills/CreateShipmentBill"));
+const ShipmentBillView = lazy(() => import("../pages/Bills/ShipmentBillView"));
 
 /* ---------------- helpers ---------------- */
 const AuthRedirect = () => {
@@ -222,6 +218,11 @@ const router = createBrowserRouter([
       { path: "cargo/view/:id", element: <ViewCargo /> },
 
       { path: "paymenttype/view", element: <PaymentTypeList /> },
+
+      { path: "bills/create", element: <CreateBills/> },
+      { path: "bills/view", element: <BillsViews/> },
+      { path: "bills-shipments/create", element: <CreateShipmentBill/> },
+      { path: "bills-shipments/list", element: <ShipmentBillView/> },
 
       { path: "licence/create", element: <LicenceCreate /> },
       { path: "licence/view", element: <LicenceView /> },

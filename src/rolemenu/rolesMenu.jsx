@@ -5,14 +5,13 @@ import {
   FaBox,
   FaBuilding,
   FaUser,
-  FaMoneyBill,
-  FaChartBar,
   FaCog,
   FaCcVisa
 } from "react-icons/fa";
 import { IoDocumentAttachSharp } from "react-icons/io5";
 import { RiMailSendFill } from "react-icons/ri";
 import { BiSolidDashboard } from "react-icons/bi";
+import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
 
 export const rolesMenu = {
   1: [ // Super Admin Menu
@@ -44,6 +43,17 @@ export const rolesMenu = {
         { name: "All Cargos", path: "/cargo/allcargolist" },
         { name: "Create Cargo", path: "/cargoshipment/createcargo" },
         { name: "Create Shipment", path: "/shipment/createshipment" },
+      ]
+    },
+      {
+      key: "bills",
+      icon: <LiaFileInvoiceDollarSolid />,
+      label: "Bills",
+      submenus: [
+        { name: "All Bills", path: "/bills/view" },
+        { name: "All Bill Shipments", path: "/bills-shipments/list" },
+        { name: "Create Bills", path: "/bills/create" },
+        { name: "Create Bill Shipment", path: "/bills-shipments/create" },  
       ]
     },
     {

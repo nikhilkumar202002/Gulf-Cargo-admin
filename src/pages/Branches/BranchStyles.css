@@ -208,3 +208,117 @@
   font-family: "Inter";
   color: var(--secondary-color);
 }
+
+/* Branded file input button (ED2624) */
+.file-input-red {
+  /* keep base look tidy */
+  padding: 0.375rem 0.5rem;
+  border: 1px solid #e2e8f0; /* slate-200 */
+  border-radius: 0.5rem;      /* rounded-lg */
+  background: #fff;
+}
+
+.file-input-red:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(237, 38, 36, 0.25); /* soft red focus ring */
+  border-color: #fecaca; /* light red border hint */
+}
+
+/* Modern browsers */
+.file-input-red::file-selector-button {
+  margin-right: 1rem;
+  border: 0;
+  border-radius: 0.5rem;      /* match rounded-lg */
+  padding: 0.5rem 1rem;       /* px-4 py-2 */
+  background: #ED2624;        /* brand red */
+  color: #ffffff;             /* accessible contrast */
+  cursor: pointer;
+  transition: background 150ms ease-in-out, transform 50ms ease-in-out;
+  font-weight: 600;
+}
+
+.file-input-red:hover::file-selector-button {
+  background: #c61f1f; /* darker hover */
+}
+
+.file-input-red:active::file-selector-button {
+  transform: translateY(1px);
+}
+
+/* Safari / old WebKit */
+.file-input-red::-webkit-file-upload-button {
+  margin-right: 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #ED2624;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 150ms ease-in-out, transform 50ms ease-in-out;
+  font-weight: 600;
+}
+
+.file-input-red:hover::-webkit-file-upload-button {
+  background: #c61f1f;
+}
+
+.file-input-red:active::-webkit-file-upload-button {
+  transform: translateY(1px);
+}
+
+/* === Equal height for all controls === */
+:root {
+  --field-h: 44px; /* tweak once, applies everywhere */
+}
+
+/* Single-line controls */
+.form-grid input:not([type="file"]),
+.form-grid select {
+  height: var(--field-h);
+  padding: 0 12px;                 /* consistent vertical rhythm */
+  border-radius: 0.5rem;           /* rounded-lg */
+  line-height: calc(var(--field-h) - 2px);
+}
+
+/* Textarea: at least same height, can grow */
+.form-grid textarea {
+  min-height: var(--field-h);
+  padding: 10px 12px;
+  border-radius: 0.5rem;
+  line-height: 1.4;
+  resize: vertical;                /* keep UX nice */
+}
+
+/* File input (branded) matches height */
+.form-grid .file-input-red {
+  height: var(--field-h);
+  padding: 4px 4px;
+  display: inline-flex;
+  align-items: center;             /* centers the filename text */
+  border-radius: 0.5rem;
+}
+
+/* Style the button inside the file input to match height */
+.form-grid .file-input-red::file-selector-button,
+.form-grid .file-input-red::-webkit-file-upload-button {
+  height: calc(var(--field-h) - 8px); /* leaves a little vertical padding */
+  padding: 0 12px;
+  margin-right: 12px;
+  border: 0;
+  border-radius: 0.5rem;
+  background: #ED2624;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease-in-out, transform 50ms ease-in-out;
+}
+
+.form-grid .file-input-red:hover::file-selector-button,
+.form-grid .file-input-red:hover::-webkit-file-upload-button {
+  background: #c61f1f;
+}
+
+.form-grid .file-input-red:active::file-selector-button,
+.form-grid .file-input-red:active::-webkit-file-upload-button {
+  transform: translateY(1px);
+}
