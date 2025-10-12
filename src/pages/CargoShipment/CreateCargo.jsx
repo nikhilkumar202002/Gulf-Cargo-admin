@@ -1560,59 +1560,67 @@ export default function CreateCargo() {
                         const qtyValue = key === "total_weight" ? totalWeight : row.qty;
                         const amountValue = derived.rows[key]?.amount ?? 0;
                         return (
-                          <div
-                            key={key}
-                            className="grid grid-cols-[200px_120px_120px_120px] items-center gap-3 mb-2"
-                          >
-                            <div className="text-sm text-slate-700">{label}</div>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="rounded-lg border border-slate-300 px-3 py-2"
-                              value={qtyValue}
-                              onChange={(e) =>
-                                setForm((f) => ({
-                                  ...f,
-                                  charges: {
-                                    ...f.charges,
-                                    [key]: {
-                                      ...(f.charges[key] || { qty: 0, rate: 0 }),
-                                      qty:
-                                        key === "total_weight"
-                                          ? totalWeight
-                                          : Number(e.target.value || 0),
-                                    },
-                                  },
-                                }))
-                              }
-                              readOnly={key === "total_weight"}
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="rounded-lg border border-slate-300 px-3 py-2"
-                              value={row.rate}
-                              onChange={(e) =>
-                                setForm((f) => ({
-                                  ...f,
-                                  charges: {
-                                    ...f.charges,
-                                    [key]: {
-                                      ...(f.charges[key] || { qty: 0, rate: 0 }),
-                                      rate: Number(e.target.value || 0),
-                                    },
-                                  },
-                                }))
-                              }
-                            />
-                            <input
-                              readOnly
-                              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right"
-                              value={amountValue.toFixed(2)}
-                            />
-                          </div>
+                 
+<div
+  key={key}
+  className="flex flex-wrap md:flex-nowrap items-center gap-3 mb-2"
+>
+  {/* Label */}
+  <div className="text-sm text-slate-700 w-full ">
+    {label}
+  </div>
+
+  {/* Qty */}
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+    value={qtyValue}
+    onChange={(e) =>
+      setForm((f) => ({
+        ...f,
+        charges: {
+          ...f.charges,
+          [key]: {
+            ...(f.charges[key] || { qty: 0, rate: 0 }),
+            qty: key === "total_weight" ? totalWeight : Number(e.target.value || 0),
+          },
+        },
+      }))
+    }
+    readOnly={key === "total_weight"}
+  />
+
+  {/* Unit Rate */}
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    className="w-full rounded-lg border border-slate-300 px-3 py-2"
+    value={row.rate}
+    onChange={(e) =>
+      setForm((f) => ({
+        ...f,
+        charges: {
+          ...f.charges,
+          [key]: {
+            ...(f.charges[key] || { qty: 0, rate: 0 }),
+            rate: Number(e.target.value || 0),
+          },
+        },
+      }))
+    }
+  />
+
+  {/* Amount */}
+  <input
+    readOnly
+    className="w-full md:basis-[120px] md:shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right"
+    value={amountValue.toFixed(2)}
+  />
+</div>
+
                         );
                       })}
 

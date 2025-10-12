@@ -23,8 +23,8 @@ const SkelLine = ({ w = 100, h = 14, className = "" }) => (
 
 /* ---------------- UI atoms ---------------- */
 const KPI = ({ value, label, Icon, sublabel, loading }) => (
-  <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-5 flex items-center gap-4">
-    <div className="shrink-0 w-11 h-11 rounded-xl bg-red-500 text-white grid place-items-center">
+  <div className="dashboard-card bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-5 flex items-center gap-4">
+    <div className="card-icon shrink-0 w-11 h-11 rounded-xl bg-red-500 text-white grid place-items-center">
       <Icon className="text-xl" />
     </div>
     <div className="min-w-0">
@@ -136,7 +136,7 @@ export default function SuperAdminPanel() {
 
   return (
     <section className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
+      <div className="max-w-7xl mx-auto">
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
             {loading ? <SkelLine w={130} h={22} /> : "Dashboard"}
@@ -149,7 +149,7 @@ export default function SuperAdminPanel() {
         {err && <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 border border-red-200 text-sm">{err}</div>}
 
         {/* TOP: Major KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
           {/* While loading, show skeletons for ALL KPIs for consistency */}
           <KPI value={dummy.shipmentsToday} label="Shipments Today" Icon={FaTruck} loading={loading} />
           <KPI value={dummy.onTimePct} label="On-Time Delivery %" Icon={FaClock} loading={loading} />

@@ -8,13 +8,13 @@ import { loginUser } from "../../api/accountApi";
 import AdminImage from "../../assets/bg/admin-bg.webp";
 import Logo from "../../assets/Logo.png";
 import { FiEye, FiEyeOff } from "react-icons/fi";
+import { flushSync } from "react-dom";
 
 /* ---------------- Top toast (slide down) ---------------- */
 function TopToast({ open, message = "", variant = "error", onClose, duration = 2500 }) {
   const bg =
     variant === "success" ? "#16a34a" : variant === "warning" ? "#f59e0b" : "#dc2626";
 
-  // auto-close
   useEffect(() => {
     if (!open || !duration) return;
     const t = setTimeout(onClose, duration);
@@ -27,9 +27,7 @@ function TopToast({ open, message = "", variant = "error", onClose, duration = 2
       aria-live="assertive"
       style={{
         position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
+        top: 0, left: 0, right: 0,
         transform: open ? "translateY(0)" : "translateY(-110%)",
         transition: "transform 320ms ease, opacity 320ms ease",
         opacity: open ? 1 : 0,
@@ -87,7 +85,6 @@ export default function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-
   const token = useSelector((s) => s.auth.token);
 
   const [values, setValues] = useState({ email: "", password: "" });
@@ -95,7 +92,6 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
-  // toast state
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState("");
   const [toastType, setToastType] = useState("error");
@@ -118,7 +114,7 @@ export default function Login() {
     setToastOpen(true);
   };
 
-  // If an authenticated user lands on /login, push them to dashboard (or back).
+  // If an authenticated user lands on /login, push them to dashboard.
   useEffect(() => {
     if (token) {
       const redirectTo = location.state?.from?.pathname || "/dashboard";
@@ -128,11 +124,7 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
-    // mark all touched on submit
     setTouched({ email: true, password: true });
-
-    // client validations
     if (hasErrors) {
       openToast("Please fix the highlighted fields.");
       return;
@@ -145,20 +137,19 @@ export default function Login() {
         { persist: true }
       );
 
-      const token =
+      const apiToken =
         data?.token || data?.access_token || data?.data?.token || data?.result?.token;
-      if (!token) throw new Error("No token returned from login API");
+      if (!apiToken) throw new Error("No token returned from login API");
 
-      // Persist token synchronously so guards see it immediately,
-      // then navigate right away (no artificial timeout).
-      dispatch(setToken(token));
+      // CRITICAL: Flush Redux update before navigating so route guards see it immediately.
+      flushSync(() => {
+        dispatch(setToken(apiToken));
+      });
+      // Also ensure localStorage is set (setToken already does this, but belt & suspenders)
+      localStorage.setItem("token", apiToken);
 
-      // Best-effort profile load (don't block navigation)
-      try {
-        await dispatch(fetchProfile()).unwrap();
-      } catch {
-        /* ignore; header can fetch later */
-      }
+      // Fire-and-forget profile (don’t block navigation)
+      dispatch(fetchProfile()).catch(() => {});
 
       openToast("Logged in successfully!", "success");
       const redirectTo = location.state?.from?.pathname || "/dashboard";
@@ -192,8 +183,6 @@ export default function Login() {
         <div className="login-page-container">
           <div className="login-page-box">
             <img src={Logo} width={100} alt="Logo" />
-            {/* <h1 className="login-page-heading">Admin Login!</h1> */}
-
             <form onSubmit={handleLogin} noValidate>
               {/* Email */}
               <div className="login-form-row">

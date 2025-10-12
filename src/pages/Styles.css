@@ -209,3 +209,17 @@
     padding-bottom: 30px;
 }
 
+/* media query */
+
+@media (max-width:1024px) {
+    .card-icon{
+        width: 30px;
+        height: 30px;
+        font-size: 14px !important;
+    }
+    .dashboard-card{
+        padding: 10px;
+        display: flex;
+    }
+}
+
