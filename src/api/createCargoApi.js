@@ -308,6 +308,59 @@ function normalizeCargoToInvoice(raw) {
   return normalized;
 }
 
+// --- Invoice helpers ---
+function incrementInvoiceString(last = "") {
+  // Handles: "INV-000123" -> "INV-000124", "2025/INV/99" -> "2025/INV/100", "99" -> "100"
+  if (!last) return "INV-000001";
+  const s = String(last).trim();
+
+  // Try suffix-digits pattern
+  const m = s.match(/^(.*?)(\d+)$/);
+  if (m) {
+    const [, prefix, digits] = m;
+    const next = String(Number(digits) + 1).padStart(digits.length, "0");
+    return `${prefix}${next}`;
+  }
+
+  // No trailing digits? start with a default suffix
+  return `${s}-000001`;
+}
+
+/**
+ * getNextInvoiceNo(branchId)
+ * Uses GET /cargos?branch_id=... to read the most recent invoice/booking no,
+ * then returns the incremented string.
+ */
+async function getNextInvoiceNo(branchId) {
+  // ask backend for the newest one from this branch
+  // (tolerant param names; your API may accept per_page/limit & sort/order)
+  const params = {
+    branch_id: branchId,
+    per_page: 1,       // try per_page first
+    limit: 1,          // some backends use 'limit'
+    sort: "id",        // safest when we don't know the exact sort keys
+    order: "desc",
+  };
+
+  const res = await listCargos(params); // wraps GET /cargos with params
+  // Normalize a single most-recent row from common response shapes
+  const row =
+    (Array.isArray(res) && res[0]) ||
+    (Array.isArray(res?.data) && res.data[0]) ||
+    (Array.isArray(res?.items) && res.items[0]) ||
+    res;
+
+  const lastNo =
+    row?.booking_no ??
+    row?.invoice_no ??
+    row?.bookingNo ??
+    row?.invoice_number ??
+    row?.invoiceNo ??
+    "";
+
+  return incrementInvoiceString(lastNo);
+}
+
 // bulk status update
 
 const bulkUpdateCargoStatus = updateCargoStatus;
@@ -334,5 +387,6 @@ export {
   deleteCargo,
   updateCargoStatus,
   normalizeCargoToInvoice,
-  bulkUpdateCargoStatus
+  bulkUpdateCargoStatus,
+  getNextInvoiceNo,  
 };
