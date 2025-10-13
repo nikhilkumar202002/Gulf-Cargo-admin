@@ -46,16 +46,20 @@ export const getCustomShipmentById = (id) => {
  * @param {Object} [extraFields] - Any additional form fields your backend expects
  * @returns {Promise<AxiosResponse>}
  */
-export const importCustomShipments = (file, extraFields = {}) => {
-  if (!file) throw new Error("importCustomShipments: 'file' is required");
-  const formData = new FormData();
-  formData.append("file", file);
-  // Append extra fields if provided (e.g., overwrite=true)
-  Object.entries(extraFields).forEach(([k, v]) => formData.append(k, v));
-  return api.post("/physical-bills/import", formData, {
+// src/api/billApi.js  (only this function shown)
+export async function importCustomShipments(file, extra = {}) {
+  const fd = new FormData();
+  fd.append("file", file);
+  Object.entries(extra || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) fd.append(k, v);
+  });
+
+  // NOTE: use the same pre-configured axios instance called "api"
+  const resp = await api.post("/physical-bills/import", fd, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-};
+  return resp; // shape may include data.added_ids or similar
+}
 
 export default {
   createCustomShipment,

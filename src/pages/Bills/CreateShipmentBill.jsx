@@ -8,7 +8,7 @@ import { getPorts } from "../../api/portApi";
 import { getActiveBranches } from "../../api/branchApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 import { getProfile } from "../../api/accountApi";
-import { getPhysicalBills } from "../../api/billApi";
+import { getPhysicalBills,importCustomShipments  } from "../../api/billApi";
 import { createBillShipment } from "../../api/billShipmentApi";
 
 import "./PhysicalBill.css";
@@ -133,9 +133,6 @@ function extractBranchInfo(profile, branches = []) {
   return { id: id != null ? Number(id) : null, name };
 }
 
-/* ============================================================================================
- * Create Shipment — picker flow with Save (mark-in) & Remove (mark-not)
- * ========================================================================================== */
 export default function CreateShipmentBill() {
   // dropdown data
   const [shipmentMethods, setShipmentMethods] = useState([]);
@@ -189,6 +186,8 @@ export default function CreateShipmentBill() {
   const [showPicker, setShowPicker] = useState(false);
   const PAGE_SIZE = 10;
   const [pickPage, setPickPage] = useState(1);
+  const SELECTED_PAGE_SIZE = 10;
+const [selPage, setSelPage] = useState(1);
   const [bookingSearch, setBookingSearch] = useState("");
   const [results, setResults] = useState([]);            // rows rendered in picker table
   const [loadingList, setLoadingList] = useState(false);
@@ -205,6 +204,9 @@ export default function CreateShipmentBill() {
 
   // Track cargos committed/saved this session so they don't reappear if backend flag lags
   const sessionHiddenIdsRef = useRef(new Set());
+
+  const fileRef = useRef(null);
+const [importing, setImporting] = useState(false);
 
   /* ---------- bootstrap: fetch dropdowns + profile ---------- */
   useEffect(() => {
@@ -306,6 +308,7 @@ const visibleResults = useMemo(() => {
   return results.slice(start, start + PAGE_SIZE);
 }, [results, safePickPage]);
 
+
   // REPLACE your fetchPickerRows with this
   const fetchPickerRows = async (queryText = "") => {
     setLoadingList(true);
@@ -388,42 +391,64 @@ const visibleResults = useMemo(() => {
   };
 
 
+const totalSelPages = Math.max(1, Math.ceil(addedRows.length / SELECTED_PAGE_SIZE));
+const selBaseIndex  = (selPage - 1) * SELECTED_PAGE_SIZE;
+
+const visibleAddedRows = useMemo(() => {
+  const start = (selPage - 1) * SELECTED_PAGE_SIZE;
+  return addedRows.slice(start, start + SELECTED_PAGE_SIZE);
+}, [addedRows, selPage]);
+
+// Clamp page if list shrinks
+useEffect(() => {
+  if (selPage > totalSelPages) setSelPage(totalSelPages);
+}, [totalSelPages, selPage]);
+
+// If list grows (e.g., after Import Excel or Save Selected), jump to last page
+const prevAddedLenRef = useRef(0);
+useEffect(() => {
+  if (addedRows.length > prevAddedLenRef.current) {
+    setSelPage(Math.max(1, Math.ceil(addedRows.length / SELECTED_PAGE_SIZE)));
+  }
+  prevAddedLenRef.current = addedRows.length;
+}, [addedRows.length]);
+
+
   /* ---------- selection controls inside picker ---------- */
 const pickAllChecked =
   visibleResults.length > 0 &&
   visibleResults.every((row) => pickSelectedIds.includes(Number(row.id)));
 
-  const toggleAllPicker = () => {
-    if (pickAllChecked) {
-      const visibleIds = new Set(visibleResults.map((r) => Number(r.id)));addIds 
-      setPickSelectedIds((prev) => prev.filter((id) => !visibleIds.has(id)));
-      setPickSelectedMap((m) => {
-        const copy = { ...m };
-        for (const id of visibleIds) delete copy[id];
-        return copy;
+const toggleAllPicker = () => {
+  if (pickAllChecked) {
+    const visibleIds = new Set(visibleResults.map((r) => Number(r.id)));
+    setPickSelectedIds((prev) => prev.filter((id) => !visibleIds.has(id)));
+    setPickSelectedMap((m) => {
+      const copy = { ...m };
+      for (const id of visibleIds) delete copy[id];
+      return copy;
+    });
+  } else {
+    const addIds = visibleResults
+      .filter((r) => Number(r?.is_shipment ?? r?.is_in_cargo_shipment ?? 0) !== 1)
+      .map((r) => Number(r.id));
+    setPickSelectedIds((prev) => Array.from(new Set([...prev, ...addIds])));
+    setPickSelectedMap((m) => {
+      const copy = { ...m };
+      visibleResults.forEach((r) => {
+        if (Number(r?.is_shipment ?? r?.is_in_cargo_shipment ?? 0) !== 1) {
+          copy[Number(r.id)] = r;
+        }
       });
-    } else {
-      const addIds = visibleResults
-        .filter((r) => Number(r?.is_shipment ?? r?.is_in_cargo_shipment ?? 0) !== 1) // now 1 is used
-        .map((r) => Number(r.id));
-      setPickSelectedIds((prev) => Array.from(new Set([...prev, ...addIds])));
-      setPickSelectedMap((m) => {
-        const copy = { ...m };
-        visibleResults.forEach((r) => {
-         if (Number(r?.is_shipment ?? r?.is_in_cargo_shipment ?? 0) !== 1) {
-         copy[Number(r.id)] = r;
-       }
-        });
-        return copy;
-      });
-    }
-  };
+      return copy;
+    });
+  }
+};
 
   const toggleOnePicker = (row) => {
     const id = Number(row.id);
-    // block selecting used rows
-    if (Number(row?.is_in_cargo_shipment) === 1) return; // now 1 is used
 
+    if (Number(row?.is_in_cargo_shipment) === 1) return; // now 1 is used
     setPickSelectedIds((prev) => {
       if (prev.includes(id)) {
         setPickSelectedMap((m) => {
@@ -472,7 +497,6 @@ const saveSelectedToList = async () => {
 
   setToast({ open: true, variant: "success", text: "Saved to list." });
 };
-
 
   /* ---------- remove from Added list -> mark-not ---------- */
  const removeFromAdded = (id) => {
@@ -597,6 +621,82 @@ useEffect(() => {
     Array.isArray(fieldErrors?.[field]) ? (
       <div className="mt-1 text-xs text-rose-600">{fieldErrors[field].join(", ")}</div>
     ) : null;
+
+    const handleImportExcel = async (e) => {
+  const file = e.target?.files?.[0];
+  if (!file) return;
+
+  setImporting(true);
+  setToast({ open: true, variant: "success", text: "Uploading… reading file…" });
+
+  try {
+    // 1) Snapshot current FREE list (not yet in shipment)
+    const before = await getPhysicalBills({}, false);
+    const beforeList = unwrapArray(before);
+    const beforeIds = new Set(beforeList.map((r) => Number(r.id)));
+
+    // 2) Upload/import (include branch if your backend uses it)
+    const resp = await importCustomShipments(file, {
+      branch_id: myBranchId ?? undefined,
+    });
+
+    // 3) Fetch FREE list again
+    const after = await getPhysicalBills({}, false);
+    const afterList = unwrapArray(after);
+
+    // Prefer IDs returned by backend if present
+    const addedIdsRaw =
+      resp?.data?.added_ids ??
+      resp?.data?.data?.added_ids ??
+      resp?.added_ids ??
+      [];
+
+    let newRows = [];
+    if (Array.isArray(addedIdsRaw) && addedIdsRaw.length > 0) {
+      const idSet = new Set(addedIdsRaw.map(Number));
+      newRows = afterList.filter((r) => idSet.has(Number(r.id)));
+    } else {
+      // Fallback: diff by new IDs visible post-import
+      newRows = afterList.filter((r) => !beforeIds.has(Number(r.id)));
+    }
+
+    // 4) Nothing new? show the same note you’ve been seeing
+    if (!newRows.length) {
+      setToast({
+        open: true,
+        variant: "success",
+        text: "Import succeeded, but nothing new to add (all duplicates or already in shipment).",
+      });
+      return;
+    }
+
+    // 5) Open picker, preselect the new rows, then auto-save them to the Added list
+    setShowPicker(true);
+    setResults(newRows); // temporarily show only the fresh rows in the picker
+    const ids = newRows.map((r) => Number(r.id));
+    setPickSelectedIds(ids);
+    setPickSelectedMap(Object.fromEntries(newRows.map((r) => [Number(r.id), r])));
+
+    // Reuse your existing "Save Selected to List" flow:
+    await saveSelectedToList();
+
+    setToast({
+      open: true,
+      variant: "success",
+      text: `Imported ${newRows.length} row(s) and added to Selected Cargos.`,
+    });
+  } catch (err) {
+    setToast({
+      open: true,
+      variant: "error",
+      text: err?.response?.data?.message || err?.message || "Import failed.",
+    });
+  } finally {
+    setImporting(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+};
+
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-4">
@@ -845,6 +945,23 @@ useEffect(() => {
                     Done
                   </button>
                 )}
+
+                <button
+  type="button"
+  onClick={() => fileRef.current?.click()}
+  className="px-3 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
+  disabled={importing}
+>
+  {importing ? "Importing…" : "Import Excel"}
+</button>
+<input
+  ref={fileRef}
+  type="file"
+  accept=".xlsx,.xls,.csv"
+  className="hidden"
+  onChange={handleImportExcel}
+/>
+
                 <button
                   type="button"
                   onClick={openPicker}
@@ -900,10 +1017,10 @@ useEffect(() => {
     </tr>
   )}
 
-  {addedRows.map((row, idx) => {
+  {visibleAddedRows.map((row, idx) => {
     const checked = pickSelectedIds.includes(Number(row.id));
     const statusTextVal = row?.status?.name || row?.status || "";
-    const isUsed = Number(row?.is_shipment ?? row?.is_in_cargo_shipment ?? 0) === 1; // 1 = already in shipment
+    const isUsed = Number(row?.is_shipment ?? row?.is_in_cargo_shipment ?? 0) === 1;
 
     return (
       <tr key={row.id} className="hover:bg-gray-50">
@@ -916,7 +1033,8 @@ useEffect(() => {
             title={isUsed ? "Already in a shipment" : ""}
           />
         </td>
-        <td className="py-2 px-4 border">{idx + 1}</td>
+        {/* SL No is page-relative */}
+        <td className="py-2 px-4 border">{selBaseIndex + idx + 1}</td>
         <td className="py-2 px-4 border">{getBillNo(row) || "—"}</td>
         <td className="py-2 px-4 border">{getPcs(row) ?? "—"}</td>
         <td className="py-2 px-4 border">{getWeight(row) ?? "—"}</td>
@@ -934,6 +1052,32 @@ useEffect(() => {
 </tbody>
 
                 </table>
+                <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50 text-sm">
+  <div>
+    Page <span className="font-medium">{selPage}</span> of{" "}
+    <span className="font-medium">{totalSelPages}</span> •{" "}
+    <span className="text-gray-500">{addedRows.length}</span> items
+  </div>
+  <div className="flex items-center gap-2">
+    <button
+      type="button"
+      className="rounded border px-3 py-1.5 hover:bg-gray-100 disabled:opacity-50"
+      onClick={() => setSelPage((p) => Math.max(1, p - 1))}
+      disabled={selPage === 1}
+    >
+      Prev
+    </button>
+    <button
+      type="button"
+      className="rounded border px-3 py-1.5 hover:bg-gray-100 disabled:opacity-50"
+      onClick={() => setSelPage((p) => Math.min(totalSelPages, p + 1))}
+      disabled={selPage === totalSelPages}
+    >
+      Next
+    </button>
+  </div>
+</div>
+
               </div>
             )}
 

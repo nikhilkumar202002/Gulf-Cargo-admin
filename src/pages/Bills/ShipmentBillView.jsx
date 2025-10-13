@@ -232,69 +232,78 @@ export default function ShipmentBillView() {
       {/* Details modal */}
       {detailOpen && detailRow && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4">
-            <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4
+                          max-h-[85vh] flex flex-col overscroll-contain">
+            {/* Header (sticky) */}
+            <div className="px-5 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
               <h3 className="text-lg font-semibold">Shipment #{detailRow.id}</h3>
               <button onClick={closeDetail} className="text-gray-600 hover:text-gray-900">✕</button>
             </div>
-            <div className="px-5 py-4 grid sm:grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500">Shipment No:</span> <b>{detailRow.shipment_number || "—"}</b></div>
-              <div><span className="text-gray-500">AWB / Container:</span> <b>{detailRow.awb_or_container_number || "—"}</b></div>
-              <div><span className="text-gray-500">Origin:</span> <b>{detailRow?.origin_port?.name || "—"}</b></div>
-              <div><span className="text-gray-500">Destination:</span> <b>{detailRow?.destination_port?.name || "—"}</b></div>
-              <div><span className="text-gray-500">Method:</span> <b>{detailRow?.shipping_method?.name || "—"}</b></div>
-              <div><span className="text-gray-500">Created On:</span> <b>{fmtDateTime(detailRow.created_at)}</b></div>
-              <div className="sm:col-span-2">
-                <span className="text-gray-500">Status:</span>{" "}
-                <span className={`px-2 py-1 text-xs rounded-lg ${statusPill(detailRow?.status?.name || detailRow?.status)}`}>
-                  {detailRow?.status?.name || detailRow?.status || "—"}
-                </span>
-              </div>
-            </div>
-            <div className="px-5 pb-5">
-              <div className="font-medium mb-2">
-                Items ({Array.isArray(detailRow.custom_shipments) ? detailRow.custom_shipments.length : 0})
-              </div>
-              <div className="border rounded-lg overflow-x-auto">
-                <table className="min-w-full table-auto text-sm">
-                  <thead className="bg-gray-100 text-gray-700">
-                    <tr>
-                      <th className="py-2 px-3 border">SL No</th>
-                      <th className="py-2 px-3 border">Invoice / Bill No</th>
-                      <th className="py-2 px-3 border">Pcs</th>
-                      <th className="py-2 px-3 border">Weight (kg)</th>
-                      <th className="py-2 px-3 border">Shipment Method</th>
-                      <th className="py-2 px-3 border">Destination</th>
-                      <th className="py-2 px-3 border">Status</th>
-                      <th className="py-2 px-3 border">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(detailRow.custom_shipments || []).map((c, i) => (
-                      <tr key={c.id} className="hover:bg-gray-50">
-                        <td className="py-2 px-3 border">{i + 1}</td>
-                        <td className="py-2 px-3 border">{c.invoice_no}</td>
-                        <td className="py-2 px-3 border">{c.pcs}</td>
-                        <td className="py-2 px-3 border">{Number(c.weight)}</td>
-                        <td className="py-2 px-3 border">{c.shipment_method}</td>
-                        <td className="py-2 px-3 border">{c.des}</td>
-                        <td className="py-2 px-3 border">
-                          <span className={`px-2 py-1 text-xs rounded-lg ${statusPill(c.status)}`}>{c.status}</span>
-                        </td>
-                        <td className="py-2 px-3 border">{fmtDateTime(c.created_at)}</td>
-                      </tr>
-                    ))}
-                    {(!detailRow.custom_shipments || detailRow.custom_shipments.length === 0) && (
-                      <tr><td colSpan={8} className="py-4 text-center text-gray-500">No items.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
 
+            {/* Scrollable body */}
+            <div className="px-5 py-4 space-y-4 overflow-y-auto">
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                <div><span className="text-gray-500">Shipment No:</span> <b>{detailRow.shipment_number || "—"}</b></div>
+                <div><span className="text-gray-500">AWB / Container:</span> <b>{detailRow.awb_or_container_number || "—"}</b></div>
+                <div><span className="text-gray-500">Origin:</span> <b>{detailRow?.origin_port?.name || "—"}</b></div>
+                <div><span className="text-gray-500">Destination:</span> <b>{detailRow?.destination_port?.name || "—"}</b></div>
+                <div><span className="text-gray-500">Method:</span> <b>{detailRow?.shipping_method?.name || "—"}</b></div>
+                <div><span className="text-gray-500">Created On:</span> <b>{fmtDateTime(detailRow.created_at)}</b></div>
+                <div className="sm:col-span-2">
+                  <span className="text-gray-500">Status:</span>{" "}
+                  <span className={`px-2 py-1 text-xs rounded-lg ${statusPill(detailRow?.status?.name || detailRow?.status)}`}>
+                    {detailRow?.status?.name || detailRow?.status || "—"}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <div className="font-medium mb-2">
+                  Items ({Array.isArray(detailRow.custom_shipments) ? detailRow.custom_shipments.length : 0})
+                </div>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-[50vh] overflow-y-auto">
+                    <table className="min-w-full table-auto text-sm">
+                      <thead className="bg-gray-100 text-gray-700 sticky top-0">
+                        <tr>
+                          <th className="py-2 px-3 border">SL No</th>
+                          <th className="py-2 px-3 border">Invoice / Bill No</th>
+                          <th className="py-2 px-3 border">Pcs</th>
+                          <th className="py-2 px-3 border">Weight (kg)</th>
+                          <th className="py-2 px-3 border">Shipment Method</th>
+                          <th className="py-2 px-3 border">Destination</th>
+                          <th className="py-2 px-3 border">Status</th>
+                          <th className="py-2 px-3 border">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(detailRow.custom_shipments || []).map((c, i) => (
+                          <tr key={c.id} className="hover:bg-gray-50">
+                            <td className="py-2 px-3 border">{i + 1}</td>
+                            <td className="py-2 px-3 border">{c.invoice_no}</td>
+                            <td className="py-2 px-3 border">{c.pcs}</td>
+                            <td className="py-2 px-3 border">{Number(c.weight)}</td>
+                            <td className="py-2 px-3 border">{c.shipment_method}</td>
+                            <td className="py-2 px-3 border">{c.des}</td>
+                            <td className="py-2 px-3 border">
+                              <span className={`px-2 py-1 text-xs rounded-lg ${statusPill(c.status)}`}>{c.status}</span>
+                            </td>
+                            <td className="py-2 px-3 border">{fmtDateTime(c.created_at)}</td>
+                          </tr>
+                        ))}
+                        {(!detailRow.custom_shipments || detailRow.custom_shipments.length === 0) && (
+                          <tr><td colSpan={8} className="py-4 text-center text-gray-500">No items.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div> 
           </div>
         </div>
       )}
+
     </div>
   );
 }
