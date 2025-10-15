@@ -29,6 +29,7 @@ export const fetchProfile = createAsyncThunk(
 const initialState = {
   token: localStorage.getItem("token") || null,
   user: JSON.parse(localStorage.getItem("user") || "null"),
+  sessionId: localStorage.getItem("session_id") || null,
   status: "idle", // 'idle' | 'loading' | 'succeeded' | 'failed'
   error: null,
 };
@@ -42,6 +43,11 @@ const slice = createSlice({
       if (payload) localStorage.setItem("token", payload);
       else localStorage.removeItem("token");
     },
+setSessionId: (state, { payload }) => {
+  state.sessionId = payload || null;
+  if (payload) localStorage.setItem("session_id", payload);
+  else localStorage.removeItem("session_id");
+},  
     setUser: (state, { payload }) => {
       state.user = payload || null;
       if (payload) localStorage.setItem("user", JSON.stringify(payload));
@@ -50,10 +56,12 @@ const slice = createSlice({
     clearAuth: (state) => {
       state.token = null;
       state.user = null;
+      state.sessionId = null;
       state.status = "idle";
       state.error = null;
       localStorage.removeItem("token");
       localStorage.removeItem("user");
+      localStorage.removeItem("session_id");
     },
   },
   extraReducers: (b) => {
@@ -79,4 +87,5 @@ const slice = createSlice({
 });
 
 export const { setToken, setUser, clearAuth } = slice.actions;
+export const { setSessionId } = slice.actions;
 export default slice.reducer;

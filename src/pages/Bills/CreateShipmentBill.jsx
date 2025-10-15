@@ -622,7 +622,29 @@ useEffect(() => {
       <div className="mt-1 text-xs text-rose-600">{fieldErrors[field].join(", ")}</div>
     ) : null;
 
-    const handleImportExcel = async (e) => {
+    // helpers (place near your other small utils)
+const labelForRow = (r) =>
+  r?.booking_no || r?.invoice_no || r?.bill_no || r?.invoice || `#${r?.id ?? "?"}`;
+
+const listForToast = (rows, cap = 6) => {
+  if (!rows?.length) return "";
+  const slice = rows.slice(0, cap).map(labelForRow).join(", ");
+  return rows.length > cap ? `${slice} …(+${rows.length - cap} more)` : slice;
+};
+
+const pluckIds = (resp, keys = []) => {
+  const r = resp?.data ?? resp;
+  const pools = [r, r?.data, r?.meta, r?.result];
+  for (const k of keys) {
+    for (const o of pools) {
+      const v = o?.[k];
+      if (Array.isArray(v) && v.length) return v.map(Number);
+    }
+  }
+  return [];
+};
+// Drop-in replacement
+const handleImportExcel = async (e) => {
   const file = e.target?.files?.[0];
   if (!file) return;
 
@@ -630,60 +652,105 @@ useEffect(() => {
   setToast({ open: true, variant: "success", text: "Uploading… reading file…" });
 
   try {
-    // 1) Snapshot current FREE list (not yet in shipment)
-    const before = await getPhysicalBills({}, false);
-    const beforeList = unwrapArray(before);
-    const beforeIds = new Set(beforeList.map((r) => Number(r.id)));
+    // BEFORE snapshots
+    const [beforeFreeResp, beforeUsedResp] = await Promise.all([
+      getPhysicalBills({}, false), // FREE
+      getPhysicalBills({}, true),  // USED (already in shipment)
+    ]);
+    const beforeFree = unwrapArray(beforeFreeResp);
+    const beforeUsed = unwrapArray(beforeUsedResp);
+    const beforeFreeIds = new Set(beforeFree.map((r) => Number(r.id)));
+    const beforeUsedIds = new Set(beforeUsed.map((r) => Number(r.id)));
 
-    // 2) Upload/import (include branch if your backend uses it)
-    const resp = await importCustomShipments(file, {
-      branch_id: myBranchId ?? undefined,
-    });
+    // IMPORT
+    const resp = await importCustomShipments(file, { branch_id: myBranchId ?? undefined });
 
-    // 3) Fetch FREE list again
-    const after = await getPhysicalBills({}, false);
-    const afterList = unwrapArray(after);
+    // AFTER snapshots
+    const [afterFreeResp, afterUsedResp] = await Promise.all([
+      getPhysicalBills({}, false),
+      getPhysicalBills({}, true),
+    ]);
+    const afterFree = unwrapArray(afterFreeResp);
+    const afterUsed = unwrapArray(afterUsedResp);
 
-    // Prefer IDs returned by backend if present
-    const addedIdsRaw =
-      resp?.data?.added_ids ??
-      resp?.data?.data?.added_ids ??
-      resp?.added_ids ??
-      [];
+    const freeById = new Map(afterFree.map((r) => [Number(r.id), r]));
+    const usedById = new Map(afterUsed.map((r) => [Number(r.id), r]));
 
-    let newRows = [];
-    if (Array.isArray(addedIdsRaw) && addedIdsRaw.length > 0) {
-      const idSet = new Set(addedIdsRaw.map(Number));
-      newRows = afterList.filter((r) => idSet.has(Number(r.id)));
+    // IDs from server (handle many shapes)
+    const addedIds     = pluckIds(resp, ["added_ids", "created_ids", "inserted_ids", "new_ids"]);
+    const duplicateIds = pluckIds(resp, ["duplicate_ids", "existing_ids", "skipped_ids", "duplicates"]);
+    const existingFreeIdsFromResp = pluckIds(resp, ["existing_free_ids", "free_ids"]);
+    const existingUsedIdsFromResp = pluckIds(resp, ["existing_used_ids", "used_ids"]);
+
+    // New FREE rows (prefer explicit IDs; else diff)
+    let newFreeRows = [];
+    if (addedIds.length) {
+      newFreeRows = addedIds.map((id) => freeById.get(Number(id))).filter(Boolean);
     } else {
-      // Fallback: diff by new IDs visible post-import
-      newRows = afterList.filter((r) => !beforeIds.has(Number(r.id)));
+      newFreeRows = afterFree.filter((r) => !beforeFreeIds.has(Number(r.id)));
     }
 
-    // 4) Nothing new? show the same note you’ve been seeing
-    if (!newRows.length) {
+    // Duplicates split by current state
+    const dupIdSet = new Set([
+      ...duplicateIds,
+      ...existingFreeIdsFromResp,
+      ...existingUsedIdsFromResp,
+    ].map(Number));
+
+    const dupFreeRows = Array.from(dupIdSet).map((id) => freeById.get(id)).filter(Boolean);
+    const dupUsedRows = Array.from(dupIdSet).map((id) => usedById.get(id)).filter(Boolean);
+
+    // === Decision matrix ===
+    // A) Nothing new AND there are USED duplicates -> show “already shipped” toast and stop
+    if (!newFreeRows.length && dupUsedRows.length) {
+      const sample = listForToast(dupUsedRows);
       setToast({
         open: true,
-        variant: "success",
-        text: "Import succeeded, but nothing new to add (all duplicates or already in shipment).",
+        variant: "warning",
+        text: `Skipped. These cargos are already shipped: ${sample}`,
       });
       return;
     }
 
-    // 5) Open picker, preselect the new rows, then auto-save them to the Added list
-    setShowPicker(true);
-    setResults(newRows); // temporarily show only the fresh rows in the picker
-    const ids = newRows.map((r) => Number(r.id));
-    setPickSelectedIds(ids);
-    setPickSelectedMap(Object.fromEntries(newRows.map((r) => [Number(r.id), r])));
+    // B) Nothing new AND duplicates map only to FREE -> do NOT re-import; inform and stop
+    if (!newFreeRows.length && dupFreeRows.length) {
+      const sample = listForToast(dupFreeRows);
+      setToast({
+        open: true,
+        variant: "warning",
+        text: `Skipped. These cargos already exist in the system: ${sample}`,
+      });
+      return;
+    }
 
-    // Reuse your existing "Save Selected to List" flow:
-    await saveSelectedToList();
+    // C) We have truly new FREE rows -> add them to Selected Cargos
+    if (newFreeRows.length) {
+      // de-dup just in case
+      const uniqMap = new Map(newFreeRows.map((r) => [Number(r.id), r]));
+      const rowsToAdd = Array.from(uniqMap.values());
 
+      setShowPicker(true);
+      setResults(rowsToAdd);
+      const ids = rowsToAdd.map((r) => Number(r.id));
+      setPickSelectedIds(ids);
+      setPickSelectedMap(Object.fromEntries(rowsToAdd.map((r) => [Number(r.id), r])));
+
+      await saveSelectedToList();
+
+      const usedNote = dupUsedRows.length ? ` (skipped ${dupUsedRows.length} already shipped)` : "";
+      setToast({
+        open: true,
+        variant: "success",
+        text: `Imported ${rowsToAdd.length} new item(s) and added to Selected Cargos${usedNote}.`,
+      });
+      return;
+    }
+
+    // D) Absolute fallback
     setToast({
       open: true,
       variant: "success",
-      text: `Imported ${newRows.length} row(s) and added to Selected Cargos.`,
+      text: "Import succeeded, but nothing to add (all duplicates).",
     });
   } catch (err) {
     setToast({
@@ -696,7 +763,6 @@ useEffect(() => {
     if (fileRef.current) fileRef.current.value = "";
   }
 };
-
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-4">

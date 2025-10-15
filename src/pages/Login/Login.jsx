@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@radix-ui/themes";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { setToken, fetchProfile } from "../../store/slices/authSlice";
+import { setToken, setSessionId, fetchProfile } from "../../store/slices/authSlice";
 import { loginUser } from "../../api/accountApi";
 import AdminImage from "../../assets/bg/admin-bg.webp";
 import Logo from "../../assets/Logo.png";
@@ -140,10 +140,15 @@ export default function Login() {
       const apiToken =
         data?.token || data?.access_token || data?.data?.token || data?.result?.token;
       if (!apiToken) throw new Error("No token returned from login API");
+      const apiSessionId =
+       data?.session_id || data?.data?.session_id || data?.result?.session_id;
+     if (apiSessionId) {
+       localStorage.setItem("session_id", apiSessionId);
+     }
 
-      // CRITICAL: Flush Redux update before navigating so route guards see it immediately.
       flushSync(() => {
         dispatch(setToken(apiToken));
+        if (apiSessionId) dispatch(setSessionId(apiSessionId));
       });
       // Also ensure localStorage is set (setToken already does this, but belt & suspenders)
       localStorage.setItem("token", apiToken);

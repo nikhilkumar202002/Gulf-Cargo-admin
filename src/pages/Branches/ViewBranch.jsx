@@ -1,206 +1,169 @@
-import React, { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import api from "../../api/axiosInstance";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { getBranchByIdSmart } from "../../api/branchApi";
+import Avatar from "../../components/Avatar"; // ✅ shared avatar
 import { FiArrowLeft } from "react-icons/fi";
 import { FaExternalLinkAlt, FaGlobe, FaMapMarkerAlt, FaPhoneAlt } from "react-icons/fa";
 import "../styles.css";
 import "./BranchStyles.css";
 
-/* Skeleton chip */
+/* ---------------- helpers ---------------- */
 const Skel = ({ w = 120, h = 14, r = 8, className = "" }) => (
-  <span
-    className={`skel ${className}`}
-    style={{
-      display: "inline-block",
-      width: typeof w === "number" ? `${w}px` : w,
-      height: typeof h === "number" ? `${h}px` : h,
-      borderRadius: r,
-    }}
-    aria-hidden="true"
-  />
+  <span className={`skel ${className}`} style={{ display:"inline-block", width: typeof w === "number" ? `${w}px` : w, height: typeof h === "number" ? `${h}px` : h, borderRadius: r }} aria-hidden="true" />
 );
+const decodeHtml = (s) => String(s || "").replace(/&amp;/g, "&");
+const isActiveStatus = (v) => {
+  if (v === 1 || v === "1" || v === true) return true;
+  if (typeof v === "string") return v.toLowerCase() === "active";
+  return false;
+};
 
 export default function ViewBranch() {
   const { id } = useParams();
   const navigate = useNavigate();
-
   const [branch, setBranch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Guard against duplicate effect runs in StrictMode (dev) and stale updates
-  const hasFetchedRef = useRef(false);
-
   useEffect(() => {
-    let aborted = false;
-    const ctrl = new AbortController();
-
-    const fetchBranch = async () => {
+    let alive = true;
+    (async () => {
       try {
         setLoading(true);
         setError("");
-        const res = await api.get(`/branch/${id}`, { signal: ctrl.signal });
-        const b = res?.data?.branch ?? res?.data?.data ?? res?.data ?? null;
-        if (!aborted) setBranch(b || null);
-      } catch (err) {
-        if (aborted) return;
-        if (err?.name === "CanceledError") return;
-        setBranch(null);
-        setError(err?.response?.data?.message || "Failed to fetch branch details.");
+        const b = await getBranchByIdSmart(id);
+        if (alive) setBranch(b);
+      } catch (e) {
+        if (alive) {
+          const code = e?.response?.status;
+          setError(code === 404 ? "Branch not found (404)." : (e?.response?.data?.message || "Failed to load branch."));
+        }
       } finally {
-        if (!aborted) setLoading(false);
+        if (alive) setLoading(false);
       }
-    };
-
-    // prevent duplicate immediate calls in dev strict mode
-    if (!hasFetchedRef.current) {
-      hasFetchedRef.current = true;
-      fetchBranch();
-    } else {
-      // when id changes for real navigation, refetch
-      fetchBranch();
-    }
-
-    return () => {
-      aborted = true;
-      ctrl.abort();
-    };
+    })();
+    return () => { alive = false; };
   }, [id]);
 
-  const isActive =
-    branch &&
-    (branch.status === 1 ||
-      branch.status === "1" ||
-      branch.status === true ||
-      branch.status === "Active");
+  const isActive = isActiveStatus(branch?.status);
 
   return (
     <section className="vb-wrap">
-      {/* Header bar */}
-      <div className="ipx-head ipx-head-bar vb-head">
-        <div className="ipx-brand">
-          <h2 className="ipx-title">Branch Details</h2>
-          <p className="ipx-sub">Profile and contact information for branch #{id}.</p>
-        </div>
-        <div className="vb-head-actions">
-          <button className="ipx-btn ghost vb-back" onClick={() => navigate(-1)}>
-            <FiArrowLeft size={16} />
-            Back
-          </button>
-        </div>
+      {/* Top bar */}
+      <div className="vb-head">
+        <button className="vb-back" onClick={() => navigate(-1)}>
+          <FiArrowLeft size={18} /> Back
+        </button>
+        <div className="grow" />
+        <Link to="/branches" className="ipx-btn ghost sm">All Branches</Link>
       </div>
 
-      {/* Error */}
       {error && <div className="vb-card vb-error">{error}</div>}
 
       {/* Main card */}
-      <div className="vb-card" aria-busy={loading}>
-        {/* Title row */}
-        <div className="vb-title-row">
-          <div className="vb-title-main">
+      <div className="vb-card vb-card-elev" aria-busy={loading}>
+        {/* Identity row: 120×64 logo + name + pills */}
+        <div className="flex items-center gap-4 mb-4">
+          {loading ? <Skel w={120} h={64} r={12} /> : (
+            <Avatar url={branch?.logo_url} name={branch?.branch_name} width={120} height={64} />
+          )}
+          <div className="min-w-0">
             {loading ? (
               <>
-                <Skel w={220} h={22} />
-                <Skel w={140} />
+                <Skel w={260} h={22} r={8} />
+                <div className="mt-2 flex items-center gap-2">
+                  <Skel w={80} h={22} r={999} />
+                  <Skel w={130} h={18} r={8} />
+                </div>
               </>
             ) : (
               <>
-                <h3 className="vb-branch-name">{branch?.branch_name || "—"}</h3>
-                <div className="vb-badges">
-                  <span className={`ipx-pill ${isActive ? "ok" : "muted"}`}>
-                    {isActive ? "Active" : "Inactive"}
-                  </span>
-                  {branch?.branch_code && (
-                    <span className="vb-code-chip">Code: {branch.branch_code}</span>
-                  )}
+                <h3 className="vb-branch-name m-0">{branch?.branch_name || "—"}</h3>
+                <div className="vb-badges mt-1 flex items-center gap-2">
+                  <span className={`ipx-pill ${isActive ? "ok" : "muted"}`}>{isActive ? "Active" : "Inactive"}</span>
+                  {branch?.branch_code && <span className="vb-code-chip">Code: {branch.branch_code}</span>}
+                  {branch?.branch_location && <span className="vb-code-chip"><FaMapMarkerAlt /> {branch.branch_location}</span>}
                 </div>
               </>
             )}
           </div>
-
-          {!loading && branch?.branch_website && (
-            <a
-              className="ipx-btn primary vb-visit"
-              href={branch.branch_website}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Open website"
-            >
-              Visit Site <FaExternalLinkAlt />
-            </a>
-          )}
         </div>
 
-        {/* Content grid */}
+        {/* Details grid */}
         <div className="vb-grid">
-          {/* Contact */}
-          <div className="vb-section">
-            <div className="vb-section-head">
-              <FaPhoneAlt className="vb-icon" />
-              <h4>Contact</h4>
-            </div>
-            <div className="vb-kv">
-              <span>Primary</span>
-              <div>{loading ? <Skel w={160} /> : (branch?.branch_contact_number || "—")}</div>
-            </div>
-            <div className="vb-kv">
-              <span>Alternative</span>
-              <div>{loading ? <Skel w={140} /> : (branch?.branch_alternative_number || "—")}</div>
-            </div>
-            <div className="vb-kv">
-              <span>Email</span>
-              <div className="vb-clip">{loading ? <Skel w={220} /> : (branch?.branch_email || "—")}</div>
-            </div>
+          {/* Identity */}
+          <div className="vb-block">
+            <h4 className="vb-title">Identity</h4>
+            <KV k="Arabic Name" v={loading ? <Skel w="60%" /> : (branch?.branch_name_ar || "—")} />
+            <KV k="Address" v={loading ? (<><Skel w="80%" /><Skel w="50%" /></>) : (decodeHtml(branch?.branch_address) || "—")} />
           </div>
 
-          {/* Location */}
-          <div className="vb-section">
-            <div className="vb-section-head">
-              <FaMapMarkerAlt className="vb-icon" />
-              <h4>Location</h4>
-            </div>
-            <div className="vb-kv">
-              <span>Address</span>
-              <div className="vb-clip">{loading ? <Skel w="80%" /> : (branch?.branch_address || "—")}</div>
-            </div>
-            <div className="vb-kv">
-              <span>City / Area</span>
-              <div>{loading ? <Skel w={160} /> : (branch?.branch_location || "—")}</div>
-            </div>
-            <div className="vb-kv">
-              <span>Website</span>
-              <div className="vb-clip">
-                {loading ? (
-                  <Skel w={220} />
-                ) : branch?.branch_website ? (
-                  <a
-                    href={branch.branch_website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="vb-link"
-                  >
-                    <FaGlobe /> {branch.branch_website}
+          {/* Contacts */}
+          <div className="vb-block">
+            <h4 className="vb-title">Contacts</h4>
+            <KV k="Primary Phone" v={loading ? <Skel w="40%" /> : (<span className="flex items-center gap-2"><FaPhoneAlt className="opacity-70" />{branch?.branch_contact_number || "—"}</span>)} />
+            <KV k="Alternate Phone" v={loading ? <Skel w="40%" /> : (branch?.branch_alternative_number || "—")} />
+            <KV k="Email" v={loading ? <Skel w="60%" /> : (branch?.branch_email || "—")} />
+          </div>
+
+          {/* Web */}
+          <div className="vb-block">
+            <h4 className="vb-title">Web</h4>
+            <KV
+              k="Website"
+              v={
+                loading ? <Skel w="70%" /> :
+                branch?.branch_website ? (
+                  <a className="vb-link inline-flex items-center gap-2" href={branch.branch_website} target="_blank" rel="noreferrer">
+                    <FaGlobe /> {branch.branch_website} <FaExternalLinkAlt className="opacity-70" />
                   </a>
-                ) : (
-                  "—"
-                )}
-              </div>
-            </div>
-            <div className="vb-kv">
-              <span>Status</span>
-              <div>
-                {loading ? (
-                  <Skel w={80} h={22} r={999} />
-                ) : (
-                  <span className={`ipx-pill ${isActive ? "ok" : "muted"}`}>
-                    {isActive ? "Active" : "Inactive"}
-                  </span>
-                )}
-              </div>
-            </div>
+                ) : "—"
+              }
+            />
+          </div>
+
+          {/* Meta */}
+          <div className="vb-block">
+            <h4 className="vb-title">Created By</h4>
+            <KV k="Name" v={loading ? <Skel w="40%" /> : (branch?.created_by || "—")} />
+            <KV k="Email" v={loading ? <Skel w="60%" /> : (branch?.created_by_email || "—")} />
           </div>
         </div>
       </div>
+
+      <style>{`
+        .skel{background:#e5e7eb;position:relative;overflow:hidden}
+        .skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+          background:linear-gradient(90deg, rgba(229,231,235,0) 0%, rgba(255,255,255,.75) 50%, rgba(229,231,235,0) 100%);
+          animation:skel-shimmer 1.2s infinite}
+        @keyframes skel-shimmer{100%{transform:translateX(100%)}}
+
+        .vb-card-elev{border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 6px 20px rgba(0,0,0,.06)}
+        .vb-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:14px}
+        @media (max-width: 900px){ .vb-grid{grid-template-columns:1fr} }
+
+        .vb-block{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px}
+        .vb-title{font-size:.95rem;font-weight:700;margin:0 0 10px 0}
+
+        .vb-kv{display:grid;grid-template-columns:160px 1fr;gap:10px;padding:8px 0;border-top:1px dashed #e5e7eb}
+        .vb-kv:first-of-type{border-top:0}
+        .vb-k{color:#64748b;font-size:.85rem}
+        .vb-v{color:#0f172a}
+
+        .vb-branch-name{font-size:1.25rem;font-weight:700}
+        .vb-code-chip{background:#EEF2FF;color:#3730A3;padding:.125rem .5rem;border-radius:999px;font-size:.75rem;display:inline-flex;align-items:center;gap:.375rem}
+        .vb-link{color:#1f6feb;text-decoration:none}
+        .vb-link:hover{ text-decoration:underline }
+      `}</style>
     </section>
+  );
+}
+
+function KV({ k, v }) {
+  return (
+    <div className="vb-kv">
+      <div className="vb-k">{k}</div>
+      <div className="vb-v">{v}</div>
+    </div>
   );
 }

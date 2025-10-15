@@ -171,6 +171,11 @@ const StaffPanel = () => {
    setPage(1);
  }
 
+ const handleView = (id) => {
+  if (!id) return;
+  navigate(`/hr&staff/staff/${id}`);
+};
+
 const handleDelete = async (id) => {
   if (!id) return;
   if (!window.confirm("Delete this staff member? This cannot be undone.")) return;
@@ -363,16 +368,20 @@ const handleDelete = async (id) => {
                     <td className="px-5 py-3 align-middle flex gap-2  ">
 <div className="flex items-center gap-2">
   {/* View */}
-  <span
-    className="inline-flex h-8 w-8 items-center justify-center rounded-full
-               bg-blue-50 text-blue-700 border border-blue-200
-               hover:bg-blue-100 hover:border-blue-300
-               focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200
-               transition-colors cursor-pointer"
-    title="View"
-  >
-    <FaEye />
-  </span>
+<span
+  onClick={() => handleView(user.id)}
+  className="inline-flex h-8 w-8 items-center justify-center rounded-full
+             bg-blue-50 text-blue-700 border border-blue-200
+             hover:bg-blue-100 hover:border-blue-300
+             focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200
+             transition-colors cursor-pointer"
+  title="View"
+  role="button"
+  tabIndex={0}
+  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleView(user.id)}
+>
+  <FaEye />
+</span>
 
   {/* Edit */}
   <span

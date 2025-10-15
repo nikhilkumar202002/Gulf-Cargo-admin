@@ -322,3 +322,8 @@
 .form-grid .file-input-red:active::-webkit-file-upload-button {
   transform: translateY(1px);
 }
+
+.view-branch-logo{
+  width: 120px;
+  height: 45px;
+}

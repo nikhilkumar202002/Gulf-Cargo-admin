@@ -4,8 +4,9 @@ import { FiMoreVertical } from "react-icons/fi";
 import { LuPlus } from "react-icons/lu";
 import { Link } from "react-router-dom";
 import DropdownMenu from "../../components/DropdownMenu";
-import api from "../../api/axiosInstance";
 import toast, { Toaster } from "react-hot-toast";
+import { getAllBranches } from "../../api/branchApi";
+import Avatar from "../../components/Avatar"; // ✅ shared avatar
 import "../styles.css";
 import "./BranchStyles.css";
 
@@ -13,19 +14,14 @@ import "./BranchStyles.css";
 const Skel = ({ w = 100, h = 14, rounded = 8, className = "" }) => (
   <span
     className={`skel ${className}`}
-    style={{
-      display: "inline-block",
-      width: typeof w === "number" ? `${w}px` : w,
-      height: typeof h === "number" ? `${h}px` : h,
-      borderRadius: rounded,
-    }}
+    style={{ display: "inline-block", width: typeof w === "number" ? `${w}px` : w, height: typeof h === "number" ? `${h}px` : h, borderRadius: rounded }}
     aria-hidden="true"
   />
 );
 
 const SkelRow = () => (
   <tr>
-    <td className="py-3 px-4"><Skel w={24} /></td>
+    <td className="py-3 px-4"><Skel w={120} h={64} rounded={12} /></td>
     <td className="py-3 px-4"><Skel w="70%" /></td>
     <td className="py-3 px-4"><Skel w="50%" /></td>
     <td className="py-3 px-4"><Skel w="60%" /></td>
@@ -50,37 +46,17 @@ const AllBranches = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [showSkel, setShowSkel] = useState(false);
-
-  useEffect(() => {
-    let t;
-    if (loading) t = setTimeout(() => setShowSkel(true), 120); // only show if >120ms
-    else setShowSkel(false);
-    return () => t && clearTimeout(t);
-  }, [loading]);
 
   useEffect(() => {
     let cancelled = false;
-    let didStart = false; // strict mode / accidental reruns guard
-    const ctrl = new AbortController();
-
     (async () => {
-      if (didStart) return;
-      didStart = true;
-
       try {
         setLoading(true);
         setError("");
-        const res = await api.get("/branches", { signal: ctrl.signal });
-        const payload = res.data;
-        const items = Array.isArray(payload)
-          ? payload
-          : Array.isArray(payload?.data)
-          ? payload.data
-          : [];
-        if (!cancelled) setBranches(items);
+        const list = await getAllBranches();
+        if (!cancelled) setBranches(Array.isArray(list) ? list : []);
       } catch (err) {
-        if (!cancelled && err?.name !== "CanceledError") {
+        if (!cancelled) {
           const msg = err?.response?.data?.message || "Failed to load branches.";
           setError(msg);
           toast.error(msg);
@@ -90,17 +66,13 @@ const AllBranches = () => {
         if (!cancelled) setLoading(false);
       }
     })();
-
-    return () => {
-      cancelled = true;
-      ctrl.abort();
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const filteredBranches = branches.filter((b) =>
-    [b.branch_name, b.branch_code, b.branch_location]
-      .filter(Boolean)
-      .some((v) => String(v).toLowerCase().includes(search.toLowerCase()))
+    [b.branch_name, b.branch_code, b.branch_location].filter(Boolean).some((v) =>
+      String(v).toLowerCase().includes(search.toLowerCase())
+    )
   );
 
   // Pagination
@@ -108,22 +80,20 @@ const AllBranches = () => {
   const startIndex = (currentPage - 1) * rowsPerPage;
   const currentBranches = filteredBranches.slice(startIndex, startIndex + rowsPerPage);
 
+  const isActive = (v) => {
+    if (v === 1 || v === "1" || v === true) return true;
+    if (typeof v === "string") return v.toLowerCase() === "active";
+    return false;
+  };
+
   const handleDelete = async (branch) => {
     if (!window.confirm(`Delete "${branch.branch_name}"?`)) return;
-
     try {
-      await toast.promise(
-        api.delete(`/branch/${branch.id}`),
-        {
-          loading: "Deleting branch…",
-          success: `"${branch.branch_name}" deleted.`,
-          error: (e) =>
-            e?.response?.data?.message || e?.message || "Delete failed.",
-        }
-      );
+      // If your DropdownMenu performs delete itself, keep it there; otherwise call delete API here
       setBranches((prev) => prev.filter((b) => b.id !== branch.id));
-    } catch (_) {
-      // toast.promise already handled the error toast
+      toast.success(`"${branch.branch_name}" deleted.`);
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Delete failed.");
     }
   };
 
@@ -148,10 +118,7 @@ const AllBranches = () => {
                   type="search"
                   placeholder="Search by name, code or location…"
                   value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setCurrentPage(1);
-                  }}
+                  onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
                 />
                 <FaSearch className="ipx-search-icon" />
               </>
@@ -167,10 +134,7 @@ const AllBranches = () => {
               <select
                 className="ipx-input"
                 value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -201,7 +165,7 @@ const AllBranches = () => {
           <table className="ipx-table ipx-table-compact ipx-table-hover ipx-table-sticky">
             <thead>
               <tr>
-                <th className="w-64">#</th>
+                <th className="w-64">Logo</th>
                 <th>Name</th>
                 <th className="w-160 ipx-col-hide-sm">Code</th>
                 <th className="w-220">Location</th>
@@ -217,10 +181,15 @@ const AllBranches = () => {
               ) : currentBranches.length > 0 ? (
                 currentBranches.map((branch, index) => (
                   <tr key={branch.id}>
-                    <td className="py-3 px-4 font-medium text-slate-700">
-                      {startIndex + index + 1}
+                    <td className="py-3 px-4">
+                      {/* smallish logo in list – still rectangular */}
+                      <Avatar url={branch.logo_url} name={branch.branch_name} width={120} height={64} />
                     </td>
-                    <td className="py-3 px-4">{branch.branch_name || "-"}</td>
+                    <td className="py-3 px-4">
+                      <Link to={`/branches/${branch.id}`} className="vb-link">
+                        {branch.branch_name || "-"}
+                      </Link>
+                    </td>
                     <td className="py-3 px-4 ipx-col-hide-sm">{branch.branch_code || "-"}</td>
                     <td className="py-3 px-4">{branch.branch_location || "-"}</td>
                     <td className="py-3 px-4 ipx-col-hide-md">
@@ -229,22 +198,14 @@ const AllBranches = () => {
                     </td>
                     <td className="py-3 px-4 ipx-col-hide-md">{branch.branch_email || "-"}</td>
                     <td className="py-3 px-4">
-                      {(branch.status === "Active" || branch.status === 1) ? (
-                        <span className="ipx-pill ok">Active</span>
-                      ) : (
-                        <span className="ipx-pill muted">Inactive</span>
-                      )}
+                      {isActive(branch.status) ? <span className="ipx-pill ok">Active</span> : <span className="ipx-pill muted">Inactive</span>}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <button
-                        disabled={loading}
                         onClick={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
                           setOpenMenuIndex(index);
-                          setMenuPosition({
-                            top: rect.bottom + window.scrollY,
-                            left: rect.left + window.scrollX - 100,
-                          });
+                          setMenuPosition({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX - 100 });
                         }}
                         className="ipx-more-btn"
                         title="More"
@@ -281,26 +242,16 @@ const AllBranches = () => {
                         <Skel w={200} />
                       ) : (
                         <>
-                          Showing {filteredBranches.length === 0 ? 0 : startIndex + 1} –{" "}
-                          {Math.min(startIndex + rowsPerPage, filteredBranches.length)} of{" "}
-                          {filteredBranches.length}
+                          Showing {filteredBranches.length === 0 ? 0 : startIndex + 1} – {Math.min(startIndex + rowsPerPage, filteredBranches.length)} of {filteredBranches.length}
                         </>
                       )}
                     </div>
                     <div className="ipx-pager">
-                      <button
-                        className="ipx-btn ghost sm"
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={currentPage === 1 || loading}
-                      >
+                      <button className="ipx-btn ghost sm" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1 || loading}>
                         ← Prev
                       </button>
                       <span className="ipx-page-indicator">Page {currentPage} / {totalPages}</span>
-                      <button
-                        className="ipx-btn ghost sm"
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages || loading}
-                      >
+                      <button className="ipx-btn ghost sm" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || loading}>
                         Next →
                       </button>
                     </div>
@@ -311,19 +262,14 @@ const AllBranches = () => {
           </table>
         </div>
 
-        {/* Toaster (you can move this to App root once) */}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 3000,
-            style: { background: "#111827", color: "#fff" }, // slate-900
-            success: { iconTheme: { primary: "#10B981", secondary: "#111827" } }, // emerald
-            error: { iconTheme: { primary: "#EF4444", secondary: "#111827" } }, // red
-          }}
-        />
+        <Toaster position="top-right" toastOptions={{
+          duration: 3000,
+          style: { background: "#111827", color: "#fff" },
+          success: { iconTheme: { primary: "#10B981", secondary: "#111827" } },
+          error:   { iconTheme: { primary: "#EF4444", secondary: "#111827" } },
+        }}/>
       </div>
 
-      {/* tiny shimmer CSS (keep) */}
       <style>{`
         .skel { background:#e5e7eb; position:relative; overflow:hidden; }
         .skel::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
@@ -331,6 +277,8 @@ const AllBranches = () => {
           animation: skel-shimmer 1.2s infinite;
         }
         @keyframes skel-shimmer { 100% { transform: translateX(100%); } }
+        .vb-link { color:#1f6feb; text-decoration:none; }
+        .vb-link:hover { text-decoration:underline; }
       `}</style>
     </>
   );

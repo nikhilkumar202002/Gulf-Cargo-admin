@@ -12,6 +12,14 @@ const buildDeleteUrl = (id) => {
   return DELETE_PATTERN.replace(":id", String(id));
 };
 
+const SHOW_PATTERN = import.meta.env.VITE_STAFF_SHOW_PATTERN || "/staff/:id";
+
+const buildShowUrl = (id) => {
+  if (!id && id !== 0) throw new Error("Staff id is required");
+  return SHOW_PATTERN.replace(":id", String(id));
+};
+
+
 // Register
 export const register = async (userData) => {
   const res = await axiosInstance.post("/register", userData);
@@ -191,4 +199,14 @@ export const deleteStaff = async (id, axiosOpts = {}) => {
     e.status = status;
     throw e;
   }
+};
+
+/**
+ * Get a single staff record by id.
+ * Usage: const staff = await getStaff(2)
+ */
+export const getStaff = async (id, params = {}, axiosOpts = {}) => {
+  const url = buildShowUrl(id);
+  const res = await axiosInstance.get(url, { params, ...axiosOpts });
+  return unwrap(res);
 };

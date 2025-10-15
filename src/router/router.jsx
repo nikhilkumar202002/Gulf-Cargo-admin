@@ -178,7 +178,7 @@ const router = createBrowserRouter([
 
       { path: "hr&staff/allstaffs", element: <StaffPanel /> },
       { path: "hr&staff/createstaffs", element: <NewStaffForm /> },
-      { path: "hr&staff/view", element: <StaffView /> },
+      { path: "hr&staff/staff/:id", element: <StaffView /> },
 
       { path: "drivers/alldriverslist", element: <ViewAllDriver /> },
       { path: "drivers/addnewdriver", element: <AddDriver /> },

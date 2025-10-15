@@ -3,41 +3,63 @@ import api from "./axiosInstance";
 
 /* ---------------- helpers ---------------- */
 const unwrap = (res) => res?.data ?? res;
+const pick = (d = {}) => ({
+  id: d.id ?? d.branch_id ?? null,
+  branch_name: d.branch_name ?? "",
+  branch_name_ar: d.branch_name_ar ?? "",
+  branch_code: d.branch_code ?? "",
+  branch_alternative_number: d.branch_alternative_number ?? "",
+  branch_email: d.branch_email ?? "",
+  logo_url: d.logo_url ?? "",
+  branch_address: d.branch_address ?? "",
+  branch_location: d.branch_location ?? "",
+  branch_contact_number: d.branch_contact_number ?? "",
+  branch_website: d.branch_website ?? "",
+  status: d.status ?? "",
+  created_by: d.created_by ?? "",
+  created_by_email: d.created_by_email ?? "",
+});
 
-// Pull an array out of common API shapes: {data:[...]}, {data:{data:[...]}}, {branches:[...]}, [...]
-const normalizeArray = (o) => {
-  if (!o) return [];
-  if (Array.isArray(o)) return o;
+export async function getBranchByIdSmart(id) {
+  // If your server path is stable, keep only the right one:
+  const candidates = [
+    `/branches/${id}`,
+    `/branch/${id}`,
+    `/api/branches/${id}`,
+    `/api/branch/${id}`,
+  ];
+  let lastErr;
+  for (const path of candidates) {
+    try {
+      const { data } = await api.get(path);
 
-  const d = o.data ?? o.branches ?? o.items ?? null;
-  if (Array.isArray(d)) return d;
-  if (Array.isArray(d?.data)) return d.data;        // Laravel paginator
-  if (Array.isArray(o?.data?.data)) return o.data.data;
+      // NEW: support { success, branch: {...} }
+      const obj =
+        data?.branch ??
+        data?.data?.branch ??
+        data?.data?.data ??
+        data?.data ??
+        data;
 
-  const firstArr = Object.values(o).find(Array.isArray);
-  return Array.isArray(firstArr) ? firstArr : [];
-};
-
-// Detect "active" truthiness across common shapes
-const isActive = (b) => {
-  const v =
-    b?.status ?? b?.active ?? b?.is_active ?? b?.isActive ?? b?.enabled ?? b?.isEnabled;
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number") return v === 1;
-  if (typeof v === "string") {
-    const s = v.toLowerCase();
-    return s === "active" || s === "1" || s === "true" || s === "enabled";
+      if (obj) return pick(obj);
+      return pick({});
+    } catch (e) {
+      if (e?.response?.status === 404) { lastErr = e; continue; }
+      throw e;
+    }
   }
-  return false;
-};
+  throw lastErr || new Error("Branch not found");
+}
 
 /* -------------- core list -------------- */
 
 // Get All Branches (optionally with params like {page, per_page, search})
-export const getAllBranches = async (params = {}) => {
-  const res = await api.get("/branches", { params });
-  return normalizeArray(unwrap(res));
-};
+export async function getAllBranches() {
+  const { data } = await api.get(`/branches`);
+  // keep your existing list unwrapping as needed
+  const list = data?.data?.data ?? data?.data ?? data?.items ?? data?.results ?? data?.branches ?? [];
+  return Array.isArray(list) ? list.map(pick) : [];
+}
 
 export const getActiveBranches = async (params = {}) => {
   // Try dedicated endpoint first

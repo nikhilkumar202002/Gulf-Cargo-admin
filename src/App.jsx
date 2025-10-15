@@ -7,13 +7,12 @@ import Preloader from "./components/Preloader";
 
 export default function App() {
   const dispatch = useDispatch();
-  const { token, status, user } = useSelector((s) => s.auth || {});
+  const { token, status, user, sessionId } = useSelector((s) => s.auth || {});
   const [splashDone, setSplashDone] = useState(false);
-
-  // JS version: no TypeScript generic here
   const bootstrappedTokenRef = useRef(null);
 
-  // One-time splash
+  const bcRef = useRef(null);
+
   useEffect(() => {
     const t = setTimeout(() => setSplashDone(true), 500);
     return () => clearTimeout(t);
@@ -38,6 +37,40 @@ export default function App() {
         });
     }
   }, [dispatch, token, status, user]);
+
+ // Cross-tab logout & login awareness (same browser profile).
+  useEffect(() => {
+    // BroadcastChannel for instant tab messaging
+    bcRef.current = new BroadcastChannel("auth");
+    const bc = bcRef.current;
+    bc.onmessage = (e) => {
+      if (e?.data === "logout") dispatch(clearAuth());
+      if (e?.data?.type === "session-update") {
+        const incomingSid = e.data.sessionId;
+        if (sessionId && incomingSid && incomingSid !== sessionId) {
+          dispatch(clearAuth());
+        }
+      }
+    };
+
+    // storage event fires on other tabs when localStorage changes
+    const onStorage = (ev) => {
+      if (ev.key === "session_id") {
+        if (sessionId && ev.newValue && ev.newValue !== sessionId) {
+          dispatch(clearAuth());
+        }
+      }
+      if (ev.key === "token" && !ev.newValue && token) {
+        dispatch(clearAuth());
+      }
+    };
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      bc.close();
+    };
+  }, [dispatch, token, sessionId]);
 
   const authBootstrapping = Boolean(token) && (status === "idle" || status === "loading") && !user;
   const stillBlocking = !splashDone || authBootstrapping;
