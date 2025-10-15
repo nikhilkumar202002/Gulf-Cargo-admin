@@ -1,39 +1,93 @@
-// api/branchApi.js
+// src/api/branchApi.js
 import api from "./axiosInstance";
 
-/* ---------------- helpers ---------------- */
+/* ───────────────────────────── helpers ───────────────────────────── */
+
+const has = (v) => v !== null && v !== undefined;
 const unwrap = (res) => res?.data ?? res;
+
+/**
+ * Return the first array-like payload from a lot of common API shapes.
+ * Works for:
+ *  - { data: { data: [...] } }
+ *  - { data: { branches: [...] } }
+ *  - { branches: [...] }
+ *  - { items: [...] }, { results: [...] }, etc.
+ */
+const firstArray = (obj) => {
+  if (Array.isArray(obj)) return obj;
+  const o = unwrap(obj);
+  if (!o || typeof o !== "object") return [];
+
+  const paths = [
+    o?.data?.data, o?.data?.items, o?.data?.results, o?.data?.branches, o?.data?.list,
+    o?.data, o?.items, o?.results, o?.branches, o?.list,
+  ];
+  for (const p of paths) if (Array.isArray(p)) return p;
+
+  const firstArr = Object.values(o).find(Array.isArray);
+  return Array.isArray(firstArr) ? firstArr : [];
+};
+
+/**
+ * Normalize ONE branch object to the fields the UI expects.
+ */
 const pick = (d = {}) => ({
-  id: d.id ?? d.branch_id ?? null,
-  branch_name: d.branch_name ?? "",
-  branch_name_ar: d.branch_name_ar ?? "",
-  branch_code: d.branch_code ?? "",
-  branch_alternative_number: d.branch_alternative_number ?? "",
-  branch_email: d.branch_email ?? "",
-  logo_url: d.logo_url ?? "",
-  branch_address: d.branch_address ?? "",
-  branch_location: d.branch_location ?? "",
-  branch_contact_number: d.branch_contact_number ?? "",
-  branch_website: d.branch_website ?? "",
-  status: d.status ?? "",
+  id: d.id ?? d.branch_id ?? d._id ?? null,
+
+  branch_name: d.branch_name ?? d.name ?? d.title ?? "",
+  branch_name_ar: d.branch_name_ar ?? d.name_ar ?? d.ar_name ?? "",
+
+  branch_code: d.branch_code ?? d.code ?? "",
+  branch_location: d.branch_location ?? d.location ?? "",
+  branch_address: d.branch_address ?? d.address ?? "",
+
+  branch_contact_number: d.branch_contact_number ?? d.contact_number ?? d.phone ?? "",
+  branch_alternative_number: d.branch_alternative_number ?? d.alternative_number ?? d.alt_phone ?? "",
+  branch_email: d.branch_email ?? d.email ?? "",
+
+  logo_url: d.logo_url ?? d.logo ?? d.logoUrl ?? "",
+  branch_website: d.branch_website ?? d.website ?? "",
+
+  status: d.status ?? d.active ?? d.is_active ?? "",
   created_by: d.created_by ?? "",
   created_by_email: d.created_by_email ?? "",
 });
 
-export async function getBranchByIdSmart(id) {
-  // If your server path is stable, keep only the right one:
-  const candidates = [
+/** Normalize ANY list response to an array of `pick(x)` */
+const normalizeArray = (raw) => firstArray(raw).map(pick);
+
+/** Truthy “active” across different backends */
+const isActive = (b) => {
+  const s = String(b?.status ?? "").trim().toLowerCase();
+  return s === "1" || s === "active" || s === "true" || s === "yes";
+};
+
+/** Header builder (token optional) */
+const withAuth = (token, extra = {}) =>
+  token ? { headers: { Authorization: `Bearer ${token}` }, ...extra } : { ...extra };
+
+/* ──────────────────────── Single / by id ───────────────────────── */
+
+/**
+ * Fetch ONE branch by id from multiple common endpoints and unwrap/normalize.
+ * Usage: const b = await getBranchByIdSmart(id, token)
+ */
+export async function getBranchByIdSmart(id, token) {
+  if (!has(id)) throw new Error("Branch id is required");
+
+  const tries = [
     `/branches/${id}`,
     `/branch/${id}`,
     `/api/branches/${id}`,
     `/api/branch/${id}`,
   ];
-  let lastErr;
-  for (const path of candidates) {
-    try {
-      const { data } = await api.get(path);
 
-      // NEW: support { success, branch: {...} }
+  let lastErr;
+  for (const url of tries) {
+    try {
+      const res = await api.get(url, withAuth(token));
+      const data = unwrap(res);
       const obj =
         data?.branch ??
         data?.data?.branch ??
@@ -41,106 +95,134 @@ export async function getBranchByIdSmart(id) {
         data?.data ??
         data;
 
-      if (obj) return pick(obj);
-      return pick({});
+      if (obj && typeof obj === "object") return pick(obj);
     } catch (e) {
-      if (e?.response?.status === 404) { lastErr = e; continue; }
-      throw e;
+      lastErr = e;
+      // try next endpoint
     }
   }
+
+  // As a final fallback: list, then find the id locally
+  try {
+    const list = await getAllBranches({}, token);
+    const found = list.find((x) => String(x.id) === String(id));
+    if (found) return found;
+  } catch (e) {
+    lastErr = e;
+  }
+
   throw lastErr || new Error("Branch not found");
 }
 
-/* -------------- core list -------------- */
-
-// Get All Branches (optionally with params like {page, per_page, search})
-export async function getAllBranches() {
-  const { data } = await api.get(`/branches`);
-  // keep your existing list unwrapping as needed
-  const list = data?.data?.data ?? data?.data ?? data?.items ?? data?.results ?? data?.branches ?? [];
-  return Array.isArray(list) ? list.map(pick) : [];
-}
-
-export const getActiveBranches = async (params = {}) => {
-  // Try dedicated endpoint first
-  try {
-    const res = await api.get("/branches?status=1", { params });
-    const list = normalizeArray(unwrap(res));
-    if (list.length) return list;
-  } catch (_) {
-    // ignore; fallback below
-  }
-
-  const merged = {
-    per_page: 500,
-    active: 1,
-    status: "Active",
-    ...params,
-  };
-  const res = await api.get("/branches", { params: merged });
-  const list = normalizeArray(unwrap(res));
-  return list.filter(isActive);
-};
-
-
-export const getInactiveBranches = async (params = {}) => {
-  try {
-    const res = await api.get("/inactive-branches", { params });
-    const list = normalizeArray(unwrap(res));
-    if (list.length) return list;
-  } catch (_) {
-    // ignore; fallback below
-  }
-
-  const res = await api.get("/branches", { params: { per_page: 500, ...params } });
-  const list = normalizeArray(unwrap(res));
-  return list.filter((b) => !isActive(b));
-};
-
-/* -------------- CRUD -------------- */
-
-// View Single Branch
-export const viewBranch = async (id) => {
-  const { data } = await api.get(`/branch/${id}`);
-  return data; // Return data without masking
-};
-
-// Store Branch
-export const storeBranch = async (branchData) => {
-  const { data } = await api.post("/branch", branchData);
-  return data; // Return data without masking
-};
-
-// Update Branch
-export const updateBranch = async (id, branchData) => {
-  const { data } = await api.put(`/branch/${id}`, branchData);
-  return data; // Return data without masking
-};
-
-// Delete Branch
-export const deleteBranch = async (id) => {
-  const { data } = await api.delete(`/branch/${id}`);
-  return data; // Return data without masking
-};
-
+/* ────────────────────────── Lists ─────────────────────────── */
 
 /**
- * Get users of a specific branch
- * @param {number|string} branchId - The ID of the branch
- * @returns {Array} - List of users in that branch
+ * Get ALL branches (any status). Tries common list endpoints then normalizes.
  */
-export const getBranchUsers = async (branchId) => {
+export async function getAllBranches(params = {}, token) {
+  const attempts = [
+    { url: "/branches",        cfg: withAuth(token, { params }) },
+    { url: "/api/branches",    cfg: withAuth(token, { params }) },
+    { url: "/branch",          cfg: withAuth(token, { params }) },
+  ];
+
+  for (const a of attempts) {
+    try {
+      const res = await api.get(a.url, a.cfg);
+      const list = normalizeArray(res);
+      if (list.length) return list;
+    } catch (_) {}
+  }
+
+  // Nothing worked
+  return [];
+}
+
+/**
+ * Get ACTIVE branches only. Token-aware and endpoint-agnostic.
+ * Returns a normalized array.
+ */
+export async function getActiveBranches(params = {}, token) {
+  const attempts = [
+    { url: "/branches",        cfg: withAuth(token, { params: { status: 1, ...params } }) },
+    { url: "/branches/active", cfg: withAuth(token, { params }) },
+    { url: "/active-branches", cfg: withAuth(token, { params }) },
+    { url: "/branch/active",   cfg: withAuth(token, { params }) },
+    { url: "/api/branches",    cfg: withAuth(token, { params: { status: 1, ...params } }) },
+  ];
+
+  for (const a of attempts) {
+    try {
+      const res = await api.get(a.url, a.cfg);
+      const list = normalizeArray(res).filter(isActive);
+      if (list.length) return list;
+    } catch (_) {}
+  }
+
+  // Broad fallback: fetch all, filter locally
+  try {
+    const res = await api.get("/branches", withAuth(token, { params: { per_page: 500, ...params } }));
+    return normalizeArray(res).filter(isActive);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get INACTIVE branches only.
+ */
+export async function getInactiveBranches(params = {}, token) {
+  const attempts = [
+    { url: "/branches/inactive", cfg: withAuth(token, { params }) },
+    { url: "/inactive-branches", cfg: withAuth(token, { params }) },
+  ];
+
+  for (const a of attempts) {
+    try {
+      const res = await api.get(a.url, a.cfg);
+      const list = normalizeArray(res).filter((b) => !isActive(b));
+      if (list.length) return list;
+    } catch (_) {}
+  }
+
+  // Fallback: fetch all and filter
+  try {
+    const res = await api.get("/branches", withAuth(token, { params: { per_page: 500, ...params } }));
+    return normalizeArray(res).filter((b) => !isActive(b));
+  } catch {
+    return [];
+  }
+}
+
+/* ───────────────────────── CRUD passthroughs ───────────────────────
+   (Keep these if your UI calls them elsewhere; they return raw data)
+--------------------------------------------------------------------- */
+
+export const viewBranch   = async (id, token) =>
+  (await api.get(`/branch/${id}`, withAuth(token))).data;
+
+export const storeBranch  = async (payload, token) =>
+  (await api.post("/branch", payload, withAuth(token))).data;
+
+export const updateBranch = async (id, payload, token) =>
+  (await api.put(`/branch/${id}`, payload, withAuth(token))).data;
+
+export const deleteBranch = async (id, token) =>
+  (await api.delete(`/branch/${id}`, withAuth(token))).data;
+
+/* ─────────────────────────── Users in a branch ───────────────────── */
+
+export const getBranchUsers = async (branchId, token) => {
   if (!branchId) return [];
   try {
-    const { data } = await api.get(`/branches/${branchId}/users`);
-    // normalize common shapes
+    const res = await api.get(`/branches/${branchId}/users`, withAuth(token));
+    const data = unwrap(res);
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.data)) return data.data;
     if (Array.isArray(data?.users)) return data.users;
-    // last-resort: first array found
     const firstArr = Object.values(data || {}).find(Array.isArray);
     return Array.isArray(firstArr) ? firstArr : [];
-  } catch (err) {
+  } catch {
     return [];
   }
 };

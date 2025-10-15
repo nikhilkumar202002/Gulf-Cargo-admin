@@ -6,6 +6,9 @@
 
 .invoice-sheet {
   font-family: "Inter";
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .invoice-qrcode {
@@ -22,7 +25,7 @@
   width: 100%;
 
   img {
-    width: 80px;
+    width: 100px;
     height: auto;
   }
 }
@@ -35,10 +38,19 @@
 .header-invoice-address {
   font-size: 12px;
   font-family: "Inter";
-  font-weight: 600;
+  font-weight: 700;
   width: 100%;
+  text-transform: uppercase;
+  color: var(--primary-color);
+  line-height: 15px;
+  padding-top: 10px;
 }
 
+.header-invoice-branch-contact{
+  font-size: 13px;
+  font-family: "Inter";
+  font-weight: 600;
+}
 .total-card-money {
   font-size: 11px;
 }
@@ -186,7 +198,7 @@
   font-size: 12px;
    font-weight: 500;
    font-family: "Inter";
-   color: var(--secondary-color);
+   color: white;
    font-weight: 600;
 }
 .invoice-top-header{
@@ -240,11 +252,21 @@
   border: 1px solid black;
   
 }
-.invoice-sheet-container{
+.invoice-main-section{
   display: flex;
   justify-content: center;
   align-items: center;
 }
 .box-summary-table{
   background-color: white;
+}
+
+.header-invoice-branch-name{
+  font-size: 16px;
+  color: var(--secondary-color);
+}
+.header-invoice-branch-arname{
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--primary-color);
 }

@@ -46,13 +46,11 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const tooBig = (f) => f && f.size > MAX_FILE_BYTES;
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// Allow 6–15 digits (E.164 max 15). If you want 10–15, change {6,15} to {10,15}.
+// Allow 9–15 digits.
 const phoneRe = /^[0-9]{9,15}$/;
 const passwordRe = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/; // >=6 chars, at least 1 letter & 1 digit
 
-// --- phone helpers (same approach as AddBranch) ---
-const onlyDigits = (s = "") => (s || "").replace(/\D+/g, "");
-
+// --- phone helpers ---
 const normalizeCode = (code) => {
   if (!code) return "";
   const c = String(code).trim();
@@ -154,36 +152,70 @@ const StaffCreate = () => {
     if (!token) return;
 
     (async () => {
+      // BRANCHES
       try {
         setLoadingBranches(true);
-        setBranches(toList(await getActiveBranches()));
-      } catch { setBranches([]); }
-      finally { setLoadingBranches(false); }
+        const list = await getActiveBranches({}, token); // pass token
+        const arr = Array.isArray(list) ? list : [];
+        setBranches(arr);
 
+        // default to logged-in user's branch if available, else keep current selection, else first
+        if (!selectedBranch && arr.length) {
+          const auth = (() => {
+            try { return JSON.parse(localStorage.getItem("auth") || "{}"); } catch { return {}; }
+          })();
+          const myId = auth?.user?.branch?.id ?? auth?.user?.branch_id ?? null;
+          const pickId =
+            (myId && arr.find(b => String(b.id) === String(myId))?.id) ||
+            arr[0]?.id;
+          if (pickId) setSelectedBranch(String(pickId));
+        }
+      } catch (e) {
+        console.error("Failed to load branches", e);
+        setBranches([]);
+      } finally {
+        setLoadingBranches(false);
+      }
+
+      // VISAS
       try {
         setLoadingVisas(true);
         setVisas(toList(await getActiveVisaTypes(token)));
-      } catch { setVisas([]); }
-      finally { setLoadingVisas(false); }
+      } catch {
+        setVisas([]);
+      } finally {
+        setLoadingVisas(false);
+      }
 
+      // ROLES
       try {
         setLoadingRoles(true);
         setRoles(toList(await getAllRoles()));
-      } catch { setRoles([]); }
-      finally { setLoadingRoles(false); }
+      } catch {
+        setRoles([]);
+      } finally {
+        setLoadingRoles(false);
+      }
 
+      // DOCUMENT TYPES
       try {
         setLoadingDocTypes(true);
         setDocTypes(toList(await getActiveDocumentTypes()));
-      } catch { setDocTypes([]); }
-      finally { setLoadingDocTypes(false); }
+      } catch {
+        setDocTypes([]);
+      } finally {
+        setLoadingDocTypes(false);
+      }
 
+      // PHONE CODES
       try {
         const pc = await getPhoneCodes();
         setPhoneCodes(pc);
-      } catch { setPhoneCodes([]); }
+      } catch {
+        setPhoneCodes([]);
+      }
     })();
-  }, [token]);
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (Array.isArray(phoneCodes) && phoneCodes.length && !phoneCodeId) {
@@ -218,9 +250,9 @@ const StaffCreate = () => {
     if (!documentNumber.trim()) next.documentNumber = "Enter document number.";
     if (!phoneCodeId) next.phoneCodeId = "Select a country code.";
 
-    // Phone validation (digits only, 6–15)
+    // Phone validation (digits only, 9–15)
     if (!phoneRe.test(contactNumber)) {
-       next.contactNumber = "Enter 9–15 digits.";
+      next.contactNumber = "Enter 9–15 digits.";
     }
 
     const photo = photoRef.current?.files?.[0];
@@ -312,10 +344,10 @@ const StaffCreate = () => {
     formData.append("role", roleName);
     formData.append("role_id", String(selectedRole));
 
-    // ☑ PHONE CODE FIX — send both selected code id and the code itself
+    // phone fields
     formData.append("phone_code_id", String(phoneCodeId));
     formData.append("phone_code", phoneCode);
-    formData.append("contact_number", contactNumber); // national digits only (code is separate)
+    formData.append("contact_number", contactNumber); // national digits only
 
     formData.append("branch_id", String(selectedBranch));
     formData.append("status", status === "" ? "1" : String(status));
@@ -329,7 +361,6 @@ const StaffCreate = () => {
     formData.append("document_id", String(selectedDocType));
     formData.append("document_number", documentNumber.trim());
 
-    
     if (photo) formData.append("profile_pic", photo, photo.name);
     docFiles.forEach((f) => formData.append("documents[]", f, f.name));
 
@@ -544,7 +575,6 @@ const StaffCreate = () => {
                       }
 
                       const digits = (payload || "").replace(/\D+/g, "");
-                      // hard cap at E.164 max 15 national digits (we validate 6–15 later)
                       setContactNumber(digits.slice(0, 15));
                     }}
                     onBlur={() => markTouched("contactNumber")}
@@ -572,14 +602,23 @@ const StaffCreate = () => {
                 aria-describedby="branch-err"
                 required
               >
-                <option value="">{loadingBranches ? "Loading branches..." : "Select Branch"}</option>
-                {!loadingBranches && branches.map((b) => (
-                  <option key={getId(b)} value={String(getId(b))}>
+                <option value="">
+                  {loadingBranches
+                    ? "Loading branches..."
+                    : branches.length
+                    ? "Select Branch"
+                    : "No active branches found"}
+                </option>
+
+                {branches.map((b) => (
+                  <option key={String(b.id)} value={String(b.id)}>
                     {getBranchLabel(b)}
                   </option>
                 ))}
               </select>
-              {err("selectedBranch") && <p id="branch-err" className="text-xs text-red-600 mt-1">{errors.selectedBranch}</p>}
+              {err("selectedBranch") && (
+                <p id="branch-err" className="text-xs text-red-600 mt-1">{errors.selectedBranch}</p>
+              )}
             </div>
           </div>
 
