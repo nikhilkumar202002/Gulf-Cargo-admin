@@ -207,8 +207,25 @@ export const storeBranch  = async (payload, token) =>
 export const updateBranch = async (id, payload, token) =>
   (await api.put(`/branch/${id}`, payload, withAuth(token))).data;
 
-export const deleteBranch = async (id, token) =>
-  (await api.delete(`/branch/${id}`, withAuth(token))).data;
+export const deleteBranch = async (id, token) => {
+  try {
+    // Primary: real DELETE
+    const res = await api.delete(`/branch/${id}`, withAuth(token));
+    return res.data;
+  } catch (e) {
+    // Some environments block DELETE/PUT. Fallback to POST + _method=DELETE.
+    const status = e?.response?.status;
+    if (status === 405 || status === 404) {
+      const fd = new FormData();
+      fd.append("_method", "DELETE");
+      const res = await api.post(`/branch/${id}`, fd, withAuth(token, {
+        headers: { "Content-Type": "multipart/form-data" },
+      }));
+      return res.data;
+    }
+    throw e;
+  }
+};
 
 /* ─────────────────────────── Users in a branch ───────────────────── */
 

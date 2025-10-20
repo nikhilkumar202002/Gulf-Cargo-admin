@@ -1,11 +1,10 @@
-// components/DropdownMenu.jsx
+
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { FaEye, FaEdit, FaTrash } from "react-icons/fa";
 import React, { useEffect, useRef } from "react";
 
-
-export default function DropdownMenu({ branch, position, onClose, handleDelete  }) {
+export default function DropdownMenu({ branch, position, onClose, handleDelete, deletingId = null }) {
     const menuRef = useRef(null);
 
      useEffect(() => {
@@ -57,6 +56,7 @@ export default function DropdownMenu({ branch, position, onClose, handleDelete  
           onClose();
         }}
         className="flex items-center gap-2 px-4 py-2 hover:bg-red-100 text-red-600 w-full"
+        disabled={deletingId === branch.id}
       >
         <FaTrash /> Delete
       </button>

@@ -7,6 +7,7 @@ import DropdownMenu from "../../components/DropdownMenu";
 import toast, { Toaster } from "react-hot-toast";
 import { getAllBranches } from "../../api/branchApi";
 import Avatar from "../../components/Avatar"; // ✅ shared avatar
+import { deleteBranch } from "../../api/branchApi";
 import "../styles.css";
 import "./BranchStyles.css";
 
@@ -47,6 +48,8 @@ const AllBranches = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+ const [deletingId, setDeletingId] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -86,17 +89,29 @@ const AllBranches = () => {
     return false;
   };
 
-  const handleDelete = async (branch) => {
-    if (!window.confirm(`Delete "${branch.branch_name}"?`)) return;
-    try {
-      // If your DropdownMenu performs delete itself, keep it there; otherwise call delete API here
-      setBranches((prev) => prev.filter((b) => b.id !== branch.id));
-      toast.success(`"${branch.branch_name}" deleted.`);
-    } catch (e) {
-      toast.error(e?.response?.data?.message || "Delete failed.");
-    }
-  };
+const handleDelete = async (branch) => {
+  if (!window.confirm(`Delete "${branch.branch_name || "this branch"}"? This cannot be undone.`)) return;
 
+  setDeletingId(branch.id);
+  try {
+    await toast.promise(
+      deleteBranch(branch.id),
+      {
+        loading: `Deleting "${branch.branch_name || "branch"}"…`,
+        success: "Branch deleted.",
+        error: (e) => e?.response?.data?.message || e?.message || "Delete failed.",
+      },
+      { success: { duration: 1600 } }
+    );
+
+    // Re-fetch from backend to keep the list canonical
+    const list = await getAllBranches();
+    setBranches(Array.isArray(list) ? list : []);
+  } finally {
+    setDeletingId(null);
+    setOpenMenuIndex(null);
+  }
+};
   return (
     <>
       {/* HEADER */}
@@ -215,10 +230,11 @@ const AllBranches = () => {
 
                       {openMenuIndex === index && (
                         <DropdownMenu
-                          branch={branch}
-                          handleDelete={handleDelete}
-                          position={menuPosition}
-                          onClose={() => setOpenMenuIndex(null)}
+                           branch={branch}
+                            handleDelete={handleDelete}
+                            position={menuPosition}
+                            onClose={() => setOpenMenuIndex(null)}
+                          deletingId={deletingId}
                         />
                       )}
                     </td>
