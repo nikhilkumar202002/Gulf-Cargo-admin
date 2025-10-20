@@ -1,132 +1,124 @@
 import axiosInstance from "./axiosInstance";
 import { setToken, clearToken } from "../auth/tokenStore";
 
+/* -------------------- helpers -------------------- */
 const unwrap = (res) => res?.data ?? res;
+const withCreds = { withCredentials: false }; // flip to true if you use Sanctum cookies
 
+const requiredId = (id, label = "id") => {
+  if (id === undefined || id === null || id === "") throw new Error(`Missing ${label}`);
+  return String(id);
+};
+
+const patternUrl = (pattern, id) => pattern.replace(":id", requiredId(id));
+
+/* -------------------- configurable patterns -------------------- */
+// Delete
 const DELETE_PATTERN =
-  import.meta.env.VITE_STAFF_DELETE_PATTERN || "/staffs/:id"; // e.g. "/staff/:id" or "/staffs/delete/:id"
-const withCreds = { withCredentials: false }; // Sanctum / cookie auth
+  import.meta.env.VITE_STAFF_DELETE_PATTERN || "/staffs/:id"; // e.g. "/staff/:id" or "/staffs/:id"
+// Show (primary)
+const SHOW_PATTERN =
+  import.meta.env.VITE_STAFF_SHOW_PATTERN || "/staff/:id";
+// Profile update (POST)
+const UPDATE_PROFILE_PATTERN =
+  import.meta.env.VITE_PROFILE_UPDATE_PATTERN || "/profile/update/:id";
+// Staff register path
+const STAFF_REGISTER_PATH =
+  import.meta.env.VITE_STAFF_REGISTER_PATH || "/register";
+// Auth login path
+const AUTH_LOGIN_PATH =
+  import.meta.env.VITE_AUTH_LOGIN_PATH || "/login";
 
-const buildDeleteUrl = (id) => {
-  if (!id && id !== 0) throw new Error("Staff id is required");
-  return DELETE_PATTERN.replace(":id", String(id));
-};
-
-const SHOW_PATTERN = import.meta.env.VITE_STAFF_SHOW_PATTERN || "/staff/:id";
-
-const buildShowUrl = (id) => {
-  if (!id && id !== 0) throw new Error("Staff id is required");
-  return SHOW_PATTERN.replace(":id", String(id));
-};
-
-
-// Register
+/* ================================================================
+   AUTH
+================================================================ */
 export const register = async (userData) => {
   const res = await axiosInstance.post("/register", userData);
   return unwrap(res);
 };
 
-// Login
 export const loginUser = async (credentials) => {
-  const loginPath = import.meta.env.VITE_AUTH_LOGIN_PATH || "/login";
-  const res = await axiosInstance.post(loginPath, credentials);
-  const data = res?.data ?? res;
+  const res = await axiosInstance.post(AUTH_LOGIN_PATH, credentials);
+  const data = unwrap(res);
   const t = data?.access_token || data?.token || data?.data?.access_token || null;
   if (t) setToken(t);
   return data;
 };
 
-// Profile (protected)
-export const getProfile = async () => {
-  const res = await axiosInstance.get("/profile");
-  return unwrap(res);
-};
+export const getProfile = async () => unwrap(await axiosInstance.get("/profile"));
 
-// Logout
 export const logout = async () => {
   try {
     await axiosInstance.post("/logout");
   } finally {
-    clearToken(); 
+    clearToken();
   }
 };
 
-// Forgot Password
-export const forgotPassword = async (email) => {
-  const res = await axiosInstance.post("/forgot-password", { email });
-  return unwrap(res);
-};
+export const forgotPassword = async (email) =>
+  unwrap(await axiosInstance.post("/forgot-password", { email }));
 
-export const resetPassword = async (email, otp, password) => {
-  const res = await axiosInstance.post("/reset-password", { email, otp, password });
-  return unwrap(res);
-};
+export const resetPassword = async (email, otp, password) =>
+  unwrap(await axiosInstance.post("/reset-password", { email, otp, password }));
 
+/* ================================================================
+   STAFF CRUD-ish
+================================================================ */
+// Create staff (supports File via auto-FormData)
 export const staffRegister = async (payload, token, axiosOpts = {}) => {
-  // Normalize payload to FormData
-  const formData = payload instanceof FormData ? payload : (() => {
-    const fd = new FormData();
-    Object.entries(payload || {}).forEach(([k, v]) => {
-      if (v == null) return;
-      if (Array.isArray(v)) {
-        const key = k.endsWith("[]") ? k : `${k}[]`;
-        v.forEach((val) => fd.append(key, val));
-      } else {
-        fd.append(k, v);
-      }
-    });
-    return fd;
-  })();
+  const body =
+    payload instanceof FormData
+      ? payload
+      : (() => {
+          const fd = new FormData();
+          Object.entries(payload || {}).forEach(([k, v]) => {
+            if (v == null) return;
+            if (Array.isArray(v)) {
+              const key = k.endsWith("[]") ? k : `${k}[]`;
+              v.forEach((val) => fd.append(key, val));
+            } else {
+              fd.append(k, v);
+            }
+          });
+          return fd;
+        })();
 
-  // Use proper staff endpoint (configurable)
-  const path = import.meta.env.VITE_STAFF_REGISTER_PATH || "/register";
-
-  const res = await axiosInstance.post(path, formData, {
+  const res = await axiosInstance.post(STAFF_REGISTER_PATH, body, {
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       Accept: "application/json",
+      // Let browser set multipart boundary automatically when FormData
     },
     ...axiosOpts,
   });
-
   return unwrap(res);
 };
 
+// List staff (robust array picker)
 export const listStaffs = async (params = {}) => {
   const res = await axiosInstance.get("/staffs", { params });
   const payload = unwrap(res);
 
-  // capture meta in common Laravel / JSON:API shapes
-  const meta =
-    payload?.meta ||
-    payload?.data?.meta ||
-    payload?.data?.staffs?.meta ||
-    payload?.staffs?.meta ||
-    null;
-
-  // robust array picker
   const pickArray = (o) => {
     if (!o) return [];
     if (Array.isArray(o)) return o;
 
-    // common shapes
-    if (Array.isArray(o.data)) return o.data;                 // { data: [...] }
-    if (Array.isArray(o?.data?.data)) return o.data.data;     // { data: { data: [...] } }
+    if (Array.isArray(o.data)) return o.data;                 // { data:[...] }
+    if (Array.isArray(o?.data?.data)) return o.data.data;     // { data:{data:[...]} }
 
-    if (Array.isArray(o?.staffs)) return o.staffs;            // { staffs: [...] }
-    if (Array.isArray(o?.staff)) return o.staff;              // { staff: [...] }
-    if (Array.isArray(o?.staffs?.data)) return o.staffs.data; // { staffs: { data:[...] } }
-    if (Array.isArray(o?.data?.staffs)) return o.data.staffs; // { data:{ staffs:[...] } }
-    if (Array.isArray(o?.data?.staffs?.data)) return o.data.staffs.data; // { data:{ staffs:{data:[...]}} }
+    if (Array.isArray(o?.staffs)) return o.staffs;            // { staffs:[...] }
+    if (Array.isArray(o?.staff)) return o.staff;              // { staff:[...] }
+    if (Array.isArray(o?.staffs?.data)) return o.staffs.data; // { staffs:{data:[...]} }
+    if (Array.isArray(o?.data?.staffs)) return o.data.staffs; // { data:{staffs:[...]} }
+    if (Array.isArray(o?.data?.staffs?.data)) return o.data.staffs.data;
 
-    // generic keys
     const keys = ["users", "items", "results", "records", "rows", "list"];
     for (const k of keys) {
       if (Array.isArray(o[k])) return o[k];
       if (Array.isArray(o?.data?.[k])) return o.data[k];
     }
 
-    // deep walk
+    // last resort: deep walk
     for (const v of Object.values(o)) {
       if (Array.isArray(v)) return v;
       if (v && typeof v === "object") {
@@ -138,38 +130,45 @@ export const listStaffs = async (params = {}) => {
   };
 
   const items = pickArray(payload);
+
+  const meta =
+    payload?.meta ||
+    payload?.data?.meta ||
+    payload?.data?.staffs?.meta ||
+    payload?.staffs?.meta ||
+    null;
+
   return { items, meta };
 };
 
+// Delete staff (robust with Laravel fallback)
 export const deleteStaff = async (id, axiosOpts = {}) => {
-  const url = buildDeleteUrl(id);
+  const url = patternUrl(DELETE_PATTERN, id);
 
-  // 1) Try plain DELETE first
+  // 1) Try plain DELETE
   try {
     const res = await axiosInstance.delete(url, {
       ...withCreds,
       headers: { Accept: "application/json" },
       ...axiosOpts,
     });
-    return res?.data ?? true; // many APIs return 204 No Content
+    return res?.data ?? true; // some APIs return 204
   } catch (err) {
     const status = err?.response?.status;
     const data = err?.response?.data;
 
-    // Bubble up detailed server message for toasts
     const serverMsg =
       data?.message ||
       data?.error ||
       (typeof data === "string" ? data : null) ||
       `Delete failed (${status || "network"})`;
 
-    // 2) If 400/405/419 (Laravel CSRF) → try Sanctum + form override fallback
+    // 2) Fallback: POST + _method=DELETE (common on shared hosts)
     if ([400, 401, 403, 405, 419].includes(status || 0)) {
       try {
-        // get CSRF cookie (Sanctum on same domain)
+        // If you use Sanctum: enable credentials + CSRF cookie
         await axiosInstance.get("/sanctum/csrf-cookie", withCreds);
 
-        // Some Laravel routes only accept POST + _method=DELETE
         const res2 = await axiosInstance.post(
           url,
           { _method: "DELETE" },
@@ -201,12 +200,106 @@ export const deleteStaff = async (id, axiosOpts = {}) => {
   }
 };
 
+/* -------------------- robust single fetch -------------------- */
 /**
- * Get a single staff record by id.
- * Usage: const staff = await getStaff(2)
+ * Get a single staff record by id (resilient).
+ * Tries env SHOW_PATTERN first, then `/profile/:id` and `/staffs/:id`.
+ * Always returns a single user object, unwrapped.
  */
 export const getStaff = async (id, params = {}, axiosOpts = {}) => {
-  const url = buildShowUrl(id);
-  const res = await axiosInstance.get(url, { params, ...axiosOpts });
+  const attempts = [
+    patternUrl(SHOW_PATTERN, id), // default: /staff/:id
+    `/profile/${requiredId(id)}`, // many backends serve via profile
+    `/staffs/${requiredId(id)}`,  // plural fallback
+  ];
+
+  const pickOne = (o) => {
+    if (!o) return null;
+    // direct object
+    if (o.id || o.email || o.name) return o;
+
+    // common single-object wrappers
+    if (o.user && typeof o.user === "object") return o.user;
+    if (o.staff && typeof o.staff === "object" && !Array.isArray(o.staff)) return o.staff;
+    if (o.profile && typeof o.profile === "object") return o.profile;
+
+    if (o.data && typeof o.data === "object" && !Array.isArray(o.data)) {
+      const d = pickOne(o.data);
+      if (d) return d;
+    }
+    if (o.result && typeof o.result === "object") return o.result;
+
+    // first element from common arrays
+    const arrays = ["users", "staffs", "staff", "items", "results", "records", "data"];
+    for (const k of arrays) {
+      const arr =
+        Array.isArray(o?.[k]) ? o[k] :
+        Array.isArray(o?.data?.[k]) ? o.data[k] :
+        null;
+      if (Array.isArray(arr) && arr.length) return arr[0];
+    }
+
+    // deep-walk
+    for (const v of Object.values(o)) {
+      if (v && typeof v === "object") {
+        const found = pickOne(v);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  let lastErr;
+  for (const url of attempts) {
+    try {
+      const res = await axiosInstance.get(url, { params, ...axiosOpts });
+      const payload = unwrap(res);
+      return pickOne(payload) ?? payload;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Failed to fetch staff");
+};
+
+/* -------------------- update profile (POST) -------------------- */
+/**
+ * Update a single staff profile by id (super admin).
+ * If payload contains File/Blob → multipart; else JSON.
+ * Accepts `avatar` file; for removal, send `avatar_remove=1`.
+ */
+export const updateStaffProfile = async (id, payload = {}, axiosOpts = {}) => {
+  const url = patternUrl(UPDATE_PROFILE_PATTERN, id);
+
+  const hasFile =
+    payload instanceof FormData
+      ? true
+      : Object.values(payload || {}).some((v) => v instanceof File || v instanceof Blob);
+
+  const body =
+    hasFile && !(payload instanceof FormData)
+      ? (() => {
+          const fd = new FormData();
+          Object.entries(payload).forEach(([k, v]) => {
+            if (v == null) return;
+            if (Array.isArray(v)) {
+              const key = k.endsWith("[]") ? k : `${k}[]`;
+              v.forEach((val) => fd.append(key, val));
+            } else {
+              fd.append(k, v);
+            }
+          });
+          return fd;
+        })()
+      : payload;
+
+  const res = await axiosInstance.post(url, body, {
+    headers: {
+      Accept: "application/json",
+      ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    },
+    ...axiosOpts,
+  });
+
   return unwrap(res);
 };

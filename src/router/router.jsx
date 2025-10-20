@@ -124,6 +124,7 @@ const CreateBills = lazy(() => import("../pages/Bills/CreateBills"));
 const BillsViews = lazy(() => import("../pages/Bills/BillsViews"));
 const CreateShipmentBill = lazy(() => import("../pages/Bills/CreateShipmentBill"));
 const ShipmentBillView = lazy(() => import("../pages/Bills/ShipmentBillView"));
+const EditStaff = lazy(() => import("../pages/Staffs/EditStaff"));
 
 /* ---------------- helpers ---------------- */
 const AuthRedirect = () => {
@@ -179,6 +180,7 @@ const router = createBrowserRouter([
       { path: "hr&staff/allstaffs", element: <StaffPanel /> },
       { path: "hr&staff/createstaffs", element: <NewStaffForm /> },
       { path: "hr&staff/staff/:id", element: <StaffView /> },
+      { path: "hr&staff/staff/:id/edit", element: <EditStaff/> },
 
       { path: "drivers/alldriverslist", element: <ViewAllDriver /> },
       { path: "drivers/addnewdriver", element: <AddDriver /> },

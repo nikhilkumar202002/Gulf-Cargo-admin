@@ -384,6 +384,7 @@ const handleDelete = async (id) => {
 
   {/* Edit */}
   <span
+  onClick={() => navigate(`/hr&staff/staff/${user.id}/edit`)}
     className="inline-flex h-8 w-8 items-center justify-center rounded-full
                bg-emerald-50 text-emerald-700 border border-emerald-200
                hover:bg-emerald-100 hover:border-emerald-300
