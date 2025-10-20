@@ -1,4 +1,3 @@
-// src/pages/StaffPanel.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { FaUsers } from "react-icons/fa6";
 import { useNavigate } from "react-router-dom";
@@ -418,7 +417,6 @@ const handleDelete = async (id) => {
 
 
 </div>
-
 
                     </td>
                   </tr>

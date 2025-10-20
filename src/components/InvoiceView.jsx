@@ -151,20 +151,14 @@ const parsePartyList = (res) => {
   return [];
 };
 
-const joinAddress = (p) => {
-  const parts = [
-    p?.address, p?.address_line1, p?.address_line2, p?.street, p?.locality, p?.area, p?.district,
-    p?.city, p?.state, p?.country, p?.postal_code ?? p?.pincode ?? p?.zip,
-  ].filter(Boolean);
-  return parts.join(", ");
-};
+const joinAddress = (p) => p?.address || "";
 
 const formatPhones = (p) => {
   const vals = [p?.contact_number, p?.phone, p?.mobile, p?.mobile_number, p?.contact].filter(Boolean);
   const whats = p?.whatsapp_number ?? p?.whatsapp ?? null;
   const a = [];
-  if (vals.length) a.push(`${vals.join(" / ")}`);
-  if (whats) a.push(` ${whats}`);
+  if (vals.length) a.push(vals.join(" / "));
+  if (whats && !vals.includes(whats)) a.push(whats);
   return a.join("  •  ");
 };
 
@@ -172,6 +166,14 @@ const extractParty = (p) => ({
   id: p?.id ?? null,
   name: p?.name || "—",
   email: p?.email || "",
+  document_type: p?.document_type || "",
+  document_id: p?.document_id || "",
+  tel: p?.contact_number || p?.whatsapp_number || "",
+  address_line: p?.address || "",
+  post: p?.city || "",            
+  pin: p?.postal_code || "",
+  dist: p?.district || "",
+  state: p?.state || "",
   address: joinAddress(p),
   phones: formatPhones(p),
   raw: p,
@@ -210,6 +212,39 @@ const getLoggedInUser = () => {
     }
   } catch {}
   return null;
+};
+
+/** Try to read pieces from common fields; else sum item qty */
+const computePieces = (sh) => {
+  const direct = pick(sh, [
+    "no_of_pieces", "total_pieces", "pieces", "piece_count",
+    "charges.no_of_pieces", "summary.total_pieces"
+  ], null);
+  let n = Number(String(direct ?? "").replace(/,/g, ""));
+  if (Number.isFinite(n) && n > 0) return n;
+
+  // sum from items
+  const items = Array.isArray(sh?.items) ? sh.items : [];
+  let sum = 0;
+  for (const it of items) {
+    const qty = it?.piece_no ?? it?.qty ?? it?.quantity ?? it?.pieces ?? it?.count;
+    const q = Number(String(qty ?? "").replace(/,/g, ""));
+    if (Number.isFinite(q)) sum += q;
+  }
+  return sum || 0;
+};
+
+/** Pick a reasonable shipment date (booking/shipment/created) */
+const pickShipmentDate = (sh) => {
+  const candidates = [
+    sh?.booking_date, sh?.shipment_date, sh?.invoice_date,
+    sh?.created_at, sh?.createdAt, sh?.date,
+  ].filter(Boolean);
+  const raw = candidates[0];
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return String(raw);
+  return d.toLocaleDateString("en-GB"); // DD/MM/YYYY
 };
 
 /* ---------------- Component ---------------- */
@@ -336,17 +371,36 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
         } catch {}
       }
 
-      const address = isSender
-        ? pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")
-        : pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "");
-      const phone = isSender
-        ? pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")
-        : pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "");
-      const email = isSender
-        ? pick(shipment, ["sender_email", "shipper_email"], "")
-        : pick(shipment, ["receiver_email", "consignee_email"], "");
+     const address = isSender
+  ? pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")
+  : pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "");
 
-      return { id: null, name: name || "—", email, address, phones: phone };
+const phone = isSender
+  ? pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")
+  : pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "");
+
+const email = isSender
+  ? pick(shipment, ["sender_email", "shipper_email"], "")
+  : pick(shipment, ["receiver_email", "consignee_email"], "");
+
+// pull possible doc ids from the shipment for the fallback
+const docId = isSender
+  ? pick(shipment, ["sender_document_id", "shipper_document_id", "document_id"], "")
+  : pick(shipment, ["receiver_document_id", "consignee_document_id", "document_id"], "");
+
+      return extractParty({
+  id: null,
+  name: name || "—",
+  email,
+  contact_number: phone,    // -> becomes .tel via extractParty
+  address,                  // -> address_line + address
+  // keep city/pin/dist/state empty so Consignee address remains only 'address'
+  city: "",
+  postal_code: "",
+  district: "",
+  state: "",
+  document_id: docId,
+});
     };
 
     (async () => {
@@ -577,7 +631,7 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
         </div>
       )}
 
-      <main className="mx-auto max-w-5xl p-4 invoice-main-section">
+      <main className="flex justify-center items-center mx-auto max-w-5xl p-4 invoice-main-section">
         <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm uppercase">
           {/* Header */}
           <div className="px-1 pt-1">
@@ -622,9 +676,9 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
                 <p className="header-invoice-branch-contact mt-1 font-medium text-slate-800">
                   {pickPhoneFromBranch(branch)}
                 </p>
-                <p className="header-invoice-branch-contact text-slate-700">
+                {/* <p className="header-invoice-branch-contact text-slate-700">
                   {s(branch?.branch_email, "—")}
-                </p>
+                </p> */}
               </div>
             </div>
 
@@ -675,173 +729,298 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
             </div>
           </div> */}
 
-          {/* Parties + Box summary */}
-          <div className="section-three-bg grid grid-cols-1 gap-6 border-slate-200 px-2 py-2
-                sm:[grid-template-columns:1fr_1fr_1fr]">
+        <div
+  className="
+    section-three-bg
+    grid gap-4 border-slate-200 px-2 py-2
+    [grid-template-columns:1fr]
+    md:[grid-template-columns:1fr_2fr_1fr]
+  "
+>
+  {/* SHIPPER (2fr) */}
+  <div className="relative rounded-lg border border-slate-200 p-3 pt-6">
+    <div className="absolute -top-3 left-3 rounded-tr-2xl rounded-bl-2xl bg-rose-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
+      Shipper
+    </div>
 
-            <div>
-              <div className="invoice-parties-header text-xs font-medium uppercase tracking-wide text-slate-500">Shipper</div>
-              <div className="mt-1 invoice-parties-content grid grid-cols-[60px_1fr] text-sm">
-                <span className="invoice-parties-label text-slate-500">Name:</span>
-                <span className="invoice-parties-text">{getName(senderParty, "sender", shipment)}</span>
+    <div className=" text-[11px]">
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Name</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text font-semibold text-slate-900">
+          {getName(senderParty, "sender", shipment) || "—"}
+        </div>
+      </div>
 
-                <span className="invoice-parties-label text-slate-500">Address:</span>
-                <span className="invoice-parties-text whitespace-pre-wrap">
-                  {getAddress(senderParty, "sender", shipment, pick)}
-                </span>
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">ID No</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">
+         {senderParty?.document_id || pick(shipment, ["sender_document_id","shipper_document_id"], "—")}
 
-                <span className="invoice-parties-label text-slate-500">Pin code:</span>
-                <span className="invoice-parties-text">{getPincode(senderParty, "sender", shipment, pick)}</span>
+        </div>
+      </div>
 
-                <span className="invoice-parties-label text-slate-500">Phone:</span>
-                <span className="invoice-parties-text">{getPhone(senderParty, "sender", shipment, pick)}</span>
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Tel</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{senderParty?.tel || getPhone(senderParty, "sender", shipment, pick) || "—"}</div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">No. of Pcs</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{computePieces(shipment)}</div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Weight</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{totalWeightDisplay} kg</div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Date</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{pickShipmentDate(shipment) || "—"}</div>
+      </div>
+    </div>
+  </div>
+
+  {/* CONSIGNEE (2fr) */}
+  <div className="relative rounded-lg border border-slate-200 p-3 pt-6">
+    <div className="absolute -top-3 left-3 rounded-tr-2xl rounded-bl-2xl bg-rose-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
+      Consignee
+    </div>
+
+    <div className="text-[11px]">
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Name</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text font-semibold text-slate-900">
+          {getName(receiverParty, "receiver", shipment) || "—"}
+        </div>
+      </div>
+
+      <div className="flex">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Adress</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text whitespace-pre-wrap">
+          {receiverParty?.address_line || getAddress(receiverParty, "receiver", shipment, pick) || "—"}
+        </div>
+      </div>
+
+      {/* <div className="flex items-start">
+        <div className="w-15 shrink-0 text-slate-700">Village</div>
+        <div className="mx-1">:</div>
+        <div>{receiverParty?.raw?.village || ""}</div>
+      </div> */}
+
+      {/* Post + PIN on one line */}
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Post</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text flex flex-wrap items-baseline gap-4">
+          <span>{receiverParty?.post || pick(receiverParty?.raw || {}, ["city"], "—")}</span>
+          <span className="text-slate-700">PIN:</span>
+          <span>{receiverParty?.pin || pick(receiverParty?.raw || {}, ["postal_code", "pincode", "zip"], "—")}</span>
+        </div>
+      </div>
+
+      {/* Dist + State on one line */}
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Dist</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text flex flex-wrap items-baseline gap-4">
+          <span>{receiverParty?.dist || pick(receiverParty?.raw || {}, ["district"], "—")}</span>
+          <span className="text-slate-700">State :</span>
+          <span>{receiverParty?.state || pick(receiverParty?.raw || {}, ["state"], "—")}</span>
+        </div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Tel</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{receiverParty?.tel || getPhone(receiverParty, "receiver", shipment, pick) || "—"}</div>
+      </div>
+    </div>
+  </div>
+
+  {/* BOX SUMMARY (1fr) */}
+  <div className="self-start">
+    <div className="mt-2 ml-auto w-[150px] overflow-hidden ">
+      <table className="text-[11px] ">
+        <thead className="box-weight-table-header">
+          <tr className="text-center">
+            <th className="border border-slate-800 px-2 py-1 w-[30px]">S.No</th>
+            <th className="border border-slate-800 px-2 py-1">Box No.</th>
+            <th className="border border-slate-800 px-2 py-1 w-[65px]">Weight</th>
+          </tr>
+        </thead>
+        <tbody className="box-weight-table-body">
+          {boxRows.length > 0 ? (
+            boxRows.map((row, idx) => (
+              <tr key={idx} className="text-center">
+                <td className="border border-slate-800 px-2 py-1">{row.sl}</td>
+                <td className="border border-slate-800 px-2 py-1">{billNo}</td>
+                <td className="border border-slate-800 px-2 py-1">{row.weight}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td className="border border-slate-800 px-2 py-2 text-center text-slate-500" colSpan={3}>
+                No box weights
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<section className="px-1 py-1">
+  <div className="flex justify-between items-center my-1">
+    <div className="invoice-cargo-heading">Cargo Items</div>
+    <div className="invoice-weight-text">Total Weight: {totalWeightDisplay} kg</div>
+  </div>
+
+  <div className="grid grid-cols-2 gap-3">
+    {/* LEFT TABLE */}
+    <div className="print-avoid">
+      <table className="items-table h-full w-full table-fixed border-collapse text-[11px]">
+        <colgroup>
+          <col style={{ width: "44px" }} />
+          <col />
+          <col style={{ width: "70px" }} />
+          <col style={{ width: "50px" }} />
+        </colgroup>
+        <thead>
+          <tr className="text-center">
+            <th className="border border-slate-800">SL NO.</th>
+            <th className="border border-slate-800 text-left">ITEMS</th>
+            <th className="border border-slate-800">BOX NO.</th>
+            <th className="border border-slate-800">QTY</th>
+          </tr>
+        </thead>
+        <tbody>
+          {colA.map((it, idx) => (
+            <tr key={`A-${idx}`} className="align-top">
+              <td className="border border-slate-800 text-center">{it ? it.idx : ""}</td>
+              <td className="border border-slate-800 uppercase">{it ? (it.name || "—") : ""}</td>
+              <td className="border border-slate-800 text-center">{it ? (it.boxLabel || "—") : ""}</td>
+              <td className="border border-slate-800 text-center">{it ? (it.qty || "—") : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    {/* RIGHT TABLE */}
+  {/* RIGHT TABLE — continuous, totals in tfoot, fillers keep totals at bottom */}
+<div className="print-avoid">
+  {(() => {
+    const MAX_ROWS = ROWS_PER_COL; // you already use 15; keep it consistent
+    const rightRows = colB.slice(0, MAX_ROWS);
+    const fillerCount = Math.max(0, MAX_ROWS - rightRows.length);
+    const fillers = Array.from({ length: fillerCount });
+
+    return (
+      <table className="items-table w-full table-fixed border-collapse text-[11px]">
+        <colgroup>
+          <col style={{ width: "44px" }} />
+          <col />
+          <col style={{ width: "70px" }} />
+          <col style={{ width: "50px" }} />
+        </colgroup>
+
+        <thead>
+          <tr className="text-center">
+            <th className="border border-slate-800">S. NO</th>
+            <th className="border border-slate-800 text-left">ITEMS</th>
+            <th className="border border-slate-800">BOX NO.</th>
+            <th className="border border-slate-800">QTY</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {/* actual rows */}
+          {rightRows.map((it, idx) => (
+            <tr key={`B-${idx}`} className="align-top">
+              <td className="border border-slate-800 text-center">{it ? it.idx : ""}</td>
+              <td className="border border-slate-800 uppercase">{it ? (it.name || "—") : ""}</td>
+              <td className="border border-slate-800 text-center">{it ? (it.boxLabel || "—") : ""}</td>
+              <td className="border border-slate-800 text-center">{it ? (it.qty || "—") : ""}</td>
+            </tr>
+          ))}
+
+          {/* filler rows to push totals to bottom */}
+          {fillers.map((_, i) => (
+            <tr key={`B-fill-${i}`}>
+              <td className="border border-slate-800 text-center">&nbsp;</td>
+              <td className="border border-slate-800">&nbsp;</td>
+              <td className="border border-slate-800 text-center">&nbsp;</td>
+              <td className="border border-slate-800 text-center">&nbsp;</td>
+            </tr>
+          ))}
+        </tbody>
+
+        <tfoot>
+          <tr>
+            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
+              <div className="flex justify-between">
+                <span className="uppercase">Total</span>
+                <span className="ml-2 text-right">المجموع</span>
               </div>
-            </div>
+            </td>
+            <td className="border border-slate-800 text-right">
+              {fmtMoney(subtotal, currency).replace(/[A-Z]{3}\s?/, "").trim()}
+            </td>
+          </tr>
 
-            {/* Consignee */}
-            <div>
-              <div className="invoice-parties-header text-xs font-medium tracking-wide text-slate-500">Consignee</div>
-              <div className="mt-1 invoice-parties-content grid grid-cols-[60px_1fr] text-sm">
-                <span className="invoice-parties-label text-slate-500">Name:</span>
-                <span className="invoice-parties-text">{getName(receiverParty, "receiver", shipment)}</span>
-
-                <span className="invoice-parties-label text-slate-500">Address:</span>
-                <span className="invoice-parties-text whitespace-pre-wrap">
-                  {getAddress(receiverParty, "receiver", shipment, pick)}
-                </span>
-
-                <span className="invoice-parties-label text-slate-500">Pincode:</span>
-                <span className="invoice-parties-text">{getPincode(receiverParty, "receiver", shipment, pick)}</span>
-
-                <span className="invoice-parties-label text-slate-500">Phone:</span>
-                <span className="invoice-parties-text">{getPhone(receiverParty, "receiver", shipment, pick)}</span>
+          <tr>
+            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
+              <div className="flex justify-between">
+                <span className="uppercase">Bill Charges</span>
+                <span className="ml-2 text-right">رسوم الفاتورة</span>
               </div>
-            </div>
+            </td>
+            <td className="border border-slate-800 text-right">
+              {fmtMoney(bill, currency).replace(/[A-Z]{3}\s?/, "").trim()}
+            </td>
+          </tr>
 
-            {/* Box Summary */}
-            <div>
-              <div className="mt-2 overflow-hidden border border-slate-200">
-                <table className="box-summary-table min-w-full text-sm">
-                  <thead className="box-weight-table-header text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Sl No</th>
-                      <th className="px-3 py-2 text-left">Box No</th>
-                      <th className="px-3 py-2 text-right">Weight</th>
-                    </tr>
-                  </thead>
-                  <tbody className="box-weight-table-body">
-                    {boxRows.length > 0 ? (
-                      boxRows.map((row, idx) => (
-                        <tr key={idx} className={idx % 2 ? "bg-white" : "bg-slate-50/50"}>
-                          <td className="px-3 py-2">{row.boxNo}</td>
-                          <td className="px-3 py-2">{billNo}</td>
-                          <td className="px-3 py-2 text-right">{row.weight} kg</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td className="px-3 py-3 text-slate-500" colSpan={3}>
-                          No box weights
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+          <tr>
+            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
+              <div className="flex justify-between">
+                <span className="uppercase">VAT %</span>
+                <span className="ml-2 text-right">ضريبة القيمة المضافة %</span>
               </div>
-            </div>
-          </div>
+            </td>
+            <td className="border border-slate-800 text-right">
+              {fmtMoney(tax, currency).replace(/[A-Z]{3}\s?/, "").trim()}
+            </td>
+          </tr>
 
-          {/* Items (two columns) */}
-          <div className="px-1 py-1">
-            <div className="flex justify-between my-1">
-              <div className="invoice-cargo-heading">Cargo Items</div>
-              <div className="invoice-weight-text">Total Weight: {totalWeightDisplay} kg</div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 py-2 sm:grid-cols-2 lg:grid-cols-2">
-              {/* Column A */}
-              <div className="lg:col-span-1">
-                <table className="min-w-full border-separate border-spacing-0 avoid-break">
-                  <thead className="invoice-table-header">
-                    <tr>
-                      <th className="w-12 border border-slate-200 px-1 py-1 text-left uppercase tracking-wider">Sl.No</th>
-                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left uppercase tracking-wider">Items</th>
-                      <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider">Box No.</th>
-                      <th className="border border-slate-200 px-1 py-1 text-right uppercase tracking-wider">Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody className="invoice-table-content">
-                    {colA.map((it, idx) => (
-                      <tr key={`A-${idx}`} className="align-top">
-                        <td className="border-x border-b border-slate-200 px-1 py-1">{it ? it.idx : ""}</td>
-                        <td className="border-b border-slate-200 px-1 py-1 ">{it ? it.name || "—" : <span className="opacity-0">pad</span>}</td>
-                        <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
-                          {it ? it.boxLabel || "—" : ""}
-                        </td>
-                        <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
-                          {it ? it.qty || "—" : ""}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <tr className="font-semibold">
+            <td className="border border-slate-800 text-right uppercase" colSpan={3}>
+              <div className="flex justify-between">
+                <span>Net Total</span>
+                <span className="ml-2 text-right">المجموع الصافي</span>
               </div>
+            </td>
+            <td className="border border-slate-800 text-right">
+              {fmtMoney(total, currency).replace(/[A-Z]{3}\s?/, "").trim()}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    );
+  })()}
+</div>
 
-              {/* Column B */}
-              <div className="lg:col-span-1">
-                <table className="min-w-full border-separate border-spacing-0">
-                  <thead className="invoice-table-header">
-                    <tr>
-                      <th className="w-12 border px-1 py-1 text-left uppercase tracking-wider">S.No</th>
-                      <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider">Items</th>
-                      <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider">Box No.</th>
-                      <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider">Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody className="invoice-table-content">
-                    {colB.map((it, idx) => (
-                      <tr key={`B-${idx}`} className="align-top">
-                        <td className="border-x border-b border-slate-200 px-1 py-1">{it ? it.idx : ""}</td>
-                        <td className="border-b border-slate-200 px-1 py-1">{it ? it.name || "—" : <span className="opacity-0">pad</span>}</td>
-                        <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right">{it ? it.boxLabel || "—" : ""}</td>
-                        <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right ">{it ? it.qty || "—" : ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {overflowCount > 0 && (
-                  <div className="mt-2 text-[11px] text-slate-500">
-                    +{overflowCount} more item{overflowCount > 1 ? "s" : ""} (not shown to preserve space for terms)
-                  </div>
-                )}
-              </div>
-
-              {/* Totals */}
-              <div className="lg:col-span-1 avoid-break">
-                <div className="mx-auto w-full rounded-xl border-slate-200 p-1 ">
-                  <div className="total-card-list flex justify-between text-sm text-slate-700">
-                    <div>SUBTOTAL</div>
-                    <div className="font-medium text-slate-900">{fmtMoney(subtotal, currency)}</div>
-                  </div>
-
-                  <div className="total-card-list flex justify-between text-sm text-slate-700">
-                    <div>BILL CHARGES</div>
-                    <div className="font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
-                  </div>
-                  <div className="total-card-list flex justify-between text-sm text-slate-700">
-                    <div>VAT</div>
-                    <div className="text-slate-900">{fmtMoney(tax, currency)}</div>
-                  </div>
-                  <div className=" total-card-list mt-1 flex justify-between border-t border-slate-200 pt-1 text-sm font-semibold text-slate-900">
-                    <div>NET TOTAL</div>
-                    <div>{fmtMoney(total, currency)}</div>
-                  </div>
-
-                </div>
-              </div>
-            </div>
-          </div>
+  </div>
+</section>
 
           {/* Footer */}
           <div className="border-t border-slate-200 px-1 py-2">

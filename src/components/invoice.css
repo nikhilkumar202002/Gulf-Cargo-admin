@@ -12,7 +12,7 @@
 }
 
 .invoice-qrcode {
-  width: 80px;
+  width: 120px;
   margin: 0 auto;
 
   img {
@@ -25,7 +25,7 @@
   width: 100%;
 
   img {
-    width: 100px;
+    width: 180px;
     height: auto;
   }
 }
@@ -36,14 +36,14 @@
 }
 
 .header-invoice-address {
-  font-size: 12px;
+  font-size: 14px;
   font-family: "Inter";
   font-weight: 700;
   width: 100%;
   text-transform: uppercase;
   color: var(--primary-color);
-  line-height: 15px;
-  padding-top: 10px;
+  line-height: 17px;
+  padding-top: 8px;
 }
 
 .header-invoice-branch-contact{
@@ -81,7 +81,7 @@
   font-size: 15px;
 }
 .section-three-bg{
-  background-color: #f4f4f4;
+  padding-top: 15px;
 }
 .invoice-terms-conditions-header {
   font-size: 12px;
@@ -202,52 +202,64 @@
    font-weight: 600;
 }
 .invoice-top-header{
-  font-size: 10px;
+  font-size: 13px;
   font-family: "Inter";
   font-weight: 600;
 }
 
+/* ---------- PRINT FIXES ---------- */
 @media print {
-  @page {
-    size: A4;
-    margin: 10mm;
+  /* keep the 2:2:1 grid on print */
+  .section-three-grid {
+    display: grid !important;
+    grid-template-columns: 2fr 2fr 1fr !important;
+    gap: 12px !important;
+    align-items: start !important;
   }
 
-  body * {
-    visibility: hidden;
+  /* never split panels or the box table between pages */
+  .print-avoid, .invoice-panel, .box-summary-print,
+  .invoice-table, .avoid-break, .box-summary-table {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    -webkit-column-break-inside: avoid !important;
+    -webkit-region-break-inside: avoid !important;
   }
 
-  #invoice-sheet, #invoice-sheet * {
-    visibility: visible;
+  /* table header/footer repeat correctly */
+  .invoice-table thead, .box-summary-table thead { display: table-header-group !important; }
+  .invoice-table tfoot, .box-summary-table tfoot { display: table-footer-group !important; }
+
+  /* stop rows/cells from splitting */
+  .invoice-table tr, .box-summary-table tr,
+  .invoice-table td, .invoice-table th,
+  .box-summary-table td, .box-summary-table th {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
-  #invoice-sheet {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    box-shadow: none !important;
-    border: none !important;
-  }
+  /* nudge paddings down a bit to prevent overflow */
+  .invoice-panel { padding: 10px 10px 8px 10px !important; }
+  .invoice-panel .panel-body { line-height: 1.25 !important; font-size: 11px !important; }
+  .invoice-header-pill { transform: translateY(-6px); }
 
-  /* Optional: Remove background or other app UI */
-  header, nav, footer, .sidebar {
-    display: none !important;
-  }
+  /* keep the small right-side summary compact */
+  .box-summary-narrow { width: 220px !important; margin-left: auto !important; }
 }
 
 /* box weight table */
 .box-weight-table-header th{
-  font-size: 10px;
-  padding: 1px 8px;
+  font-size: 9px;
+  padding: 0px 4px;
   font-family: "Inter";
   color: black;
+  font-weight: 800;
   border: 1px solid black;
 }
 .box-weight-table-body td{
-  font-size: 10px;
+  font-size: 9px;
   font-family: "Inter";
-  padding: 1px 8px;
+  padding: 0px 4px;
   color: black;
   border: 1px solid black;
   
@@ -262,11 +274,39 @@
 }
 
 .header-invoice-branch-name{
-  font-size: 16px;
+  font-size: 20px;
+  font-weight: 700 !important;
   color: var(--secondary-color);
 }
 .header-invoice-branch-arname{
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--primary-color);
+}
+
+/* keep uniform padding and visible empty rows */
+.items-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  --cell-px: 8px;
+  --cell-py: 6px;
+  --row-h: 24px;
+  --lh: 1.3;
+}
+.items-table :is(th, td){
+  padding: var(--cell-py) var(--cell-px) !important;
+  line-height: var(--lh) !important;
+  height: var(--row-h) !important;
+  border: 1px solid #1f2937; /* slate-800 */
+  vertical-align: middle;
+  overflow: hidden;
+}
+/* keep tfoot glued to bottom when printing */
+@media print {
+  .items-table thead { display: table-header-group !important; }
+  .items-table tfoot { display: table-footer-group !important; }
+  .items-table tr, .items-table td, .items-table th {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
 }

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { PiShippingContainerFill } from "react-icons/pi";
 
@@ -8,7 +7,7 @@ import { getPorts } from "../../api/portApi";
 import { getActiveBranches } from "../../api/branchApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 import { getProfile } from "../../api/accountApi";
-import { getPhysicalBills,importCustomShipments  } from "../../api/billApi";
+import { getPhysicalBills, importCustomShipments } from "../../api/billApi";
 import { createBillShipment } from "../../api/billShipmentApi";
 
 import "./PhysicalBill.css";
@@ -33,17 +32,28 @@ const statusPill = (s) => {
   return "bg-slate-100 text-slate-800";
 };
 
+const buildStatusMaps = (arr = []) => {
+  const byId = new Map();      // 13 -> "Enquiry collected"
+  const byName = new Map();    // "enquiry collected" -> 13
+  for (const s of arr) {
+    if (s?.id != null && s?.name) {
+      byId.set(Number(s.id), String(s.name));
+      byName.set(String(s.name).toLowerCase(), Number(s.id));
+    }
+  }
+  return { byId, byName };
+};
+
 // ---- picker cell getters ----
-const getBillNo  = (r) => String(r?.invoice_no ?? r?.bill_no ?? r?.booking_no ?? "").trim();
-const getPcs     = (r) => (Number.isFinite(Number(r?.pcs)) ? Number(r.pcs) : null);
-const getWeight  = (r) => {
+const getBillNo = (r) => String(r?.invoice_no ?? r?.bill_no ?? r?.booking_no ?? "").trim();
+const getPcs = (r) => (Number.isFinite(Number(r?.pcs)) ? Number(r.pcs) : null);
+const getWeight = (r) => {
   const n = Number(r?.weight ?? r?.total_weight);
   return Number.isFinite(n) ? n : null;
 };
 
-const getMethod  = (r) => String(r?.shipment_method ?? "").trim();
-const getDest    = (r) => String(r?.des ?? r?.destination ?? "").trim();
-const getStatus  = (r) => String(r?.status ?? "").trim();
+const getMethod = (r) => String(r?.shipment_method ?? "").trim();
+const getDest = (r) => String(r?.des ?? r?.destination ?? "").trim();
 const getDateISO = (r) => r?.created_at ?? r?.date ?? null;
 
 const fmtDate = (iso) => {
@@ -55,7 +65,7 @@ const fmtDate = (iso) => {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 };
 
@@ -66,10 +76,13 @@ function RightToast({ open, variant = "success", children, onClose }) {
   return (
     <div className="fixed top-4 right-4 z-[60]">
       <div
-        className={`rounded-xl px-4 py-3 shadow-lg text-sm border ${variant === "error"
+        className={`rounded-xl px-4 py-3 shadow-lg text-sm border ${
+          variant === "error"
             ? "bg-rose-50 border-rose-200 text-rose-800"
+            : variant === "warning"
+            ? "bg-amber-50 border-amber-200 text-amber-800"
             : "bg-emerald-50 border-emerald-200 text-emerald-800"
-          }`}
+        }`}
       >
         <div className="flex items-start gap-3">
           <div>{children}</div>
@@ -133,6 +146,35 @@ function extractBranchInfo(profile, branches = []) {
   return { id: id != null ? Number(id) : null, name };
 }
 
+/* ---------- status helpers ---------- */
+const normalizeStatusId = (val) => {
+  if (!val) return null;
+  if (typeof val === "object" && val.id != null) return Number(val.id);
+  const n = Number(val);
+  return Number.isFinite(n) ? n : null;
+};
+
+// SAFE: statusById is optional and guarded
+const getStatusText = (row, statusById = new Map()) => {
+  if (row?.status?.name) return String(row.status.name);
+  const id = normalizeStatusId(row?.status);
+  if (id != null && statusById && typeof statusById.has === "function" && statusById.has(id)) {
+    return statusById.get(id);
+  }
+  if (typeof row?.status === "string") return row.status;
+  return "";
+};
+
+const toStatusId = (val, statusById, statusByName) => {
+  const asId = normalizeStatusId(val);
+  if (asId != null && statusById.has(asId)) return asId;
+  if (typeof val === "string") {
+    const id = statusByName.get(val.trim().toLowerCase());
+    if (id != null) return id;
+  }
+  return null;
+};
+
 export default function CreateShipmentBill() {
   // dropdown data
   const [shipmentMethods, setShipmentMethods] = useState([]);
@@ -140,7 +182,7 @@ export default function CreateShipmentBill() {
   const [branches, setBranches] = useState([]);
   const [shipmentStatuses, setShipmentStatuses] = useState([]);
 
-  // ---- Redux fallbacks (hooks must be unconditional) ----
+  // Redux fallbacks (hooks must be unconditional)
   const selBranchId = useSelector((s) => s.branch?.branchId);
   const selAuthUserBranchId = useSelector((s) => s.auth?.user?.branch_id);
   const selAuthProfileBranchId = useSelector((s) => s.auth?.profile?.branch_id);
@@ -159,6 +201,10 @@ export default function CreateShipmentBill() {
   const [myUserId, setMyUserId] = useState(null);
   const [myUserName, setMyUserName] = useState("");
   const [profileObj, setProfileObj] = useState(null);
+
+  // status maps
+  const [statusList, setStatusList] = useState([]);
+  const [statusMaps, setStatusMaps] = useState({ byId: new Map(), byName: new Map() });
 
   // form data
   const [formData, setFormData] = useState({
@@ -179,17 +225,17 @@ export default function CreateShipmentBill() {
   const [toast, setToast] = useState({ open: false, variant: "success", text: "" });
   const [fieldErrors, setFieldErrors] = useState({});
 
-  // ===== Saved cargos list (added to form before final submit) =====
-  const [addedRows, setAddedRows] = useState([]); // array of cargo objects
+  // Saved cargos list
+  const [addedRows, setAddedRows] = useState([]);
 
   // picker state
   const [showPicker, setShowPicker] = useState(false);
   const PAGE_SIZE = 10;
   const [pickPage, setPickPage] = useState(1);
   const SELECTED_PAGE_SIZE = 10;
-const [selPage, setSelPage] = useState(1);
+  const [selPage, setSelPage] = useState(1);
   const [bookingSearch, setBookingSearch] = useState("");
-  const [results, setResults] = useState([]);            // rows rendered in picker table
+  const [results, setResults] = useState([]); // rows rendered in picker table
   const [loadingList, setLoadingList] = useState(false);
   const [savingMarks, setSavingMarks] = useState(false);
   const [dupeNote, setDupeNote] = useState("");
@@ -206,9 +252,9 @@ const [selPage, setSelPage] = useState(1);
   const sessionHiddenIdsRef = useRef(new Set());
 
   const fileRef = useRef(null);
-const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
-  /* ---------- bootstrap: fetch dropdowns + profile ---------- */
+  /* ---------- bootstrap: fetch dropdowns + profile + statuses ---------- */
   useEffect(() => {
     (async () => {
       try {
@@ -219,13 +265,21 @@ const [importing, setImporting] = useState(false);
           getActiveShipmentStatuses(),
           getProfile(),
         ]);
-        setShipmentMethods(unwrapArray(methods));
-        setPorts(unwrapArray(portList));
-        setBranches(unwrapArray(branchList));
-        setShipmentStatuses(unwrapArray(statuses));
+
+        const methodsArr = unwrapArray(methods);
+        const portsArr = unwrapArray(portList);
+        const branchesArr = unwrapArray(branchList);
+        const statusesArr = unwrapArray(statuses);
+
+        setShipmentMethods(methodsArr);
+        setPorts(portsArr);
+        setBranches(branchesArr);
+        setShipmentStatuses(statusesArr);
+        setStatusList(statusesArr);
+        setStatusMaps(buildStatusMaps(statusesArr));
+
         setProfileObj(me?.data ?? me ?? null);
       } catch (e) {
-       
         setToast({ open: true, variant: "error", text: e?.message || "Failed to load dropdown data." });
       }
     })();
@@ -300,16 +354,15 @@ const [importing, setImporting] = useState(false);
   };
 
   // ---- pagination for picker results ----
-const totalPickPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
-const safePickPage = Math.min(pickPage, totalPickPages);
-const baseIndex = (safePickPage - 1) * PAGE_SIZE;
-const visibleResults = useMemo(() => {
-  const start = (safePickPage - 1) * PAGE_SIZE;
-  return results.slice(start, start + PAGE_SIZE);
-}, [results, safePickPage]);
+  const totalPickPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
+  const safePickPage = Math.min(pickPage, totalPickPages);
+  const baseIndex = (safePickPage - 1) * PAGE_SIZE;
+  const visibleResults = useMemo(() => {
+    const start = (safePickPage - 1) * PAGE_SIZE;
+    return results.slice(start, start + PAGE_SIZE);
+  }, [results, safePickPage]);
 
-
-  // REPLACE your fetchPickerRows with this
+  // Fetch picker rows
   const fetchPickerRows = async (queryText = "") => {
     setLoadingList(true);
     setDupeNote("");
@@ -348,7 +401,6 @@ const visibleResults = useMemo(() => {
           getPhysicalBills({ search: queryText }, true),  // ?is_shipment=1
         ]);
 
-
         // Free rows for the TABLE
         tableRows = onlyFree(unwrapArray(freeResp)).filter((r) =>
           String(r?.booking_no || "").toLowerCase().includes(qlc)
@@ -381,7 +433,6 @@ const visibleResults = useMemo(() => {
       setOppositeBucket(usedRows);
       setPickPage(1);
     } catch (e) {
-      
       setResults([]);
       setOppositeBucket([]);
       setToast({ open: true, variant: "error", text: e?.message || "Failed to fetch cargos." });
@@ -390,60 +441,58 @@ const visibleResults = useMemo(() => {
     }
   };
 
+  const totalSelPages = Math.max(1, Math.ceil(addedRows.length / SELECTED_PAGE_SIZE));
+  const selBaseIndex = (selPage - 1) * SELECTED_PAGE_SIZE;
 
-const totalSelPages = Math.max(1, Math.ceil(addedRows.length / SELECTED_PAGE_SIZE));
-const selBaseIndex  = (selPage - 1) * SELECTED_PAGE_SIZE;
+  const visibleAddedRows = useMemo(() => {
+    const start = (selPage - 1) * SELECTED_PAGE_SIZE;
+    return addedRows.slice(start, start + SELECTED_PAGE_SIZE);
+  }, [addedRows, selPage]);
 
-const visibleAddedRows = useMemo(() => {
-  const start = (selPage - 1) * SELECTED_PAGE_SIZE;
-  return addedRows.slice(start, start + SELECTED_PAGE_SIZE);
-}, [addedRows, selPage]);
+  // Clamp page if list shrinks
+  useEffect(() => {
+    if (selPage > totalSelPages) setSelPage(totalSelPages);
+  }, [totalSelPages, selPage]);
 
-// Clamp page if list shrinks
-useEffect(() => {
-  if (selPage > totalSelPages) setSelPage(totalSelPages);
-}, [totalSelPages, selPage]);
-
-// If list grows (e.g., after Import Excel or Save Selected), jump to last page
-const prevAddedLenRef = useRef(0);
-useEffect(() => {
-  if (addedRows.length > prevAddedLenRef.current) {
-    setSelPage(Math.max(1, Math.ceil(addedRows.length / SELECTED_PAGE_SIZE)));
-  }
-  prevAddedLenRef.current = addedRows.length;
-}, [addedRows.length]);
-
+  // If list grows, jump to last page
+  const prevAddedLenRef = useRef(0);
+  useEffect(() => {
+    if (addedRows.length > prevAddedLenRef.current) {
+      setSelPage(Math.max(1, Math.ceil(addedRows.length / SELECTED_PAGE_SIZE)));
+    }
+    prevAddedLenRef.current = addedRows.length;
+  }, [addedRows.length]);
 
   /* ---------- selection controls inside picker ---------- */
-const pickAllChecked =
-  visibleResults.length > 0 &&
-  visibleResults.every((row) => pickSelectedIds.includes(Number(row.id)));
+  const pickAllChecked =
+    visibleResults.length > 0 &&
+    visibleResults.every((row) => pickSelectedIds.includes(Number(row.id)));
 
-const toggleAllPicker = () => {
-  if (pickAllChecked) {
-    const visibleIds = new Set(visibleResults.map((r) => Number(r.id)));
-    setPickSelectedIds((prev) => prev.filter((id) => !visibleIds.has(id)));
-    setPickSelectedMap((m) => {
-      const copy = { ...m };
-      for (const id of visibleIds) delete copy[id];
-      return copy;
-    });
-  } else {
-    const addIds = visibleResults
-      .filter((r) => Number(r?.is_shipment ?? r?.is_in_cargo_shipment ?? 0) !== 1)
-      .map((r) => Number(r.id));
-    setPickSelectedIds((prev) => Array.from(new Set([...prev, ...addIds])));
-    setPickSelectedMap((m) => {
-      const copy = { ...m };
-      visibleResults.forEach((r) => {
-        if (Number(r?.is_shipment ?? r?.is_in_cargo_shipment ?? 0) !== 1) {
-          copy[Number(r.id)] = r;
-        }
+  const toggleAllPicker = () => {
+    if (pickAllChecked) {
+      const visibleIds = new Set(visibleResults.map((r) => Number(r.id)));
+      setPickSelectedIds((prev) => prev.filter((id) => !visibleIds.has(id)));
+      setPickSelectedMap((m) => {
+        const copy = { ...m };
+        for (const id of visibleIds) delete copy[id];
+        return copy;
       });
-      return copy;
-    });
-  }
-};
+    } else {
+      const addIds = visibleResults
+        .filter((r) => Number(r?.is_shipment ?? r?.is_in_cargo_shipment ?? 0) !== 1)
+        .map((r) => Number(r.id));
+      setPickSelectedIds((prev) => Array.from(new Set([...prev, ...addIds])));
+      setPickSelectedMap((m) => {
+        const copy = { ...m };
+        visibleResults.forEach((r) => {
+          if (Number(r?.is_shipment ?? r?.is_in_cargo_shipment ?? 0) !== 1) {
+            copy[Number(r.id)] = r;
+          }
+        });
+        return copy;
+      });
+    }
+  };
 
   const toggleOnePicker = (row) => {
     const id = Number(row.id);
@@ -469,43 +518,43 @@ const toggleAllPicker = () => {
     setPickSelectedMap({});
   };
 
-// AFTER: only update UI state and hide locally
-const saveSelectedToList = async () => {
-  if (pickSelectedIds.length === 0) {
-    setToast({ open: true, variant: "error", text: "Select at least one cargo to save." });
-    return;
-  }
+  // AFTER: only update UI state and hide locally
+  const saveSelectedToList = async () => {
+    if (pickSelectedIds.length === 0) {
+      setToast({ open: true, variant: "error", text: "Select at least one cargo to save." });
+      return;
+    }
 
-  const selectedRows = Object.values(pickSelectedMap);
-  // merge into addedRows (unique by id)
-  setAddedRows(prev => {
-    const seen = new Set(prev.map(r => Number(r.id)));
-    const merged = [...prev];
-    selectedRows.forEach(r => {
-      const id = Number(r.id);
-      if (!seen.has(id)) merged.push(r);
+    const selectedRows = Object.values(pickSelectedMap);
+    // merge into addedRows (unique by id)
+    setAddedRows((prev) => {
+      const seen = new Set(prev.map((r) => Number(r.id)));
+      const merged = [...prev];
+      selectedRows.forEach((r) => {
+        const id = Number(r.id);
+        if (!seen.has(id)) merged.push(r);
+      });
+      return merged;
     });
-    return merged;
-  });
 
-  // hide them locally so they don't show in the picker again
-  selectedRows.forEach(r => sessionHiddenIdsRef.current.add(Number(r.id)));
-  setPickSelectedIds([]);
-  setPickSelectedMap({});
-  if (bookingSearch.trim()) await fetchPickerRows(bookingSearch);
-  else await fetchPickerRows();
+    // hide them locally so they don't show in the picker again
+    selectedRows.forEach((r) => sessionHiddenIdsRef.current.add(Number(r.id)));
+    setPickSelectedIds([]);
+    setPickSelectedMap({});
+    if (bookingSearch.trim()) await fetchPickerRows(bookingSearch);
+    else await fetchPickerRows();
 
-  setToast({ open: true, variant: "success", text: "Saved to list." });
-};
+    setToast({ open: true, variant: "success", text: "Saved to list." });
+  };
 
   /* ---------- remove from Added list -> mark-not ---------- */
- const removeFromAdded = (id) => {
-   const n = Number(id);
-   setAddedRows((prev) => prev.filter((r) => Number(r.id) !== n));
-   sessionHiddenIdsRef.current.delete(n);
-   setToast({ open: true, variant: "success", text: `Removed #${n} from list.` });
-   if (showPicker) fetchPickerRows(bookingSearch);
- };
+  const removeFromAdded = (id) => {
+    const n = Number(id);
+    setAddedRows((prev) => prev.filter((r) => Number(r.id) !== n));
+    sessionHiddenIdsRef.current.delete(n);
+    setToast({ open: true, variant: "success", text: `Removed #${n} from list.` });
+    if (showPicker) fetchPickerRows(bookingSearch);
+  };
 
   /* ---------- submit ---------- */
   const onSubmit = async (e) => {
@@ -537,22 +586,22 @@ const saveSelectedToList = async () => {
       return;
     }
 
-     const payload = {
-        custom_shipment_ids: addedRows.map((r) => Number(r.id)),            // <<< physical bills
-        shipment_status_id: Number(formData.shipmentStatus),
-        origin_port_id: formData.portOfOrigin,
-        destination_port_id: formData.portOfDestination,
-        awb_or_container_number: formData.awbNo,
-        created_on: formData.createdOn,
-        branch_id: Number(myBranchId),
-        created_by_id: Number(myUserId),
-        shipment_number: formData.shipmentNumber || undefined,
-        license_details: formData.licenseDetails || undefined,
-        exchange_rate: formData.exchangeRate ? Number(formData.exchangeRate) : undefined,
-        shipping_method_id: formData.shippingMethod || undefined,
-        clearing_agent_id: formData.clearingAgent || undefined,
-        remarks: formData.shipmentDetails || undefined,
-      };
+    const payload = {
+      custom_shipment_ids: addedRows.map((r) => Number(r.id)), // physical bills
+      shipment_status_id: Number(formData.shipmentStatus),
+      origin_port_id: formData.portOfOrigin,
+      destination_port_id: formData.portOfDestination,
+      awb_or_container_number: formData.awbNo,
+      created_on: formData.createdOn,
+      branch_id: Number(myBranchId),
+      created_by_id: Number(myUserId),
+      shipment_number: formData.shipmentNumber || undefined,
+      license_details: formData.licenseDetails || undefined,
+      exchange_rate: formData.exchangeRate ? Number(formData.exchangeRate) : undefined,
+      shipping_method_id: formData.shippingMethod || undefined,
+      clearing_agent_id: formData.clearingAgent || undefined,
+      remarks: formData.shipmentDetails || undefined,
+    };
 
     try {
       const committedIds = addedRows.map((r) => Number(r.id));
@@ -578,32 +627,28 @@ const saveSelectedToList = async () => {
       setDupeNote("");
       setShowPicker(false);
       setAddedRows([]); // fresh list
-      } catch (e2) {
-    const is422  = Number(e2?.status) === 422;
-    const used   = e2?.details?.already_used_ids;       // ← comes from shipmentCargo.js
-    if (is422 && Array.isArray(used) && used.length) {
-      const usedIds = used.map(Number);
-      // hard alert as you asked
-      window.alert(`Some cargos are already assigned to another shipment:\n${usedIds.join(", ")}`);
-      // remove those from the pending list
-      setAddedRows(prev => prev.filter(r => !usedIds.includes(Number(r.id))));
-      // hide them in this session so they don’t bounce back into the picker
-      usedIds.forEach(id => sessionHiddenIdsRef.current.add(id));
-      if (showPicker) await fetchPickerRows(bookingSearch);
-      return;
+    } catch (e2) {
+      const is422 = Number(e2?.status) === 422;
+      const used = e2?.details?.already_used_ids;
+      if (is422 && Array.isArray(used) && used.length) {
+        const usedIds = used.map(Number);
+        window.alert(`Some cargos are already assigned to another shipment:\n${usedIds.join(", ")}`);
+        setAddedRows((prev) => prev.filter((r) => !usedIds.includes(Number(r.id))));
+        usedIds.forEach((id) => sessionHiddenIdsRef.current.add(id));
+        if (showPicker) await fetchPickerRows(bookingSearch);
+        return;
+      }
+      setToast({
+        open: true,
+        variant: "error",
+        text: e2?.message || e2?.details?.message || "Failed to create shipment.",
+      });
     }
-    setToast({
-      open: true,
-      variant: "error",
-      text: e2?.message || e2?.details?.message || "Failed to create shipment."
-    });
-  }
-} 
+  };
 
-useEffect(() => {
-  if (pickPage > totalPickPages) setPickPage(totalPickPages);
-}, [totalPickPages, pickPage]);
-
+  useEffect(() => {
+    if (pickPage > totalPickPages) setPickPage(totalPickPages);
+  }, [totalPickPages, pickPage]);
 
   /* ---------- derived for Saved panel ---------- */
   const totalAddedWeight = useMemo(
@@ -622,147 +667,147 @@ useEffect(() => {
       <div className="mt-1 text-xs text-rose-600">{fieldErrors[field].join(", ")}</div>
     ) : null;
 
-    // helpers (place near your other small utils)
-const labelForRow = (r) =>
-  r?.booking_no || r?.invoice_no || r?.bill_no || r?.invoice || `#${r?.id ?? "?"}`;
+  // helpers for import toasts
+  const labelForRow = (r) =>
+    r?.booking_no || r?.invoice_no || r?.bill_no || r?.invoice || `#${r?.id ?? "?"}`;
 
-const listForToast = (rows, cap = 6) => {
-  if (!rows?.length) return "";
-  const slice = rows.slice(0, cap).map(labelForRow).join(", ");
-  return rows.length > cap ? `${slice} …(+${rows.length - cap} more)` : slice;
-};
+  const listForToast = (rows, cap = 6) => {
+    if (!rows?.length) return "";
+    const slice = rows.slice(0, cap).map(labelForRow).join(", ");
+    return rows.length > cap ? `${slice} …(+${rows.length - cap} more)` : slice;
+  };
 
-const pluckIds = (resp, keys = []) => {
-  const r = resp?.data ?? resp;
-  const pools = [r, r?.data, r?.meta, r?.result];
-  for (const k of keys) {
-    for (const o of pools) {
-      const v = o?.[k];
-      if (Array.isArray(v) && v.length) return v.map(Number);
+  const pluckIds = (resp, keys = []) => {
+    const r = resp?.data ?? resp;
+    const pools = [r, r?.data, r?.meta, r?.result];
+    for (const k of keys) {
+      for (const o of pools) {
+        const v = o?.[k];
+        if (Array.isArray(v) && v.length) return v.map(Number);
+      }
     }
-  }
-  return [];
-};
-// Drop-in replacement
-const handleImportExcel = async (e) => {
-  const file = e.target?.files?.[0];
-  if (!file) return;
+    return [];
+  };
 
-  setImporting(true);
-  setToast({ open: true, variant: "success", text: "Uploading… reading file…" });
+  const handleImportExcel = async (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
 
-  try {
-    // BEFORE snapshots
-    const [beforeFreeResp, beforeUsedResp] = await Promise.all([
-      getPhysicalBills({}, false), // FREE
-      getPhysicalBills({}, true),  // USED (already in shipment)
-    ]);
-    const beforeFree = unwrapArray(beforeFreeResp);
-    const beforeUsed = unwrapArray(beforeUsedResp);
-    const beforeFreeIds = new Set(beforeFree.map((r) => Number(r.id)));
-    const beforeUsedIds = new Set(beforeUsed.map((r) => Number(r.id)));
+    setImporting(true);
+    setToast({ open: true, variant: "success", text: "Uploading… reading file…" });
 
-    // IMPORT
-    const resp = await importCustomShipments(file, { branch_id: myBranchId ?? undefined });
+    try {
+      // BEFORE snapshots
+      const [beforeFreeResp, beforeUsedResp] = await Promise.all([
+        getPhysicalBills({}, false), // FREE
+        getPhysicalBills({}, true),  // USED (already in shipment)
+      ]);
+      const beforeFree = unwrapArray(beforeFreeResp);
+      const beforeUsed = unwrapArray(beforeUsedResp);
+      const beforeFreeIds = new Set(beforeFree.map((r) => Number(r.id)));
+      const beforeUsedIds = new Set(beforeUsed.map((r) => Number(r.id)));
 
-    // AFTER snapshots
-    const [afterFreeResp, afterUsedResp] = await Promise.all([
-      getPhysicalBills({}, false),
-      getPhysicalBills({}, true),
-    ]);
-    const afterFree = unwrapArray(afterFreeResp);
-    const afterUsed = unwrapArray(afterUsedResp);
-
-    const freeById = new Map(afterFree.map((r) => [Number(r.id), r]));
-    const usedById = new Map(afterUsed.map((r) => [Number(r.id), r]));
-
-    // IDs from server (handle many shapes)
-    const addedIds     = pluckIds(resp, ["added_ids", "created_ids", "inserted_ids", "new_ids"]);
-    const duplicateIds = pluckIds(resp, ["duplicate_ids", "existing_ids", "skipped_ids", "duplicates"]);
-    const existingFreeIdsFromResp = pluckIds(resp, ["existing_free_ids", "free_ids"]);
-    const existingUsedIdsFromResp = pluckIds(resp, ["existing_used_ids", "used_ids"]);
-
-    // New FREE rows (prefer explicit IDs; else diff)
-    let newFreeRows = [];
-    if (addedIds.length) {
-      newFreeRows = addedIds.map((id) => freeById.get(Number(id))).filter(Boolean);
-    } else {
-      newFreeRows = afterFree.filter((r) => !beforeFreeIds.has(Number(r.id)));
-    }
-
-    // Duplicates split by current state
-    const dupIdSet = new Set([
-      ...duplicateIds,
-      ...existingFreeIdsFromResp,
-      ...existingUsedIdsFromResp,
-    ].map(Number));
-
-    const dupFreeRows = Array.from(dupIdSet).map((id) => freeById.get(id)).filter(Boolean);
-    const dupUsedRows = Array.from(dupIdSet).map((id) => usedById.get(id)).filter(Boolean);
-
-    // === Decision matrix ===
-    // A) Nothing new AND there are USED duplicates -> show “already shipped” toast and stop
-    if (!newFreeRows.length && dupUsedRows.length) {
-      const sample = listForToast(dupUsedRows);
-      setToast({
-        open: true,
-        variant: "warning",
-        text: `Skipped. These cargos are already shipped: ${sample}`,
+      // IMPORT with status 13
+      const resp = await importCustomShipments(file, {
+        branch_id: myBranchId ?? undefined,
+        status_id: 13, // default to “Enquiry Collected”
       });
-      return;
-    }
 
-    // B) Nothing new AND duplicates map only to FREE -> do NOT re-import; inform and stop
-    if (!newFreeRows.length && dupFreeRows.length) {
-      const sample = listForToast(dupFreeRows);
-      setToast({
-        open: true,
-        variant: "warning",
-        text: `Skipped. These cargos already exist in the system: ${sample}`,
-      });
-      return;
-    }
+      // AFTER snapshots
+      const [afterFreeResp, afterUsedResp] = await Promise.all([
+        getPhysicalBills({}, false),
+        getPhysicalBills({}, true),
+      ]);
+      const afterFree = unwrapArray(afterFreeResp);
+      const afterUsed = unwrapArray(afterUsedResp);
 
-    // C) We have truly new FREE rows -> add them to Selected Cargos
-    if (newFreeRows.length) {
-      // de-dup just in case
-      const uniqMap = new Map(newFreeRows.map((r) => [Number(r.id), r]));
-      const rowsToAdd = Array.from(uniqMap.values());
+      const freeById = new Map(afterFree.map((r) => [Number(r.id), r]));
+      const usedById = new Map(afterUsed.map((r) => [Number(r.id), r]));
 
-      setShowPicker(true);
-      setResults(rowsToAdd);
-      const ids = rowsToAdd.map((r) => Number(r.id));
-      setPickSelectedIds(ids);
-      setPickSelectedMap(Object.fromEntries(rowsToAdd.map((r) => [Number(r.id), r])));
+      // IDs from server (handle many shapes)
+      const addedIds = pluckIds(resp, ["added_ids", "created_ids", "inserted_ids", "new_ids"]);
+      const duplicateIds = pluckIds(resp, ["duplicate_ids", "existing_ids", "skipped_ids", "duplicates"]);
+      const existingFreeIdsFromResp = pluckIds(resp, ["existing_free_ids", "free_ids"]);
+      const existingUsedIdsFromResp = pluckIds(resp, ["existing_used_ids", "used_ids"]);
 
-      await saveSelectedToList();
+      // New FREE rows (prefer explicit IDs; else diff)
+      let newFreeRows = [];
+      if (addedIds.length) {
+        newFreeRows = addedIds.map((id) => freeById.get(Number(id))).filter(Boolean);
+      } else {
+        newFreeRows = afterFree.filter((r) => !beforeFreeIds.has(Number(r.id)));
+      }
 
-      const usedNote = dupUsedRows.length ? ` (skipped ${dupUsedRows.length} already shipped)` : "";
+      // Duplicates split by current state
+      const dupIdSet = new Set([
+        ...duplicateIds,
+        ...existingFreeIdsFromResp,
+        ...existingUsedIdsFromResp,
+      ].map(Number));
+
+      const dupFreeRows = Array.from(dupIdSet).map((id) => freeById.get(id)).filter(Boolean);
+      const dupUsedRows = Array.from(dupIdSet).map((id) => usedById.get(id)).filter(Boolean);
+
+      // Decision matrix
+      if (!newFreeRows.length && dupUsedRows.length) {
+        const sample = listForToast(dupUsedRows);
+        setToast({
+          open: true,
+          variant: "warning",
+          text: `Skipped. These cargos are already shipped: ${sample}`,
+        });
+        return;
+      }
+
+      if (!newFreeRows.length && dupFreeRows.length) {
+        const sample = listForToast(dupFreeRows);
+        setToast({
+          open: true,
+          variant: "warning",
+          text: `Skipped. These cargos already exist in the system: ${sample}`,
+        });
+        return;
+      }
+
+      if (newFreeRows.length) {
+        // de-dup just in case
+        const uniqMap = new Map(newFreeRows.map((r) => [Number(r.id), r]));
+        const rowsToAdd = Array.from(uniqMap.values());
+
+        setShowPicker(true);
+        setResults(rowsToAdd);
+        const ids = rowsToAdd.map((r) => Number(r.id));
+        setPickSelectedIds(ids);
+        setPickSelectedMap(Object.fromEntries(rowsToAdd.map((r) => [Number(r.id), r])));
+
+        await saveSelectedToList();
+
+        const usedNote = dupUsedRows.length ? ` (skipped ${dupUsedRows.length} already shipped)` : "";
+        setToast({
+          open: true,
+          variant: "success",
+          text: `Imported ${rowsToAdd.length} new item(s) and added to Selected Cargos${usedNote}.`,
+        });
+        return;
+      }
+
+      // Fallback
       setToast({
         open: true,
         variant: "success",
-        text: `Imported ${rowsToAdd.length} new item(s) and added to Selected Cargos${usedNote}.`,
+        text: "Import succeeded, but nothing to add (all duplicates).",
       });
-      return;
+    } catch (err) {
+      setToast({
+        open: true,
+        variant: "error",
+        text: err?.response?.data?.message || err?.message || "Import failed.",
+      });
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
-
-    // D) Absolute fallback
-    setToast({
-      open: true,
-      variant: "success",
-      text: "Import succeeded, but nothing to add (all duplicates).",
-    });
-  } catch (err) {
-    setToast({
-      open: true,
-      variant: "error",
-      text: err?.response?.data?.message || err?.message || "Import failed.",
-    });
-  } finally {
-    setImporting(false);
-    if (fileRef.current) fileRef.current.value = "";
-  }
-};
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-4">
@@ -1085,7 +1130,7 @@ const handleImportExcel = async (e) => {
 
   {visibleAddedRows.map((row, idx) => {
     const checked = pickSelectedIds.includes(Number(row.id));
-    const statusTextVal = row?.status?.name || row?.status || "";
+    const statusTextVal = getStatusText(row, statusMaps.byId);
     const isUsed = Number(row?.is_shipment ?? row?.is_in_cargo_shipment ?? 0) === 1;
 
     return (
@@ -1233,7 +1278,7 @@ const handleImportExcel = async (e) => {
   {visibleResults.map((row, idx) => {
     const checked   = pickSelectedIds.includes(Number(row.id));
     const isUsed    = Number(row?.is_shipment ?? row?.is_in_cargo_shipment ?? 0) === 1;
-    const statusStr = getStatus(row);
+    const statusStr = getStatusText(row, statusMaps.byId);
 
     return (
       <tr key={row.id} className="hover:bg-gray-50">

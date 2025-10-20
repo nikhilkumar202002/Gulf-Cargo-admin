@@ -1,9 +1,13 @@
 // src/pages/ShipmentReport.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { listCargoShipments, updateCargoShipmentStatus, bulkUpdateCargoShipmentStatus } from "../../api/shipmentCargo";
-import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi"; // <- load status options
+import {
+  listCargoShipments,
+  bulkUpdateCargoShipmentStatus,
+} from "../../api/shipmentCargo";
+import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 import { IoMdEye } from "react-icons/io";
+
 const cx = (...c) => c.filter(Boolean).join(" ");
 
 /* ---------------- Skeleton helpers (lightweight) ---------------- */
@@ -61,7 +65,7 @@ const statusColor = (s = "") => {
 };
 
 // Unwrap server response into (list, meta)
-function unwrapShipments(resp, fallbackPage = 1, fallbackSize = 10) {
+function unwrapShipments(resp) {
   const list =
     (Array.isArray(resp?.data?.data) && resp.data.data) ||
     (Array.isArray(resp?.data) && resp.data) ||
@@ -69,21 +73,14 @@ function unwrapShipments(resp, fallbackPage = 1, fallbackSize = 10) {
     (Array.isArray(resp?.items) && resp.items) ||
     (Array.isArray(resp) && resp) ||
     [];
-  const meta =
-    resp?.meta ||
-    resp?.data?.meta || {
-      current_page: fallbackPage,
-      per_page: fallbackSize,
-      last_page: 1,
-      total: list.length,
-    };
+  const meta = resp?.meta || resp?.data?.meta || null; // we won't rely on this for client paging
   return { list, meta };
 }
 
+const PAGE_SIZE = 10; // <- fixed 10 rows per page
+
 export default function ShipmentReport() {
   const [rows, setRows] = useState([]);
-  const [meta, setMeta] = useState({ current_page: 1, per_page: 10, last_page: 1, total: 0 });
-
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -93,9 +90,8 @@ export default function ShipmentReport() {
   const [toDate, setToDate] = useState(""); // yyyy-mm-dd
   const [statusId, setStatusId] = useState(""); // filter: id
 
-  // pagination
+  // pagination (client-side only)
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
 
   // status options
   const [statusOptions, setStatusOptions] = useState([]);
@@ -106,10 +102,6 @@ export default function ShipmentReport() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkStatusId, setBulkStatusId] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
-
-  // per-row draft status
-  const [rowStatusDraft, setRowStatusDraft] = useState({}); // { [id]: statusId }
-  const [rowBusyId, setRowBusyId] = useState(null);
 
   const loadStatuses = async () => {
     setStatusLoading(true);
@@ -129,29 +121,23 @@ export default function ShipmentReport() {
     }
   };
 
-  const load = async (overrides = {}) => {
+  const load = async () => {
     setLoading(true);
     setErr("");
     try {
-      const p = overrides.page ?? page;
-      const pp = overrides.perPage ?? perPage;
-
+      // We fetch all that matches the filters; client paginates.
       const params = {
-        page: p,
-        per_page: pp,
+        // NOTE: no page/per_page; we paginate on the client
         from_date: fromDate || undefined,
         to_date: toDate || undefined,
         status_id: statusId || undefined,
       };
-
       const resp = await listCargoShipments(params);
-      const { list, meta: m } = unwrapShipments(resp, p, pp);
-      setRows(list);
-      setMeta(m);
+      const { list } = unwrapShipments(resp);
+      setRows(Array.isArray(list) ? list : []);
     } catch (e) {
       setErr(e?.message || "Failed to load shipments");
       setRows([]);
-      setMeta({ current_page: 1, per_page: perPage, last_page: 1, total: 0 });
     } finally {
       setLoading(false);
     }
@@ -160,22 +146,16 @@ export default function ShipmentReport() {
   // initial loads
   useEffect(() => {
     loadStatuses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // reload on page/perPage
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, perPage]);
-
-  // reload when filters change (and reset to page 1)
+  // reload when filters change and reset to page 1
   useEffect(() => {
     setPage(1);
-    load({ page: 1 });
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate, statusId]);
 
+  // simple text search filter
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;
     const q = query.toLowerCase();
@@ -201,12 +181,23 @@ export default function ShipmentReport() {
     });
   }, [rows, query]);
 
+  // client-side pagination derived data
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const startIdx = (safePage - 1) * PAGE_SIZE;
+  const endIdx = Math.min(startIdx + PAGE_SIZE, total);
+  const pageRows = filtered.slice(startIdx, endIdx);
+
+  // reset page if query narrows results past current page
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
+
   const columns = [
     { key: "select", label: "" },
-     // selection checkbox
     { key: "id", label: "ID" },
     { key: "actions", label: "Actions" },
-
     { key: "created_on", label: "Shipment Date" },
     { key: "awb_or_container_number", label: "AWB / Container" },
     { key: "origin_port", label: "Origin" },
@@ -216,9 +207,6 @@ export default function ShipmentReport() {
     { key: "no_of_cargos", label: "No. of Cargos" },
     { key: "status", label: "Status" },
   ];
-
-  const showingFrom = filtered.length ? (meta.current_page - 1) * meta.per_page + 1 : 0;
-  const showingTo = filtered.length ? showingFrom + filtered.length - 1 : 0;
 
   const toggleSelected = (id, checked) => {
     setSelectedIds((prev) => {
@@ -232,7 +220,7 @@ export default function ShipmentReport() {
   const toggleSelectAllThisPage = (checked) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      filtered.forEach((r) => {
+      pageRows.forEach((r) => {
         if (checked) next.add(r.id);
         else next.delete(r.id);
       });
@@ -256,8 +244,7 @@ export default function ShipmentReport() {
         shipment_status_id: Number(bulkStatusId),
         shipment_ids: ids,
       });
-      // refresh and clear selection
-      await load();
+      await load(); // refresh
       setSelectedIds(new Set());
       setBulkStatusId("");
     } catch (e) {
@@ -267,8 +254,6 @@ export default function ShipmentReport() {
       setBulkBusy(false);
     }
   };
-
- 
 
   return (
     <div className="min-h-screen mx-auto max-w-6xl">
@@ -283,23 +268,21 @@ export default function ShipmentReport() {
           </p>
         </div>
         <div className="flex items-end">
-            {loading ? (
-              <SkelBtn wide />
-            ) : (
-              <Link
-                to="/shipment/createshipment"
-                className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                + Add Shipment
-              </Link>
-            )}
-          </div>
+          {loading ? (
+            <SkelBtn wide />
+          ) : (
+            <Link
+              to="/shipment/createshipment"
+              className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              + Add Shipment
+            </Link>
+          )}
+        </div>
       </header>
 
       <main className="mx-auto max-w-6xl py-6">
- 
         <div className="mb-4 grid grid-cols-4 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4 lg:grid-cols-4">
-
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">Search</label>
             {loading ? (
@@ -364,38 +347,36 @@ export default function ShipmentReport() {
             {!loading && statusErr && <p className="mt-1 text-xs text-rose-600">{statusErr}</p>}
           </div>
 
-           <div className="flex items-center gap-2">
-                <select
-                  value={bulkStatusId}
-                  onChange={(e) => setBulkStatusId(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                  disabled={loading || statusLoading}
-                  title="Choose status to apply to selected rows"
-                >
-                  <option value="">Bulk: set status…</option>
-                  {statusOptions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleBulkUpdate}
-                  disabled={bulkBusy || !bulkStatusId || selectedIds.size === 0}
-                  className={cx(
-                    "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
-                    bulkBusy || !bulkStatusId || selectedIds.size === 0
-                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  )}
-                >
-                  {bulkBusy ? <Spinner className="h-4 w-4" /> : "Update Selected"}
-                </button>
-              </div>
-         
+          <div className="flex items-center gap-2">
+            <select
+              value={bulkStatusId}
+              onChange={(e) => setBulkStatusId(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              disabled={loading || statusLoading}
+              title="Choose status to apply to selected rows"
+            >
+              <option value="">Bulk: set status…</option>
+              {statusOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleBulkUpdate}
+              disabled={bulkBusy || !bulkStatusId || selectedIds.size === 0}
+              className={cx(
+                "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
+                bulkBusy || !bulkStatusId || selectedIds.size === 0
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              )}
+            >
+              {bulkBusy ? <Spinner className="h-4 w-4" /> : "Update Selected"}
+            </button>
+          </div>
         </div>
-
 
         {/* Table */}
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -416,10 +397,7 @@ export default function ShipmentReport() {
                           type="checkbox"
                           aria-label="Select all on this page"
                           onChange={(e) => toggleSelectAllThisPage(e.target.checked)}
-                          checked={
-                            filtered.length > 0 &&
-                            filtered.every((r) => selectedIds.has(r.id))
-                          }
+                          checked={pageRows.length > 0 && pageRows.every((r) => selectedIds.has(r.id))}
                         />
                       ) : (
                         c.label
@@ -451,7 +429,7 @@ export default function ShipmentReport() {
                 )}
 
                 {/* Empty */}
-                {!loading && !err && filtered.length === 0 && (
+                {!loading && !err && pageRows.length === 0 && (
                   <tr>
                     <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-slate-500">
                       No shipments found.
@@ -459,10 +437,10 @@ export default function ShipmentReport() {
                   </tr>
                 )}
 
-                {/* Data rows */}
+                {/* Data rows (10 per page) */}
                 {!loading &&
                   !err &&
-                  filtered.map((r) => {
+                  pageRows.map((r) => {
                     const noOfCargos = Array.isArray(r.cargos)
                       ? r.cargos.length
                       : Number(r.no_of_cargos || r.total_cargos || r.cargo_count || 0);
@@ -479,13 +457,13 @@ export default function ShipmentReport() {
                             aria-label={`Select shipment ${r.id}`}
                           />
                         </td>
-                  
+
                         <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">
                           {r.id ?? "—"}
                         </td>
-                              <td className="px-4 py-3 text-sm">
+
+                        <td className="px-4 py-3 text-sm">
                           <div className="flex items-center gap-2">
-                      
                             <Link
                               to={`/shipments/shipmentsview/${r.id}`}
                               state={{ shipment: r }}
@@ -496,10 +474,11 @@ export default function ShipmentReport() {
                                transition"
                               title="View"
                             >
-                              <IoMdEye/>
+                              <IoMdEye />
                             </Link>
                           </div>
                         </td>
+
                         <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">
                           {formatDate(r.created_on ?? r.created_at)}
                         </td>
@@ -515,9 +494,6 @@ export default function ShipmentReport() {
                         <td className="px-4 py-3 text-sm">
                           <Badge text={statusText || "—"} color={statusColor(statusText)} />
                         </td>
-
-                        {/* Actions: per-row quick update + view */}
-                        
                       </tr>
                     );
                   })}
@@ -525,45 +501,21 @@ export default function ShipmentReport() {
             </table>
           </div>
 
-          {/* Pagination + Bulk update controls */}
+          {/* Pagination (10 per page) */}
           <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 p-3 sm:flex-row">
             <div className="text-sm text-slate-600">
               {loading ? (
                 <Skel w={220} h={16} />
               ) : (
                 <>
-                  Showing <span className="font-medium">{filtered.length ? showingFrom : 0}</span> to{" "}
-                  <span className="font-medium">{filtered.length ? showingTo : 0}</span> of{" "}
-                  <span className="font-medium">{meta.total ?? filtered.length}</span> shipments
+                  Showing <span className="font-medium">{total ? startIdx + 1 : 0}</span> to{" "}
+                  <span className="font-medium">{total ? endIdx : 0}</span> of{" "}
+                  <span className="font-medium">{total}</span> shipments
                 </>
               )}
             </div>
 
-            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
-              {/* Rows / page selector sits near pagination */}
-              {loading ? (
-                <Skel w={140} h={28} rounded={6} />
-              ) : (
-                <select
-                  value={perPage}
-                  onChange={(e) => {
-                    setPerPage(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {[10, 20, 50, 100].map((n) => (
-                    <option key={n} value={n}>
-                      {n} / page
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {/* Bulk updater */}
-             
-
-              {/* Pager */}
+            <div className="flex items-center gap-2">
               {loading ? (
                 <>
                   <SkelBtn />
@@ -571,13 +523,13 @@ export default function ShipmentReport() {
                   <SkelBtn />
                 </>
               ) : (
-                <div className="flex items-center gap-2">
+                <>
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={loading || meta.current_page <= 1}
+                    disabled={loading || safePage <= 1}
                     className={cx(
                       "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
-                      meta.current_page <= 1 || loading
+                      safePage <= 1 || loading
                         ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                         : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                     )}
@@ -585,22 +537,22 @@ export default function ShipmentReport() {
                     Prev
                   </button>
                   <span className="text-sm text-slate-700">
-                    Page <span className="font-semibold">{meta.current_page}</span> of{" "}
-                    <span className="font-semibold">{meta.last_page}</span>
+                    Page <span className="font-semibold">{safePage}</span> of{" "}
+                    <span className="font-semibold">{totalPages}</span>
                   </span>
                   <button
-                    onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}
-                    disabled={loading || meta.current_page >= meta.last_page}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={loading || safePage >= totalPages}
                     className={cx(
                       "inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium",
-                      meta.current_page >= meta.last_page || loading
+                      safePage >= totalPages || loading
                         ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                         : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                     )}
                   >
                     Next
                   </button>
-                </div>
+                </>
               )}
             </div>
           </div>

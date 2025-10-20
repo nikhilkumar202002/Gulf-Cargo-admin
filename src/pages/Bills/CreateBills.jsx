@@ -4,13 +4,11 @@ import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
 import { Link } from "react-router-dom";
 import { Toaster, toast } from "react-hot-toast";
 import "./PhysicalBill.css";
-
-/* APIs */
 import { getActiveShipmentMethods } from "../../api/shipmentMethodApi";
 import { createCustomShipment } from "../../api/billApi"; // <-- NEW
 
 function CreateBills() {
-  const FIXED_STATUS = "enquiry collected"; // locked status
+  const FIXED_STATUS = 13; // locked status
 
   const [form, setForm] = useState({
     bill_no: "",
@@ -55,7 +53,7 @@ function CreateBills() {
 
   const onChange = (e) => {
     const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
+    setForm((f) => ({ ...f, [name]: value, status: FIXED_STATUS }));
   };
 
   const validate = () => {
@@ -97,7 +95,7 @@ function CreateBills() {
         pcs: Number(form.pcs),
         weight: Number(form.weight),
         shipment_method: shipmentMethodName,
-        status: FIXED_STATUS,
+        status: form.status,
         des: form.destination,
       };
 

@@ -308,7 +308,7 @@ export default function CreateCargo() {
   const showToast = useCallback((text, variant = "success", duration = 3500) => {
     try {
       clearTimeout(toastTimer.current);
-    } catch {}
+    } catch { }
     setToast({ visible: true, text, variant });
     toastTimer.current = setTimeout(
       () => setToast((t) => ({ ...t, visible: false })),
@@ -318,7 +318,7 @@ export default function CreateCargo() {
   const hideToast = useCallback(() => {
     try {
       clearTimeout(toastTimer.current);
-    } catch {}
+    } catch { }
     setToast((t) => ({ ...t, visible: false }));
   }, []);
 
@@ -497,26 +497,26 @@ export default function CreateCargo() {
     setCollectedByOptions(unwrapArray(res));
   }, [form.branchId, userProfile, tokenBranchId]);
 
-    useEffect(() => {
-  let alive = true;
-  (async () => {
-    const bidRaw = pickBranchId(userProfile) ?? tokenBranchId ?? null;
-    const bid = bidRaw != null ? String(bidRaw) : "";
-    if (!bid) return;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const bidRaw = pickBranchId(userProfile) ?? tokenBranchId ?? null;
+      const bid = bidRaw != null ? String(bidRaw) : "";
+      if (!bid) return;
 
-    // Prefill next invoice number from /cargos?branch_id=...
-    try {
-      const next = await getNextInvoiceNo(bid);
-      if (!alive) return;
-      setForm((f) => ({ ...f, branchId: bid, invoiceNo: next }));
-    } catch {
-      // Fallback if API is empty/new
-      if (!alive) return;
-      setForm((f) => ({ ...f, branchId: bid, invoiceNo: f.invoiceNo || "INV-000001" }));
-    }
-  })();
-  return () => { alive = false; };
-}, [userProfile, tokenBranchId]);
+      // Prefill next invoice number from /cargos?branch_id=...
+      try {
+        const next = await getNextInvoiceNo(bid);
+        if (!alive) return;
+        setForm((f) => ({ ...f, branchId: bid, invoiceNo: next }));
+      } catch {
+        // Fallback if API is empty/new
+        if (!alive) return;
+        setForm((f) => ({ ...f, branchId: bid, invoiceNo: f.invoiceNo || "INV-000001" }));
+      }
+    })();
+    return () => { alive = false; };
+  }, [userProfile, tokenBranchId]);
 
   useEffect(() => {
     let alive = true;
@@ -524,7 +524,7 @@ export default function CreateCargo() {
       if (form.collectedByRoleName === "Office") {
         try {
           await loadOfficeStaff();
-        } catch {}
+        } catch { }
         return;
       }
       if (form.collectedByRoleName === "Driver") {
@@ -707,23 +707,23 @@ export default function CreateCargo() {
   }, [form, boxes]);
 
   const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
-  setForm({
-    ...buildInitialForm(branchId),
-    branchId: String(branchId || ""),
-    invoiceNo: nextInvoiceNo || "INV-000001",
-  });
-  setCollectedByOptions([]);
-  setBoxes([{ box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] }]);
-}, []);
+    setForm({
+      ...buildInitialForm(branchId),
+      branchId: String(branchId || ""),
+      invoiceNo: nextInvoiceNo || "INV-000001",
+    });
+    setCollectedByOptions([]);
+    setBoxes([{ box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] }]);
+  }, []);
 
   const onResetClick = useCallback(() => {
-  const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
-  setForm(buildInitialForm(nextBranchId));
-  setCollectedByOptions([]);
-  setBoxes([{ box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] }]);
-  setInvoiceShipment(null);
-  showToast("Form reset.", "success");
-}, [userProfile, tokenBranchId, showToast]);
+    const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
+    setForm(buildInitialForm(nextBranchId));
+    setCollectedByOptions([]);
+    setBoxes([{ box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] }]);
+    setInvoiceShipment(null);
+    showToast("Form reset.", "success");
+  }, [userProfile, tokenBranchId, showToast]);
 
   const resetFormAfterSubmit = useCallback(() => {
     const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
@@ -734,214 +734,214 @@ export default function CreateCargo() {
     ]);
   }, [userProfile, tokenBranchId]);
 
-const submit = useCallback(
-  async (e) => {
-    e.preventDefault();
-    const missing = validateBeforeSubmit();
-    if (missing.length) {
-      setMsg({ text: `Missing/invalid: ${missing.join(", ")}`, variant: "error" });
-      return;
-    }
-
-    const roleId = Number(form.collectedByRoleId);
-    const personId = Number(form.collectedByPersonId);
-    if (!Number.isFinite(roleId) || roleId <= 0) {
-      setMsg({ text: "Choose a valid ‘Collected By’ role.", variant: "error" });
-      return;
-    }
-    if (!Number.isFinite(personId) || personId <= 0) {
-      setMsg({ text: "Choose a valid ‘Collected By’ person.", variant: "error" });
-      return;
-    }
-
-    // ---- build payload (unchanged) ----
-    const grouped = {};
-    boxes.forEach((box, bIdx) => {
-      const bn = String(box.box_number ?? bIdx + 1);
-      const numericWeight = Number(box.box_weight ?? box.weight ?? 0);
-      const boxWeightNum = Number.isFinite(numericWeight) ? Math.max(0, numericWeight) : 0;
-      if (!grouped[bn]) grouped[bn] = { items: [] };
-      let putWeightOnFirstItem = true;
-      (box.items || []).forEach((it) => {
-        const pieces = Number(it.pieces || 0);
-        const itemWeight = putWeightOnFirstItem ? boxWeightNum : 0;
-        putWeightOnFirstItem = false;
-        grouped[bn].items.push({
-          slno: String(grouped[bn].items.length + 1),
-          box_number: bn,
-          name: it.name || "",
-          piece_no: String(pieces),
-          unit_price: toDec(0, 2),
-          total_price: toDec(0, 2),
-          weight: toDec(itemWeight, 3),
-        });
-      });
-    });
-    const ordered = {};
-    Object.keys(grouped).sort((a, b) => Number(a) - Number(b)).forEach((k) => (ordered[k] = grouped[k]));
-
-    const flatItems = [];
-    boxes.forEach((box, bIdx) => {
-      const bn = String(box.box_number ?? bIdx + 1);
-      const boxW = Number(box.box_weight ?? box.weight ?? 0) || 0;
-      const list = Array.isArray(box.items) && box.items.length ? box.items : [{ name: "", pieces: 0 }];
-      let putWeightOnFirst = true;
-      list.forEach((it, i) => {
-        const name = (it.name && String(it.name).trim()) || `Box ${bn} contents`;
-        const pcs = Number.isFinite(Number(it.pieces)) ? Number(it.pieces) : 0;
-        flatItems.push({
-          slno: String(i + 1),
-          box_number: bn,
-          name,
-          piece_no: String(pcs),
-          unit_price: "0.00",
-          total_price: "0.00",
-          weight: (putWeightOnFirst ? boxW : 0).toFixed(3),
-        });
-        putWeightOnFirst = false;
-      });
-    });
-    if (flatItems.length === 0) {
-      setMsg({ text: "Add at least one box or item.", variant: "error" });
-      return;
-    }
-
-    const boxWeights = boxes
-      .sort((a, b) => Number(a.box_number ?? 0) - Number(b.box_number ?? 0))
-      .map((box) => {
-        const w = Number(box.box_weight ?? box.weight ?? 0);
-        const wn = Number.isFinite(w) ? Math.max(0, w) : 0;
-        return wn.toFixed(3);
-      });
-
-    const R = derived.rows;
-    const payload = {
-      branch_id: Number(form.branchId),
-      booking_no: form.invoiceNo, // we send what we have; backend may override
-      sender_id: Number(form.senderId),
-      receiver_id: Number(form.receiverId),
-      shipping_method_id: Number(form.shippingMethodId),
-      payment_method_id: Number(form.paymentMethodId),
-      status_id: Number(form.statusId || DEFAULT_STATUS_ID),
-      date: form.date,
-      time: form.time,
-      collected_by: form.collectedByRoleName || "",
-      collected_by_id: Number(form.collectedByRoleId),
-      name_id: Number(form.collectedByPersonId),
-      lrl_tracking_code: form.lrlTrackingCode || null,
-      delivery_type_id: Number(form.deliveryTypeId),
-      special_remarks: form.specialRemarks || null,
-      items: flatItems,
-      total_cost: +subtotal.toFixed(2),
-      vat_percentage: +vatPercentage.toFixed(2),
-      vat_cost: +vatCost.toFixed(2),
-      net_total: +derived.totalAmount.toFixed(2),
-      total_weight: Number(totalWeight.toFixed(3)),
-      box_weight: boxWeights,
-      boxes: ordered,
-      quantity_total_weight: R.total_weight.qty,
-      unit_rate_total_weight: R.total_weight.rate,
-      amount_total_weight: R.total_weight.amount,
-      quantity_duty: R.duty.qty,
-      unit_rate_duty: R.duty.rate,
-      amount_duty: R.duty.amount,
-      quantity_packing_charge: R.packing_charge.qty,
-      unit_rate_packing_charge: R.packing_charge.rate,
-      amount_packing_charge: R.packing_charge.amount,
-      quantity_additional_packing_charge: R.additional_packing_charge.qty,
-      unit_rate_additional_packing_charge: R.additional_packing_charge.rate,
-      amount_additional_packing_charge: R.additional_packing_charge.amount,
-      quantity_insurance: R.insurance.qty,
-      unit_rate_insurance: R.insurance.rate,
-      amount_insurance: R.insurance.amount,
-      quantity_awb_fee: R.awb_fee.qty,
-      unit_rate_awb_fee: R.awb_fee.rate,
-      amount_awb_fee: R.awb_fee.amount,
-      quantity_vat_amount: R.vat_amount.qty,
-      unit_rate_vat_amount: R.vat_amount.rate,
-      amount_vat_amount: R.vat_amount.amount,
-      quantity_volume_weight: R.volume_weight.qty,
-      unit_rate_volume_weight: R.volume_weight.rate,
-      amount_volume_weight: R.volume_weight.amount,
-      quantity_other_charges: R.other_charges.qty,
-      unit_rate_other_charges: R.other_charges.rate,
-      amount_other_charges: R.other_charges.amount,
-      quantity_discount: R.discount.qty,
-      unit_rate_discount: R.discount.rate,
-      amount_discount: R.discount.amount,
-      bill_charges: +billCharges.toFixed(2),
-      total_amount: derived.totalAmount,
-      no_of_pieces: Number(form.charges.no_of_pieces || 0),
-    };
-
-    try {
-      setLoading(true);
-
-      // ✅ One API call only
-      const res = await createCargo(payload);
-
-      // Normalize for invoice modal
-      const normalized = normalizeCargoToInvoice(res);
-      if ((!normalized.booking_no || String(normalized.booking_no).trim() === "") && normalized.boxes) {
-        const keys = Object.keys(normalized.boxes).filter((k) => String(k).trim() !== "");
-        if (keys.length) {
-          keys.sort((a, b) => Number(a) - Number(b));
-          normalized.booking_no = keys.join("-");
-        }
+  const submit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      const missing = validateBeforeSubmit();
+      if (missing.length) {
+        setMsg({ text: `Missing/invalid: ${missing.join(", ")}`, variant: "error" });
+        return;
       }
-      setInvoiceShipment(normalized);
-      setInvoiceOpen(true);
 
-      // Figure out what number backend actually used
-      const saved = res?.data ?? res ?? {};
-      const savedNo =
-        saved.booking_no ??
-        saved.invoice_no ??
-        saved.bookingNo ??
-        saved.invoiceNo ??
-        form.invoiceNo;
+      const roleId = Number(form.collectedByRoleId);
+      const personId = Number(form.collectedByPersonId);
+      if (!Number.isFinite(roleId) || roleId <= 0) {
+        setMsg({ text: "Choose a valid ‘Collected By’ role.", variant: "error" });
+        return;
+      }
+      if (!Number.isFinite(personId) || personId <= 0) {
+        setMsg({ text: "Choose a valid ‘Collected By’ person.", variant: "error" });
+        return;
+      }
 
-      // Compute NEXT and show it instantly
-      const nextNo = incrementInvoiceString(savedNo);
-      const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? form.branchId ?? "";
-      softResetForNext(nextBranchId, nextNo);
+      // ---- build payload (unchanged) ----
+      const grouped = {};
+      boxes.forEach((box, bIdx) => {
+        const bn = String(box.box_number ?? bIdx + 1);
+        const numericWeight = Number(box.box_weight ?? box.weight ?? 0);
+        const boxWeightNum = Number.isFinite(numericWeight) ? Math.max(0, numericWeight) : 0;
+        if (!grouped[bn]) grouped[bn] = { items: [] };
+        let putWeightOnFirstItem = true;
+        (box.items || []).forEach((it) => {
+          const pieces = Number(it.pieces || 0);
+          const itemWeight = putWeightOnFirstItem ? boxWeightNum : 0;
+          putWeightOnFirstItem = false;
+          grouped[bn].items.push({
+            slno: String(grouped[bn].items.length + 1),
+            box_number: bn,
+            name: it.name || "",
+            piece_no: String(pieces),
+            unit_price: toDec(0, 2),
+            total_price: toDec(0, 2),
+            weight: toDec(itemWeight, 3),
+          });
+        });
+      });
+      const ordered = {};
+      Object.keys(grouped).sort((a, b) => Number(a) - Number(b)).forEach((k) => (ordered[k] = grouped[k]));
 
-      showToast("Cargo created. Invoice ready.", "success");
-    } catch (e2) {
-      const details =
-        e2?.response?.data?.errors ??
-        e2?.response?.data ??
-        e2?.details ??
-        e2?.message;
-      console.error("Create cargo failed:", details);
-      const msgText =
-        typeof details === "string"
-          ? details
-          : Array.isArray(details)
-          ? details.join(", ")
-          : Object.entries(details || {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(" | ");
-      setMsg({ text: msgText || "Failed to create cargo (422).", variant: "error" });
-    } finally {
-      setLoading(false);
-    }
-  },
-  [
-    boxes,
-    form,
-    subtotal,
-    billCharges,
-    vatCost,
-    totalWeight,
-    validateBeforeSubmit,
-    showToast,
-    derived.totalAmount,
-    derived.rows,
-    vatPercentage,
-    userProfile,
-    tokenBranchId,
-    softResetForNext,
-  ]
-);
+      const flatItems = [];
+      boxes.forEach((box, bIdx) => {
+        const bn = String(box.box_number ?? bIdx + 1);
+        const boxW = Number(box.box_weight ?? box.weight ?? 0) || 0;
+        const list = Array.isArray(box.items) && box.items.length ? box.items : [{ name: "", pieces: 0 }];
+        let putWeightOnFirst = true;
+        list.forEach((it, i) => {
+          const name = (it.name && String(it.name).trim()) || `Box ${bn} contents`;
+          const pcs = Number.isFinite(Number(it.pieces)) ? Number(it.pieces) : 0;
+          flatItems.push({
+            slno: String(i + 1),
+            box_number: bn,
+            name,
+            piece_no: String(pcs),
+            unit_price: "0.00",
+            total_price: "0.00",
+            weight: (putWeightOnFirst ? boxW : 0).toFixed(3),
+          });
+          putWeightOnFirst = false;
+        });
+      });
+      if (flatItems.length === 0) {
+        setMsg({ text: "Add at least one box or item.", variant: "error" });
+        return;
+      }
+
+      const boxWeights = boxes
+        .sort((a, b) => Number(a.box_number ?? 0) - Number(b.box_number ?? 0))
+        .map((box) => {
+          const w = Number(box.box_weight ?? box.weight ?? 0);
+          const wn = Number.isFinite(w) ? Math.max(0, w) : 0;
+          return wn.toFixed(3);
+        });
+
+      const R = derived.rows;
+      const payload = {
+        branch_id: Number(form.branchId),
+        booking_no: form.invoiceNo, // we send what we have; backend may override
+        sender_id: Number(form.senderId),
+        receiver_id: Number(form.receiverId),
+        shipping_method_id: Number(form.shippingMethodId),
+        payment_method_id: Number(form.paymentMethodId),
+        status_id: Number(form.statusId || DEFAULT_STATUS_ID),
+        date: form.date,
+        time: form.time,
+        collected_by: form.collectedByRoleName || "",
+        collected_by_id: Number(form.collectedByRoleId),
+        name_id: Number(form.collectedByPersonId),
+        lrl_tracking_code: form.lrlTrackingCode || null,
+        delivery_type_id: Number(form.deliveryTypeId),
+        special_remarks: form.specialRemarks || null,
+        items: flatItems,
+        total_cost: +subtotal.toFixed(2),
+        vat_percentage: +vatPercentage.toFixed(2),
+        vat_cost: +vatCost.toFixed(2),
+        net_total: +derived.totalAmount.toFixed(2),
+        total_weight: Number(totalWeight.toFixed(3)),
+        box_weight: boxWeights,
+        boxes: ordered,
+        quantity_total_weight: R.total_weight.qty,
+        unit_rate_total_weight: R.total_weight.rate,
+        amount_total_weight: R.total_weight.amount,
+        quantity_duty: R.duty.qty,
+        unit_rate_duty: R.duty.rate,
+        amount_duty: R.duty.amount,
+        quantity_packing_charge: R.packing_charge.qty,
+        unit_rate_packing_charge: R.packing_charge.rate,
+        amount_packing_charge: R.packing_charge.amount,
+        quantity_additional_packing_charge: R.additional_packing_charge.qty,
+        unit_rate_additional_packing_charge: R.additional_packing_charge.rate,
+        amount_additional_packing_charge: R.additional_packing_charge.amount,
+        quantity_insurance: R.insurance.qty,
+        unit_rate_insurance: R.insurance.rate,
+        amount_insurance: R.insurance.amount,
+        quantity_awb_fee: R.awb_fee.qty,
+        unit_rate_awb_fee: R.awb_fee.rate,
+        amount_awb_fee: R.awb_fee.amount,
+        quantity_vat_amount: R.vat_amount.qty,
+        unit_rate_vat_amount: R.vat_amount.rate,
+        amount_vat_amount: R.vat_amount.amount,
+        quantity_volume_weight: R.volume_weight.qty,
+        unit_rate_volume_weight: R.volume_weight.rate,
+        amount_volume_weight: R.volume_weight.amount,
+        quantity_other_charges: R.other_charges.qty,
+        unit_rate_other_charges: R.other_charges.rate,
+        amount_other_charges: R.other_charges.amount,
+        quantity_discount: R.discount.qty,
+        unit_rate_discount: R.discount.rate,
+        amount_discount: R.discount.amount,
+        bill_charges: +billCharges.toFixed(2),
+        total_amount: derived.totalAmount,
+        no_of_pieces: Number(form.charges.no_of_pieces || 0),
+      };
+
+      try {
+        setLoading(true);
+
+        // ✅ One API call only
+        const res = await createCargo(payload);
+
+        // Normalize for invoice modal
+        const normalized = normalizeCargoToInvoice(res);
+        if ((!normalized.booking_no || String(normalized.booking_no).trim() === "") && normalized.boxes) {
+          const keys = Object.keys(normalized.boxes).filter((k) => String(k).trim() !== "");
+          if (keys.length) {
+            keys.sort((a, b) => Number(a) - Number(b));
+            normalized.booking_no = keys.join("-");
+          }
+        }
+        setInvoiceShipment(normalized);
+        setInvoiceOpen(true);
+
+        // Figure out what number backend actually used
+        const saved = res?.data ?? res ?? {};
+        const savedNo =
+          saved.booking_no ??
+          saved.invoice_no ??
+          saved.bookingNo ??
+          saved.invoiceNo ??
+          form.invoiceNo;
+
+        // Compute NEXT and show it instantly
+        const nextNo = incrementInvoiceString(savedNo);
+        const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? form.branchId ?? "";
+        softResetForNext(nextBranchId, nextNo);
+
+        showToast("Cargo created. Invoice ready.", "success");
+      } catch (e2) {
+        const details =
+          e2?.response?.data?.errors ??
+          e2?.response?.data ??
+          e2?.details ??
+          e2?.message;
+        console.error("Create cargo failed:", details);
+        const msgText =
+          typeof details === "string"
+            ? details
+            : Array.isArray(details)
+              ? details.join(", ")
+              : Object.entries(details || {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(" | ");
+        setMsg({ text: msgText || "Failed to create cargo (422).", variant: "error" });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      boxes,
+      form,
+      subtotal,
+      billCharges,
+      vatCost,
+      totalWeight,
+      validateBeforeSubmit,
+      showToast,
+      derived.totalAmount,
+      derived.rows,
+      vatPercentage,
+      userProfile,
+      tokenBranchId,
+      softResetForNext,
+    ]
+  );
 
   useEffect(() => {
     if (!invoiceOpen || !invoiceShipment?.booking_no) return;
@@ -1008,11 +1008,10 @@ const submit = useCallback(
         }}
       >
         <div
-          className={`min-w-[260px] max-w-[360px] rounded-xl border px-4 py-3 shadow ${
-            toast.variant === "error"
+          className={`min-w-[260px] max-w-[360px] rounded-xl border px-4 py-3 shadow ${toast.variant === "error"
               ? "border-rose-200 bg-rose-50 text-rose-800"
               : "border-emerald-200 bg-emerald-50 text-emerald-800"
-          }`}
+            }`}
         >
           <div className="flex items-start gap-3">
             <div className="flex-1 text-sm">{toast.text}</div>
@@ -1070,41 +1069,42 @@ const submit = useCallback(
             <form onSubmit={submit} onChange={handleChange} className="space-y-6">
               {/* Collection Details */}
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 items-end py-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold tracking-wide text-slate-700">
                     Collection Details
                   </h3>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
-                        Invoice No
-                      </label>
-                      <input
-                        name="invoiceNo"
-                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-700 cursor-not-allowed select-all"
-                        value={form.invoiceNo || "INV-000001"}
-                        readOnly
-                        tabIndex={-1}                 // optional: skip focus
-                        title="Auto-generated from last branch invoice"
-                      />
-                    </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Branch
-                    </label>
-                    <input
-                      className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-slate-700"
-                      value={branchNameFromProfile || ""}
-                      readOnly
-                    />
+<div className="flex gap-5 w-full">
+<div className="flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wide text-slate-500">Invoice No</span>
+                    <span className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm border border-slate-200">
+                      {form.invoiceNo || "INV-000001"}
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(form.invoiceNo || "")}
+                        className="ml-1 rounded-md border border-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+                        title="Copy invoice number"
+                      >
+                        Copy
+                      </button>
+                    </span>
                   </div>
-               
-                </div>
+
+                     <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wide text-slate-500">Branch</span>
+                    <span className="inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm border border-slate-200">
+                      {branchNameFromProfile || "--"}
+                    </span>
+                  </div>
+
+</div>
+                 
+                  </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end py-3">
-                     <div>
+                  <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">
                       Collected By (Role)
                     </label>
@@ -1423,11 +1423,10 @@ const submit = useCallback(
                             min="0"
                             step="0.001"
                             title="Enter after packing"
-                            className={`w-32 rounded-lg border px-2 py-1 text-right ${
-                              Number(box.box_weight || 0) <= 0
+                            className={`w-32 rounded-lg border px-2 py-1 text-right ${Number(box.box_weight || 0) <= 0
                                 ? "border-rose-300"
                                 : "border-slate-300"
-                            }`}
+                              }`}
                             value={box.box_weight ?? 0}
                             onChange={(e) => setBoxWeight(boxIndex, e.target.value)}
                             placeholder="0.000"
@@ -1439,11 +1438,10 @@ const submit = useCallback(
                           type="button"
                           onClick={() => removeBox(boxIndex)}
                           disabled={boxes.length <= 1}
-                          className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-white ${
-                            boxes.length <= 1
+                          className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-white ${boxes.length <= 1
                               ? "bg-slate-300 cursor-not-allowed"
                               : "bg-rose-600 hover:bg-rose-700"
-                          }`}
+                            }`}
                           title={
                             boxes.length <= 1
                               ? "At least one box is required"
@@ -1498,7 +1496,7 @@ const submit = useCallback(
                                       itemIndex,
                                       "pieces",
                                       Number.parseInt(e.target.value || 0, 10) ||
-                                        0
+                                      0
                                     )
                                   }
                                 />
@@ -1588,66 +1586,66 @@ const submit = useCallback(
                         const qtyValue = key === "total_weight" ? totalWeight : row.qty;
                         const amountValue = derived.rows[key]?.amount ?? 0;
                         return (
-                 
-<div
-  key={key}
-  className="flex flex-wrap md:flex-nowrap items-center gap-3 mb-2"
->
-  {/* Label */}
-  <div className="text-sm text-slate-700 w-full ">
-    {label}
-  </div>
 
-  {/* Qty */}
-  <input
-    type="number"
-    min="0"
-    step="0.01"
-    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-    value={qtyValue}
-    onChange={(e) =>
-      setForm((f) => ({
-        ...f,
-        charges: {
-          ...f.charges,
-          [key]: {
-            ...(f.charges[key] || { qty: 0, rate: 0 }),
-            qty: key === "total_weight" ? totalWeight : Number(e.target.value || 0),
-          },
-        },
-      }))
-    }
-    readOnly={key === "total_weight"}
-  />
+                          <div
+                            key={key}
+                            className="flex flex-wrap md:flex-nowrap items-center gap-3 mb-2"
+                          >
+                            {/* Label */}
+                            <div className="text-sm text-slate-700 w-full ">
+                              {label}
+                            </div>
 
-  {/* Unit Rate */}
-  <input
-    type="number"
-    min="0"
-    step="0.01"
-    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-    value={row.rate}
-    onChange={(e) =>
-      setForm((f) => ({
-        ...f,
-        charges: {
-          ...f.charges,
-          [key]: {
-            ...(f.charges[key] || { qty: 0, rate: 0 }),
-            rate: Number(e.target.value || 0),
-          },
-        },
-      }))
-    }
-  />
+                            {/* Qty */}
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                              value={qtyValue}
+                              onChange={(e) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  charges: {
+                                    ...f.charges,
+                                    [key]: {
+                                      ...(f.charges[key] || { qty: 0, rate: 0 }),
+                                      qty: key === "total_weight" ? totalWeight : Number(e.target.value || 0),
+                                    },
+                                  },
+                                }))
+                              }
+                              readOnly={key === "total_weight"}
+                            />
 
-  {/* Amount */}
-  <input
-    readOnly
-    className="w-full md:basis-[120px] md:shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right"
-    value={amountValue.toFixed(2)}
-  />
-</div>
+                            {/* Unit Rate */}
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                              value={row.rate}
+                              onChange={(e) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  charges: {
+                                    ...f.charges,
+                                    [key]: {
+                                      ...(f.charges[key] || { qty: 0, rate: 0 }),
+                                      rate: Number(e.target.value || 0),
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+
+                            {/* Amount */}
+                            <input
+                              readOnly
+                              className="w-full md:basis-[120px] md:shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right"
+                              value={amountValue.toFixed(2)}
+                            />
+                          </div>
 
                         );
                       })}
@@ -1739,9 +1737,8 @@ const submit = useCallback(
                   <button
                     type="submit"
                     disabled={loading}
-                    className={`rounded-lg px-4 py-2 text-white ${
-                      loading ? "bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"
-                    }`}
+                    className={`rounded-lg px-4 py-2 text-white ${loading ? "bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"
+                      }`}
                   >
                     Save &amp; Generate Invoice
                   </button>

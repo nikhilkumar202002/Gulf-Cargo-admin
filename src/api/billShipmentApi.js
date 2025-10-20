@@ -44,22 +44,29 @@ export const getBillShipments = async (params = {}) => {
   }
 };
 
-// ---- UPDATE (single) – keep if you support editing a shipment
-export const updateBillShipment = async (id, payload) => {
-  const url = `/physical-shipment/${id}`;
+
+// Bulk/single in one helper
+export const updateBillShipmentStatuses = async (shipmentIds, shipmentStatusId) => {
+  const url = "/physical-shipment/update-status";
+  const payload = {
+    shipment_ids: shipmentIds.map(Number),
+    shipment_status_id: Number(shipmentStatusId),
+  };
+  info("POST " + url + " =>", payload);
   try {
-    info("PATCH " + url, payload);
-    const res = await api.patch(url, payload);
-    ok("PATCH /physical-shipment/:id [OK]", { status: res.status });
+    const res = await api.post(url, payload);
+    ok("POST /physical-shipment/update-status [OK]", { status: res.status });
     return res.data ?? res;
   } catch (e) {
-    bad("PATCH /physical-shipment/:id [ERR]", {
+    bad("POST /physical-shipment/update-status [ERR]", {
       status: e?.response?.status,
       data: e?.response?.data,
-      msg: e?.message,
+      message: e?.message,
     });
     throw e;
   }
 };
 
-// No bulk status update (per your instruction)
+// Convenience single-update wrapper
+export const updateSingleBillShipmentStatus = (shipmentId, shipmentStatusId) =>
+  updateBillShipmentStatuses([shipmentId], shipmentStatusId);
