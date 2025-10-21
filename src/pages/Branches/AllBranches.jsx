@@ -1,303 +1,431 @@
-import React, { useEffect, useState } from "react";
-import { FaSearch } from "react-icons/fa";
-import { FiMoreVertical } from "react-icons/fi";
-import { LuPlus } from "react-icons/lu";
+// src/pages/Branches/AllBranches.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import DropdownMenu from "../../components/DropdownMenu";
-import toast, { Toaster } from "react-hot-toast";
-import { getAllBranches } from "../../api/branchApi";
-import Avatar from "../../components/Avatar"; // ✅ shared avatar
-import { deleteBranch } from "../../api/branchApi";
-import "../styles.css";
-import "./BranchStyles.css";
+import * as branchApi from "../../api/branchApi"; // <— detect helpers at runtime
+import { FiSearch } from "react-icons/fi";
+import { IoMdRefresh } from "react-icons/io";
 
-/* --------- skeleton helpers --------- */
-const Skel = ({ w = 100, h = 14, rounded = 8, className = "" }) => (
+// ---------- tiny helpers ----------
+const cx = (...c) => c.filter(Boolean).join(" ");
+
+const Skel = ({ w = "100%", h = 14, rounded = 8, className = "" }) => (
   <span
-    className={`skel ${className}`}
-    style={{ display: "inline-block", width: typeof w === "number" ? `${w}px` : w, height: typeof h === "number" ? `${h}px` : h, borderRadius: rounded }}
+    className={cx("inline-block bg-slate-200 animate-pulse", className)}
+    style={{
+      width: typeof w === "number" ? `${w}px` : w,
+      height: typeof h === "number" ? `${h}px` : h,
+      borderRadius: rounded,
+    }}
     aria-hidden="true"
   />
 );
 
 const SkelRow = () => (
-  <tr>
-    <td className="py-3 px-4"><Skel w={120} h={64} rounded={12} /></td>
-    <td className="py-3 px-4"><Skel w="70%" /></td>
-    <td className="py-3 px-4"><Skel w="50%" /></td>
-    <td className="py-3 px-4"><Skel w="60%" /></td>
-    <td className="py-3 px-4">
-      <div className="space-y-1">
-        <Skel w="70%" />
-        <Skel w="40%" />
-      </div>
-    </td>
-    <td className="py-3 px-4"><Skel w="70%" /></td>
-    <td className="py-3 px-4"><Skel w={68} h={22} rounded={999} /></td>
-    <td className="py-3 px-4 text-right"><Skel w={28} h={28} rounded={6} /></td>
+  <tr className="border-b">
+    <td className="p-3"><Skel h={32} w={120} /></td>
+    <td className="p-3"><Skel /></td>
+    <td className="p-3"><Skel w={80} /></td>
+    <td className="p-3"><Skel w={120} /></td>
+    <td className="p-3"><Skel w={160} /></td>
+    <td className="p-3"><Skel w={130} /></td>
+    <td className="p-3"><Skel w={80} /></td>
+    <td className="p-3"><Skel w={140} /></td>
   </tr>
 );
 
-const AllBranches = () => {
-  const [branches, setBranches] = useState([]);
-  const [search, setSearch] = useState("");
-  const [openMenuIndex, setOpenMenuIndex] = useState(null);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+// Normalizer so the component UI doesn’t care about API shape differences
+function normalizePagedResponse(raw) {
+  // getAllBranchesPaged -> { items, meta }
+  if (raw && Array.isArray(raw.items) && raw.meta) {
+    const { items, meta } = raw;
+    return {
+      items,
+      meta: {
+        current_page: meta.current_page ?? 1,
+        per_page: meta.per_page ?? items.length,
+        total: meta.total ?? items.length,
+        last_page: meta.last_page ?? 1,
+      },
+    };
+  }
 
- const [deletingId, setDeletingId] = useState(null);
+  // getAllBranches({ per_page: 500 }) -> array
+  if (Array.isArray(raw)) {
+    return {
+      items: raw,
+      meta: {
+        current_page: 1,
+        per_page: raw.length,
+        total: raw.length,
+        last_page: 1,
+      },
+    };
+  }
+
+  // Laravel paginator
+  const data = raw?.data;
+  if (data?.data && Array.isArray(data.data)) {
+    return {
+      items: data.data,
+      meta: {
+        current_page: data.current_page ?? 1,
+        per_page: data.per_page ?? data.data.length,
+        total: data.total ?? data.data.length,
+        last_page: data.last_page ?? 1,
+      },
+    };
+  }
+
+  return { items: [], meta: { current_page: 1, per_page: 0, total: 0, last_page: 1 } };
+}
+
+export default function AllBranches() {
+  // server paging state
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // ui data
+  const [branches, setBranches] = useState([]);
+  const [meta, setMeta] = useState({ current_page: 1, per_page: 10, total: 0, last_page: 1 });
+
+  // ux
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [q, setQ] = useState("");
+
+  async function loadPage({ pageArg = page, perPageArg = rowsPerPage } = {}) {
+    setLoading(true);
+    setErr("");
+    try {
+      let result;
+
+      if (typeof branchApi.getAllBranchesPaged === "function") {
+        // Preferred: server pagination
+        result = await branchApi.getAllBranchesPaged({ page: pageArg, per_page: perPageArg });
+      } else if (typeof branchApi.getAllBranches === "function") {
+        // Fallback: fetch all and page on client
+        const all = await branchApi.getAllBranches({ per_page: 1000 });
+        const start = (pageArg - 1) * perPageArg;
+        const pageItems = (Array.isArray(all) ? all : []).slice(start, start + perPageArg);
+        result = {
+          items: pageItems,
+          meta: {
+            current_page: pageArg,
+            per_page: perPageArg,
+            total: Array.isArray(all) ? all.length : 0,
+            last_page: Math.max(1, Math.ceil((Array.isArray(all) ? all.length : 0) / perPageArg)),
+          },
+        };
+      } else {
+        throw new Error("branchApi helper not found. Export getAllBranchesPaged or getAllBranches.");
+      }
+
+      const { items, meta } = normalizePagedResponse(result);
+      setBranches(Array.isArray(items) ? items : []);
+      setMeta(meta);
+    } catch (e) {
+      setErr(e?.message || "Failed to load branches");
+      setBranches([]);
+      setMeta({ current_page: 1, per_page: rowsPerPage, total: 0, last_page: 1 });
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        setError("");
-        const list = await getAllBranches();
-        if (!cancelled) setBranches(Array.isArray(list) ? list : []);
-      } catch (err) {
-        if (!cancelled) {
-          const msg = err?.response?.data?.message || "Failed to load branches.";
-          setError(msg);
-          toast.error(msg);
-          setBranches([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    loadPage({ pageArg: page, perPageArg: rowsPerPage });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, rowsPerPage]);
 
-  const filteredBranches = branches.filter((b) =>
-    [b.branch_name, b.branch_code, b.branch_location].filter(Boolean).some((v) =>
-      String(v).toLowerCase().includes(search.toLowerCase())
-    )
-  );
+  // filter the CURRENT page by search (keeps server paging intact).
+  const filtered = useMemo(() => {
+    const t = (q || "").trim().toLowerCase();
+    if (!t) return branches;
+    return branches.filter((b) => {
+      const hay = `${b.branch_name ?? ""} ${b.branch_code ?? ""} ${b.branch_location ?? ""} ${b.branch_email ?? ""} ${b.branch_contact_number ?? ""}`.toLowerCase();
+      return hay.includes(t);
+    });
+  }, [q, branches]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredBranches.length / rowsPerPage) || 1;
-  const startIndex = (currentPage - 1) * rowsPerPage;
-  const currentBranches = filteredBranches.slice(startIndex, startIndex + rowsPerPage);
+  const showingFrom = filtered.length ? meta.per_page * (meta.current_page - 1) + 1 : 0;
+  const showingTo = meta.per_page * (meta.current_page - 1) + filtered.length;
 
-  const isActive = (v) => {
-    if (v === 1 || v === "1" || v === true) return true;
-    if (typeof v === "string") return v.toLowerCase() === "active";
-    return false;
-  };
-
-const handleDelete = async (branch) => {
-  if (!window.confirm(`Delete "${branch.branch_name || "this branch"}"? This cannot be undone.`)) return;
-
-  setDeletingId(branch.id);
-  try {
-    await toast.promise(
-      deleteBranch(branch.id),
-      {
-        loading: `Deleting "${branch.branch_name || "branch"}"…`,
-        success: "Branch deleted.",
-        error: (e) => e?.response?.data?.message || e?.message || "Delete failed.",
-      },
-      { success: { duration: 1600 } }
-    );
-
-    // Re-fetch from backend to keep the list canonical
-    const list = await getAllBranches();
-    setBranches(Array.isArray(list) ? list : []);
-  } finally {
-    setDeletingId(null);
-    setOpenMenuIndex(null);
-  }
-};
   return (
-    <>
-      {/* HEADER */}
-      <div className="ipx-head ipx-head-bar max-w-6xl mx-auto">
-        <div className="ipx-brand">
-          <h2 className="ipx-title">Branch List</h2>
-          <p className="ipx-sub">Manage branches, contacts and status.</p>
+    <div className="min-h-screen bg-gray-50 flex items-start justify-center p-6">
+      <div className="w-full max-w-7xl bg-white rounded-2xl p-6 md:p-8 shadow-sm">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">All Branches</h2>
+            <p className="text-sm text-gray-500">Manage your branches across regions</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={q}
+                onChange={(e) => { setQ(e.target.value); }}
+                placeholder="Search branch name, code, location, email…"
+                className="pl-9 pr-3 py-2 w-72 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-400"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadPage({ pageArg: page, perPageArg: rowsPerPage })}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
+              disabled={loading}
+              title="Reload"
+            >
+              <IoMdRefresh />
+              <span className="text-sm">Reload</span>
+            </button>
+
+            <Link
+              to="/branches/create"
+              className="inline-flex items-center px-4 py-2 rounded-lg bg-black text-white hover:opacity-90"
+            >
+              + Add Branch
+            </Link>
+          </div>
         </div>
 
-        <div className="ipx-toolbar">
-          {/* Search */}
-          <div className="ipx-field grow relative">
-            {loading ? (
-              <Skel w="100%" h={44} />
-            ) : (
-              <>
-                <input
-                  className="ipx-input ipx-input-lg ipx-searchpad"
-                  type="search"
-                  placeholder="Search by name, code or location…"
-                  value={search}
-                  onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                />
-                <FaSearch className="ipx-search-icon" />
-              </>
-            )}
-          </div>
+        {/* Mobile: Card list (≤ md) */}
+        <div className="mt-6 grid grid-cols-1 gap-4 md:hidden">
+          {loading && Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="border rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <Skel w={48} h={48} rounded={12} />
+                <div className="flex-1">
+                  <Skel w="70%" h={16} />
+                  <div className="mt-2"><Skel w="45%" h={12} /></div>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <Skel h={12} />
+                <Skel h={12} />
+                <Skel h={12} />
+                <Skel h={12} />
+              </div>
+            </div>
+          ))}
 
-          {/* Rows per page */}
-          <div className="ipx-field">
-            <label className="ipx-label small">Rows</label>
-            {loading ? (
-              <Skel w={88} h={36} />
-            ) : (
-              <select
-                className="ipx-input"
-                value={rowsPerPage}
-                onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={15}>15</option>
-                <option value={25}>25</option>
-              </select>
-            )}
-          </div>
+          {!loading && filtered.length === 0 && (
+            <div className="p-6 text-center text-gray-500 border rounded-xl">
+              {err ? `Error: ${err}` : "No branches found on this page."}
+            </div>
+          )}
 
-          {/* Add new */}
-          <Link to="/branches/add" className="ipx-btn primary ipx-btn-cta flex items-center gap-2">
-            <LuPlus /> Add Branch
-          </Link>
+          {!loading && filtered.map((b) => (
+            <div key={b.id} className="border rounded-xl p-4 hover:shadow-sm transition">
+              <div className="flex items-center gap-3">
+                {b.logo_url ? (
+                  <img
+                    src={b.logo_url}
+                    alt={b.branch_name || "logo"}
+                    className="h-12 w-12 rounded-lg object-cover border"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="h-12 w-12 rounded-lg bg-gray-100 border" />
+                )}
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">{b.branch_name || "-"}</div>
+                  {b.branch_name_ar ? (
+                    <div className="text-xs text-gray-500 truncate">{b.branch_name_ar}</div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-2 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-500 w-24 shrink-0">Code</span>
+                  <span className="font-medium">{b.branch_code || "-"}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-500 w-24 shrink-0">Location</span>
+                  <span className="line-clamp-2">{b.branch_location || "-"}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-500 w-24 shrink-0">Email</span>
+                  <span className="truncate">
+                    {b.branch_email ? (
+                      <a className="text-blue-600 hover:underline" href={`mailto:${b.branch_email}`}>{b.branch_email}</a>
+                    ) : "-"}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-500 w-24 shrink-0">Contact</span>
+                  <span>{b.branch_contact_number || b.branch_alternative_number || "-"}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-500 w-24 shrink-0">Status</span>
+                  <span
+                    className={cx(
+                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+                      b.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                    )}
+                  >
+                    {b.status || "—"}
+                  </span>
+                </div>
+              </div>
+
+              {b.created_by || b.created_by_email ? (
+                <div className="mt-3 text-xs text-gray-500">
+                  <span className="font-medium">Created by:</span>{" "}
+                  <span className="whitespace-nowrap">{b.created_by || "-"}</span>
+                  {b.created_by_email ? <> · <span>{b.created_by_email}</span></> : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
         </div>
-      </div>
 
-      {/* CARD */}
-      <div className="ipx-card p-0 max-w-6xl mx-auto" aria-busy={loading}>
-        {/* Error banner */}
-        {error && (
-          <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </div>
-        )}
-
-        {/* TABLE */}
-        <div className="ipx-table-wrap ipx-table-elevated" aria-busy={loading}>
-          <table className="ipx-table ipx-table-compact ipx-table-hover ipx-table-sticky">
-            <thead>
-              <tr>
-                <th className="w-64">Logo</th>
-                <th>Name</th>
-                <th className="w-160 ipx-col-hide-sm">Code</th>
-                <th className="w-220">Location</th>
-                <th className="w-240 ipx-col-hide-md">Contacts</th>
-                <th className="w-220 ipx-col-hide-md">Email</th>
-                <th className="w-120">Status</th>
-                <th className="w-80 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 6 }).map((_, i) => <SkelRow key={`sk-${i}`} />)
-              ) : currentBranches.length > 0 ? (
-                currentBranches.map((branch, index) => (
-                  <tr key={branch.id}>
-                    <td className="py-3 px-4">
-                      {/* smallish logo in list – still rectangular */}
-                      <Avatar url={branch.logo_url} name={branch.branch_name} width={120} height={64} />
-                    </td>
-                    <td className="py-3 px-4">
-                      <Link to={`/branches/${branch.id}`} className="vb-link">
-                        {branch.branch_name || "-"}
-                      </Link>
-                    </td>
-                    <td className="py-3 px-4 ipx-col-hide-sm">{branch.branch_code || "-"}</td>
-                    <td className="py-3 px-4">{branch.branch_location || "-"}</td>
-                    <td className="py-3 px-4 ipx-col-hide-md">
-                      {branch.branch_contact_number && <p>{branch.branch_contact_number}</p>}
-                      {branch.branch_alternative_number && <p>{branch.branch_alternative_number}</p>}
-                    </td>
-                    <td className="py-3 px-4 ipx-col-hide-md">{branch.branch_email || "-"}</td>
-                    <td className="py-3 px-4">
-                      {isActive(branch.status) ? <span className="ipx-pill ok">Active</span> : <span className="ipx-pill muted">Inactive</span>}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setOpenMenuIndex(index);
-                          setMenuPosition({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX - 100 });
-                        }}
-                        className="ipx-more-btn"
-                        title="More"
-                      >
-                        <FiMoreVertical size={18} />
-                      </button>
-
-                      {openMenuIndex === index && (
-                        <DropdownMenu
-                           branch={branch}
-                            handleDelete={handleDelete}
-                            position={menuPosition}
-                            onClose={() => setOpenMenuIndex(null)}
-                          deletingId={deletingId}
-                        />
-                      )}
-                    </td>
+        {/* Desktop: Responsive table (≥ md) */}
+        <div className="mt-6 hidden md:block">
+          <div className="overflow-hidden border rounded-xl">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-100 text-gray-700 sticky top-0 z-10">
+                  <tr>
+                    <th className="text-left p-3 font-medium">Logo</th>
+                    <th className="text-left p-3 font-medium">Branch Name</th>
+                    <th className="text-left p-3 font-medium">Code</th>
+                    <th className="text-left p-3 font-medium">Location</th>
+                    <th className="text-left p-3 font-medium">Email</th>
+                    <th className="text-left p-3 font-medium">Contact</th>
+                    <th className="text-left p-3 font-medium">Status</th>
+                    <th className="text-left p-3 font-medium">Created By</th>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} className="py-5 px-4 text-center text-slate-500">
-                    No branches found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
+                </thead>
+                <tbody className="divide-y">
+                  {loading && (
+                    <>
+                      <SkelRow /><SkelRow /><SkelRow /><SkelRow /><SkelRow />
+                      <SkelRow /><SkelRow /><SkelRow /><SkelRow /><SkelRow />
+                    </>
+                  )}
 
-            <tfoot>
-              <tr>
-                <td colSpan={8}>
-                  <div className="ipx-pagination">
-                    <div className="ipx-results-count">
-                      {loading ? (
-                        <Skel w={200} />
-                      ) : (
-                        <>
-                          Showing {filteredBranches.length === 0 ? 0 : startIndex + 1} – {Math.min(startIndex + rowsPerPage, filteredBranches.length)} of {filteredBranches.length}
-                        </>
-                      )}
-                    </div>
-                    <div className="ipx-pager">
-                      <button className="ipx-btn ghost sm" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1 || loading}>
-                        ← Prev
-                      </button>
-                      <span className="ipx-page-indicator">Page {currentPage} / {totalPages}</span>
-                      <button className="ipx-btn ghost sm" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || loading}>
-                        Next →
-                      </button>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+                  {!loading && filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="p-6 text-center text-gray-500">
+                        {err ? `Error: ${err}` : "No branches found on this page."}
+                      </td>
+                    </tr>
+                  )}
+
+                  {!loading && filtered.map((b) => (
+                    <tr key={b.id} className="hover:bg-gray-50">
+                      <td className="p-3">
+                        {b.logo_url ? (
+                          <img
+                            src={b.logo_url}
+                            alt={b.branch_name || "logo"}
+                            className="h-10 w-10 rounded-md object-cover border"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-md bg-gray-100 border" />
+                        )}
+                      </td>
+                      <td className="p-3 max-w-[260px]">
+                        <div className="font-medium truncate" title={b.branch_name || ""}>{b.branch_name || "-"}</div>
+                        {b.branch_name_ar ? (
+                          <div className="text-xs text-gray-500 truncate" title={b.branch_name_ar}>{b.branch_name_ar}</div>
+                        ) : null}
+                      </td>
+                      <td className="p-3 whitespace-nowrap">{b.branch_code || "-"}</td>
+                      <td className="p-3 max-w-[280px]">
+                        <div className="truncate" title={b.branch_location || ""}>{b.branch_location || "-"}</div>
+                        {b.branch_address ? (
+                          <div className="text-xs text-gray-500 truncate" title={b.branch_address}>{b.branch_address}</div>
+                        ) : null}
+                      </td>
+                      <td className="p-3 max-w-[260px]">
+                        {b.branch_email ? (
+                          <a
+                            className="text-blue-600 hover:underline truncate inline-block max-w-[240px]"
+                            href={`mailto:${b.branch_email}`}
+                            title={b.branch_email}
+                          >
+                            {b.branch_email}
+                          </a>
+                        ) : "-"}
+                      </td>
+                      <td className="p-3 whitespace-nowrap">
+                        {b.branch_contact_number || b.branch_alternative_number || "-"}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={cx(
+                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+                            b.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                          )}
+                        >
+                          {b.status || "—"}
+                        </span>
+                      </td>
+                      <td className="p-3 max-w-[240px]">
+                        <div className="whitespace-nowrap truncate" title={b.created_by || ""}>{b.created_by || "-"}</div>
+                        {b.created_by_email ? (
+                          <div className="text-xs text-gray-500 truncate" title={b.created_by_email}>{b.created_by_email}</div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
-        <Toaster position="top-right" toastOptions={{
-          duration: 3000,
-          style: { background: "#111827", color: "#fff" },
-          success: { iconTheme: { primary: "#10B981", secondary: "#111827" } },
-          error:   { iconTheme: { primary: "#EF4444", secondary: "#111827" } },
-        }}/>
+        {/* Footer / Pagination */}
+        <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="text-sm text-gray-600">
+            Showing <span className="font-medium">{showingFrom}</span>–<span className="font-medium">{showingTo}</span> of{" "}
+            <span className="font-medium">{meta.total}</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-600">Rows per page</label>
+            <select
+              className="border rounded-lg px-2 py-1"
+              value={rowsPerPage}
+              onChange={(e) => { setPage(1); setRowsPerPage(Number(e.target.value)); }}
+              disabled={loading}
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+
+            <div className="ml-2 flex items-center gap-2">
+              <button
+                className="px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50 disabled:opacity-50"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={loading || meta.current_page <= 1}
+              >
+                ← Prev
+              </button>
+              <span className="text-sm text-gray-700">
+                Page <span className="font-medium">{meta.current_page}</span> / {meta.last_page}
+              </span>
+              <button
+                className="px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50 disabled:opacity-50"
+                onClick={() => setPage((p) => Math.min(meta.last_page || 1, p + 1))}
+                disabled={loading || meta.current_page >= (meta.last_page || 1)}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <style>{`
-        .skel { background:#e5e7eb; position:relative; overflow:hidden; }
-        .skel::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
-          background:linear-gradient(90deg, rgba(229,231,235,0) 0%, rgba(255,255,255,.75) 50%, rgba(229,231,235,0) 100%);
-          animation: skel-shimmer 1.2s infinite;
-        }
-        @keyframes skel-shimmer { 100% { transform: translateX(100%); } }
-        .vb-link { color:#1f6feb; text-decoration:none; }
-        .vb-link:hover { text-decoration:underline; }
-      `}</style>
-    </>
+    </div>
   );
-};
-
-export default AllBranches;
+}

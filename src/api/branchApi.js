@@ -243,3 +243,23 @@ export const getBranchUsers = async (branchId, token) => {
     return [];
   }
 };
+
+
+// add this to branchApi.js
+export async function getAllBranchesPaged(params = {}, token) {
+  const res = await api.get("/branches", withAuth(token, { params }));
+  const raw = unwrap(res);
+
+  // Laravel paginator shape
+  const pageData = raw?.data || {};
+  const items = firstArray(raw).map(pick); // normalize  page's "data" array
+  const meta = {
+    current_page: pageData.current_page ?? 1,
+    per_page: pageData.per_page ?? items.length,
+    total: pageData.total ?? items.length,
+    last_page: pageData.last_page ?? 1,
+    next_page_url: pageData.next_page_url || null,
+    prev_page_url: pageData.prev_page_url || null,
+  };
+  return { items, meta };
+}

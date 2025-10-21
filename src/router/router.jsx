@@ -125,6 +125,7 @@ const BillsViews = lazy(() => import("../pages/Bills/BillsViews"));
 const CreateShipmentBill = lazy(() => import("../pages/Bills/CreateShipmentBill"));
 const ShipmentBillView = lazy(() => import("../pages/Bills/ShipmentBillView"));
 const EditStaff = lazy(() => import("../pages/Staffs/EditStaff"));
+const SingleBill = lazy(() => import("../pages/Bills/SingleBill"));
 
 /* ---------------- helpers ---------------- */
 const AuthRedirect = () => {
@@ -235,6 +236,7 @@ const router = createBrowserRouter([
       { path: "invoiceprevix/list", element: <ListInvoicePrefix /> },
       { path: "deliverytype/list", element: <ListDeliveryType /> },
       { path: "invoice/:id", element: <InvoiceOnly /> },
+      { path: "bill/view/:id", element: <SingleBill /> },
       
       {
         path: "roles/allroles",

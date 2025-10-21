@@ -8,7 +8,6 @@ import * as XLSX from "xlsx";
 
 /* ================= DEBUG ================= */
 const DEBUG = true;
-const log  = (...a) => DEBUG && console.log("[Manifest]", ...a);
 const info = (...a) => DEBUG && console.info("[Manifest]", ...a);
 const warn = (...a) => DEBUG && console.warn("[Manifest]", ...a);
 const errL = (...a) => DEBUG && console.error("[Manifest]", ...a);

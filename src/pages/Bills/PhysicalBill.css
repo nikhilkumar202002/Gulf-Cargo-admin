@@ -41,3 +41,21 @@
     font-size: 17px;
     font-weight: 600;
 }
+.single-bill-copy{
+    background-color: var(--secondary-color);
+    padding: 8px 20px;
+    font-family: "Inter";
+    font-weight: 600;
+    color: white;
+    border-radius: 10px;
+    font-size: 14px;
+}
+.single-bill-back{
+      background-color: var(--primary-color);
+    padding: 8px 20px;
+    font-family: "Inter";
+    font-weight: 600;
+    color: white;
+    border-radius: 10px;
+    font-size: 14px;
+}
