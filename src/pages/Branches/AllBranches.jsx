@@ -1,11 +1,11 @@
 // src/pages/Branches/AllBranches.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import * as branchApi from "../../api/branchApi"; // <— detect helpers at runtime
-import { FiSearch } from "react-icons/fi";
+import * as branchApi from "../../api/branchApi"; // detect helpers at runtime
+import { FiSearch, FiEye, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { IoMdRefresh } from "react-icons/io";
 
-// ---------- tiny helpers ----------
+/* ---------------- tiny helpers ---------------- */
 const cx = (...c) => c.filter(Boolean).join(" ");
 
 const Skel = ({ w = "100%", h = 14, rounded = 8, className = "" }) => (
@@ -30,12 +30,52 @@ const SkelRow = () => (
     <td className="p-3"><Skel w={130} /></td>
     <td className="p-3"><Skel w={80} /></td>
     <td className="p-3"><Skel w={140} /></td>
+    <td className="p-3"><Skel w={160} /></td>
   </tr>
 );
 
-// Normalizer so the component UI doesn’t care about API shape differences
+/* ----------- phones normalizer ----------- */
+function getPhones(b = {}) {
+  const out = [];
+
+  // 1) Explicit array support
+  if (Array.isArray(b.branch_contact_numbers)) {
+    for (const n of b.branch_contact_numbers) {
+      if (n && String(n).trim()) out.push(String(n).trim());
+    }
+  }
+
+  // 2) Primary string (may contain multiple numbers)
+  const primary = b.branch_contact_number ?? b.contact ?? "";
+  if (typeof primary === "string" && primary.trim()) {
+    const parts = primary
+      .split(/[,\|/;\s]+/g)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    out.push(...parts);
+  }
+
+  // 3) Alternative field
+  if (b.branch_alternative_number) {
+    out.push(String(b.branch_alternative_number).trim());
+  }
+
+  // Deduplicate while preserving order
+  const seen = new Set();
+  const uniq = [];
+  for (const n of out) {
+    const k = n.replace(/\s+/g, "");
+    if (!seen.has(k)) {
+      seen.add(k);
+      uniq.push(n);
+    }
+  }
+  return uniq;
+}
+
+/* ----------- normalize API shapes ----------- */
 function normalizePagedResponse(raw) {
-  // getAllBranchesPaged -> { items, meta }
+  // { items, meta }
   if (raw && Array.isArray(raw.items) && raw.meta) {
     const { items, meta } = raw;
     return {
@@ -49,7 +89,7 @@ function normalizePagedResponse(raw) {
     };
   }
 
-  // getAllBranches({ per_page: 500 }) -> array
+  // array -> treat as single page
   if (Array.isArray(raw)) {
     return {
       items: raw,
@@ -62,7 +102,7 @@ function normalizePagedResponse(raw) {
     };
   }
 
-  // Laravel paginator
+  // Laravel paginator style
   const data = raw?.data;
   if (data?.data && Array.isArray(data.data)) {
     return {
@@ -80,15 +120,15 @@ function normalizePagedResponse(raw) {
 }
 
 export default function AllBranches() {
-  // server paging state
+  /* -------- server paging state -------- */
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  // ui data
+  /* -------- ui data -------- */
   const [branches, setBranches] = useState([]);
   const [meta, setMeta] = useState({ current_page: 1, per_page: 10, total: 0, last_page: 1 });
 
-  // ux
+  /* -------- UX -------- */
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
@@ -100,7 +140,7 @@ export default function AllBranches() {
       let result;
 
       if (typeof branchApi.getAllBranchesPaged === "function") {
-        // Preferred: server pagination
+        // Preferred: server-side pagination
         result = await branchApi.getAllBranchesPaged({ page: pageArg, per_page: perPageArg });
       } else if (typeof branchApi.getAllBranches === "function") {
         // Fallback: fetch all and page on client
@@ -137,7 +177,7 @@ export default function AllBranches() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, rowsPerPage]);
 
-  // filter the CURRENT page by search (keeps server paging intact).
+  /* -------- search over current page (keeps server paging intact) -------- */
   const filtered = useMemo(() => {
     const t = (q || "").trim().toLowerCase();
     if (!t) return branches;
@@ -149,6 +189,44 @@ export default function AllBranches() {
 
   const showingFrom = filtered.length ? meta.per_page * (meta.current_page - 1) + 1 : 0;
   const showingTo = meta.per_page * (meta.current_page - 1) + filtered.length;
+
+  /* ---------------- Delete (with graceful fallback) ---------------- */
+  async function doDeleteApi(id) {
+    if (typeof branchApi.deleteBranch === "function") {
+      return branchApi.deleteBranch(id);
+    }
+    // common alt names
+    if (typeof branchApi.removeBranch === "function") {
+      return branchApi.removeBranch(id);
+    }
+    if (typeof branchApi.destroyBranch === "function") {
+      return branchApi.destroyBranch(id);
+    }
+    throw new Error("No delete function exported from branchApi.");
+  }
+
+  async function handleDelete(id) {
+    if (!id) return;
+    if (!window.confirm("Delete this branch? This cannot be undone.")) return;
+
+    const currentFilteredCount = filtered.length;
+
+    try {
+      setLoading(true);
+      setErr("");
+      await doDeleteApi(id);
+
+      const willBeEmpty = currentFilteredCount === 1 && meta.current_page > 1;
+      const nextPage = willBeEmpty ? Math.max(1, meta.current_page - 1) : meta.current_page;
+
+      setPage(nextPage);
+      await loadPage({ pageArg: nextPage, perPageArg: rowsPerPage });
+    } catch (e) {
+      setErr(e?.response?.data?.message || e?.message || "Delete failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center p-6">
@@ -183,7 +261,7 @@ export default function AllBranches() {
             </button>
 
             <Link
-              to="/branches/create"
+              to="/branches/add"
               className="inline-flex items-center px-4 py-2 rounded-lg bg-black text-white hover:opacity-90"
             >
               + Add Branch
@@ -217,71 +295,118 @@ export default function AllBranches() {
             </div>
           )}
 
-          {!loading && filtered.map((b) => (
-            <div key={b.id} className="border rounded-xl p-4 hover:shadow-sm transition">
-              <div className="flex items-center gap-3">
-                {b.logo_url ? (
-                  <img
-                    src={b.logo_url}
-                    alt={b.branch_name || "logo"}
-                    className="h-12 w-12 rounded-lg object-cover border"
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="h-12 w-12 rounded-lg bg-gray-100 border" />
-                )}
-                <div className="min-w-0">
-                  <div className="font-semibold truncate">{b.branch_name || "-"}</div>
-                  {b.branch_name_ar ? (
-                    <div className="text-xs text-gray-500 truncate">{b.branch_name_ar}</div>
-                  ) : null}
+          {!loading && filtered.map((b) => {
+            const phones = getPhones(b);
+            return (
+              <div key={b.id} className="border rounded-xl p-4 hover:shadow-sm transition">
+                <div className="flex items-center gap-3">
+                  {b.logo_url ? (
+                    <img
+                      src={b.logo_url}
+                      alt={b.branch_name || "logo"}
+                      className="h-12 w-12 rounded-lg object-cover border"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-lg bg-gray-100 border" />
+                  )}
+                  <div className="min-w-0">
+                    <Link to={`/branches/${b.id}`} className="font-semibold truncate text-blue-700 hover:underline">
+                      {b.branch_name || "-"}
+                    </Link>
+                    {b.branch_name_ar ? (
+                      <div className="text-xs text-gray-500 truncate">{b.branch_name_ar}</div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-2 text-sm">
-                <div className="flex items-start gap-2">
-                  <span className="text-gray-500 w-24 shrink-0">Code</span>
-                  <span className="font-medium">{b.branch_code || "-"}</span>
+                <div className="mt-4 grid grid-cols-1 gap-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-500 w-24 shrink-0">Code</span>
+                    <span className="font-medium">{b.branch_code || "-"}</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-500 w-24 shrink-0">Location</span>
+                    <span className="line-clamp-2">{b.branch_location || "-"}</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-500 w-24 shrink-0">Email</span>
+                    <span className="truncate">
+                      {b.branch_email ? (
+                        <a className="text-blue-600 hover:underline" href={`mailto:${b.branch_email}`}>{b.branch_email}</a>
+                      ) : "-"}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-500 w-24 shrink-0">Contact</span>
+                    <span className="flex flex-wrap gap-1">
+                      {phones.length
+                        ? phones.map((p, i) => (
+                            <a
+                              key={i}
+                              href={`tel:${p.replace(/\s+/g, "")}`}
+                              className="inline-flex items-center rounded-full border px-2 py-0.5 text-[12px] leading-5 hover:bg-gray-50"
+                              title={p}
+                            >
+                              {p}
+                            </a>
+                          ))
+                        : "-"}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-gray-500 w-24 shrink-0">Status</span>
+                    <span
+                      className={cx(
+                        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+                        (b.status === "Active" || b.status === 1 || b.status === "1") ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                      )}
+                    >
+                      {b.status ?? "—"}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-gray-500 w-24 shrink-0">Location</span>
-                  <span className="line-clamp-2">{b.branch_location || "-"}</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-gray-500 w-24 shrink-0">Email</span>
-                  <span className="truncate">
-                    {b.branch_email ? (
-                      <a className="text-blue-600 hover:underline" href={`mailto:${b.branch_email}`}>{b.branch_email}</a>
-                    ) : "-"}
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-gray-500 w-24 shrink-0">Contact</span>
-                  <span>{b.branch_contact_number || b.branch_alternative_number || "-"}</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-gray-500 w-24 shrink-0">Status</span>
-                  <span
-                    className={cx(
-                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                      b.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
-                    )}
+
+                {b.created_by || b.created_by_email ? (
+                  <div className="mt-3 text-xs text-gray-500">
+                    <span className="font-medium">Created by:</span>{" "}
+                    <span className="whitespace-nowrap">{b.created_by || "-"}</span>
+                    {b.created_by_email ? <> · <span>{b.created_by_email}</span></> : null}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 flex items-center gap-2">
+                  <Link
+                    to={`/bbranch/viewbranch/${b.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border hover:bg-gray-50 text-sm"
+                    title="View branch"
                   >
-                    {b.status || "—"}
-                  </span>
+                    <FiEye className="text-gray-700" />
+                    <span>View</span>
+                  </Link>
+                  <Link
+                    to={`/branches/edit/${b.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border hover:bg-gray-50 text-sm"
+                    title="Edit branch"
+                  >
+                    <FiEdit2 className="text-gray-700" />
+                    <span>Edit</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(b.id)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-sm disabled:opacity-50"
+                    title="Delete branch"
+                    disabled={loading}
+                  >
+                    <FiTrash2 />
+                    <span>Delete</span>
+                  </button>
                 </div>
               </div>
-
-              {b.created_by || b.created_by_email ? (
-                <div className="mt-3 text-xs text-gray-500">
-                  <span className="font-medium">Created by:</span>{" "}
-                  <span className="whitespace-nowrap">{b.created_by || "-"}</span>
-                  {b.created_by_email ? <> · <span>{b.created_by_email}</span></> : null}
-                </div>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Desktop: Responsive table (≥ md) */}
@@ -298,7 +423,7 @@ export default function AllBranches() {
                     <th className="text-left p-3 font-medium">Email</th>
                     <th className="text-left p-3 font-medium">Contact</th>
                     <th className="text-left p-3 font-medium">Status</th>
-                    <th className="text-left p-3 font-medium">Created By</th>
+                    <th className="text-left p-3 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -311,72 +436,126 @@ export default function AllBranches() {
 
                   {!loading && filtered.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="p-6 text-center text-gray-500">
+                      <td colSpan={9} className="p-6 text-center text-gray-500">
                         {err ? `Error: ${err}` : "No branches found on this page."}
                       </td>
                     </tr>
                   )}
 
-                  {!loading && filtered.map((b) => (
-                    <tr key={b.id} className="hover:bg-gray-50">
-                      <td className="p-3">
-                        {b.logo_url ? (
-                          <img
-                            src={b.logo_url}
-                            alt={b.branch_name || "logo"}
-                            className="h-10 w-10 rounded-md object-cover border"
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-md bg-gray-100 border" />
-                        )}
-                      </td>
-                      <td className="p-3 max-w-[260px]">
-                        <div className="font-medium truncate" title={b.branch_name || ""}>{b.branch_name || "-"}</div>
-                        {b.branch_name_ar ? (
-                          <div className="text-xs text-gray-500 truncate" title={b.branch_name_ar}>{b.branch_name_ar}</div>
-                        ) : null}
-                      </td>
-                      <td className="p-3 whitespace-nowrap">{b.branch_code || "-"}</td>
-                      <td className="p-3 max-w-[280px]">
-                        <div className="truncate" title={b.branch_location || ""}>{b.branch_location || "-"}</div>
-                        {b.branch_address ? (
-                          <div className="text-xs text-gray-500 truncate" title={b.branch_address}>{b.branch_address}</div>
-                        ) : null}
-                      </td>
-                      <td className="p-3 max-w-[260px]">
-                        {b.branch_email ? (
-                          <a
-                            className="text-blue-600 hover:underline truncate inline-block max-w-[240px]"
-                            href={`mailto:${b.branch_email}`}
-                            title={b.branch_email}
-                          >
-                            {b.branch_email}
-                          </a>
-                        ) : "-"}
-                      </td>
-                      <td className="p-3 whitespace-nowrap">
-                        {b.branch_contact_number || b.branch_alternative_number || "-"}
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={cx(
-                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                            b.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                  {!loading && filtered.map((b) => {
+                    const phones = getPhones(b);
+                    return (
+                      <tr key={b.id} className="hover:bg-gray-50">
+                        <td className="p-3">
+                          {b.logo_url ? (
+                            <img
+                              src={b.logo_url}
+                              alt={b.branch_name || "logo"}
+                              className="h-10 w-10 rounded-md object-cover border"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-md bg-gray-100 border" />
                           )}
-                        >
-                          {b.status || "—"}
-                        </span>
-                      </td>
-                      <td className="p-3 max-w-[240px]">
-                        <div className="whitespace-nowrap truncate" title={b.created_by || ""}>{b.created_by || "-"}</div>
-                        {b.created_by_email ? (
-                          <div className="text-xs text-gray-500 truncate" title={b.created_by_email}>{b.created_by_email}</div>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+
+                        <td className="p-3 max-w-[260px]">
+                          <Link
+                            to={`/branches/${b.id}`}
+                            className="font-medium truncate text-blue-700 hover:underline"
+                            title={b.branch_name || ""}
+                          >
+                            {b.branch_name || "-"}
+                          </Link>
+                          {b.branch_name_ar ? (
+                            <div className="text-xs text-gray-500 truncate" title={b.branch_name_ar}>{b.branch_name_ar}</div>
+                          ) : null}
+                        </td>
+
+                        <td className="p-3 whitespace-nowrap">{b.branch_code || "-"}</td>
+
+                        <td className="p-3 max-w-[280px]">
+                          <div className="truncate" title={b.branch_location || ""}>{b.branch_location || "-"}</div>
+                          {b.branch_address ? (
+                            <div className="text-xs text-gray-500 truncate" title={b.branch_address}>{b.branch_address}</div>
+                          ) : null}
+                        </td>
+
+                        <td className="p-3 max-w-[260px]">
+                          {b.branch_email ? (
+                            <a
+                              className="text-blue-600 hover:underline truncate inline-block max-w-[240px]"
+                              href={`mailto:${b.branch_email}`}
+                              title={b.branch_email}
+                            >
+                              {b.branch_email}
+                            </a>
+                          ) : "-"}
+                        </td>
+
+                        <td className="p-3 whitespace-nowrap">
+                          {phones.length
+                            ? (
+                              <div className="flex flex-col gap-0.5">
+                                {phones.map((p, i) => (
+                                  <a
+                                    key={i}
+                                    href={`tel:${p.replace(/\s+/g, "")}`}
+                                    className="hover:underline"
+                                    title={p}
+                                  >
+                                    {p}
+                                  </a>
+                                ))}
+                              </div>
+                            )
+                            : "-"}
+                        </td>
+
+                        <td className="p-3">
+                          <span
+                            className={cx(
+                              "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+                              (b.status === "Active" || b.status === 1 || b.status === "1") ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                            )}
+                          >
+                            {b.status ?? "—"}
+                          </span>
+                        </td>
+
+                        <td className="p-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              to={`/bbranch/viewbranch/${b.id}`}
+                              className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded border hover:bg-gray-50 text-sm"
+                              title="View branch"
+                            >
+                              <FiEye className="text-gray-700" />
+                            </Link>
+
+                            <Link
+                              to={`/branches/edit/${b.id}`}
+                              className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded border hover:bg-gray-50 text-sm"
+                              title="Edit branch"
+                            >
+                              <FiEdit2 className="text-gray-700" />
+                            </Link>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(b.id)}
+                              className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-sm disabled:opacity-50"
+                              title="Delete branch"
+                              disabled={loading}
+                            >
+                              <FiTrash2 />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
