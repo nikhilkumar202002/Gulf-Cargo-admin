@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { getBranchByIdSmart } from "../../api/branchApi";
-import Avatar from "../../components/Avatar"; // ✅ shared avatar
+import Avatar from "../../components/Avatar";
 import { FiArrowLeft } from "react-icons/fi";
 import { FaExternalLinkAlt, FaGlobe, FaMapMarkerAlt, FaPhoneAlt } from "react-icons/fa";
 import "../styles.css";
@@ -9,13 +9,86 @@ import "./BranchStyles.css";
 
 /* ---------------- helpers ---------------- */
 const Skel = ({ w = 120, h = 14, r = 8, className = "" }) => (
-  <span className={`skel ${className}`} style={{ display:"inline-block", width: typeof w === "number" ? `${w}px` : w, height: typeof h === "number" ? `${h}px` : h, borderRadius: r }} aria-hidden="true" />
+  <span
+    className={`skel ${className}`}
+    style={{
+      display: "inline-block",
+      width: typeof w === "number" ? `${w}px` : w,
+      height: typeof h === "number" ? `${h}px` : h,
+      borderRadius: r,
+    }}
+    aria-hidden="true"
+  />
 );
 const decodeHtml = (s) => String(s || "").replace(/&amp;/g, "&");
 const isActiveStatus = (v) => {
   if (v === 1 || v === "1" || v === true) return true;
   if (typeof v === "string") return v.toLowerCase() === "active";
   return false;
+};
+
+/* ---------------- start_number finder (tolerant + deep) ---------------- */
+const digitStr = (v) => String(v ?? "").replace(/\D+/g, "");
+
+/** Recursively search for a 6-digit-ish start number across nested objects */
+const findStartNumberDeep = (obj, depth = 0) => {
+  if (!obj || typeof obj !== "object" || depth > 4) return "";
+
+  // 1) explicit favorites first
+  const explicitPaths = [
+    "start_number",
+    "startNumber",
+    "invoice_start_number",
+    "invoiceStartNumber",
+    "invoice_start",
+    "invoiceStart",
+    "startNo",
+    "start_no",
+  ];
+  for (const k of explicitPaths) {
+    if (k in obj) {
+      const ds = digitStr(obj[k]);
+      if (ds) return ds.slice(0, 6);
+    }
+  }
+
+  // 2) common containers
+  const containers = ["invoice", "invoices", "settings", "meta", "data", "attributes"];
+  for (const c of containers) {
+    if (obj[c]) {
+      const ds = findStartNumberDeep(obj[c], depth + 1);
+      if (ds) return ds;
+    }
+  }
+
+  // 3) heuristic on keys
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === "object" && v) {
+      const ds = findStartNumberDeep(v, depth + 1);
+      if (ds) return ds;
+    } else {
+      if (/(start).*(invoice|number)|(invoice).*(start)/i.test(k)) {
+        const ds = digitStr(v);
+        if (ds) return ds.slice(0, 6);
+      }
+    }
+  }
+  return "";
+};
+
+const pickStartNumber = (b) => {
+  if (!b) return "";
+  // quick top-level wins
+  const quick =
+    digitStr(b.start_number) ||
+    digitStr(b.startNumber) ||
+    digitStr(b.invoice_start_number) ||
+    digitStr(b.invoice_start) ||
+    digitStr(b.startNo) ||
+    digitStr(b.start_no);
+  if (quick) return quick.slice(0, 6);
+  // deep fallback
+  return findStartNumberDeep(b);
 };
 
 export default function ViewBranch() {
@@ -36,16 +109,23 @@ export default function ViewBranch() {
       } catch (e) {
         if (alive) {
           const code = e?.response?.status;
-          setError(code === 404 ? "Branch not found (404)." : (e?.response?.data?.message || "Failed to load branch."));
+          setError(
+            code === 404
+              ? "Branch not found (404)."
+              : e?.response?.data?.message || "Failed to load branch."
+          );
         }
       } finally {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [id]);
 
   const isActive = isActiveStatus(branch?.status);
+  const startNumber = pickStartNumber(branch);
 
   return (
     <section className="vb-wrap">
@@ -55,17 +135,26 @@ export default function ViewBranch() {
           <FiArrowLeft size={18} /> Back
         </button>
         <div className="grow" />
-        <Link to="/branches" className="ipx-btn ghost sm">All Branches</Link>
+        <Link to="/branches" className="ipx-btn ghost sm">
+          All Branches
+        </Link>
       </div>
 
       {error && <div className="vb-card vb-error">{error}</div>}
 
       {/* Main card */}
       <div className="vb-card vb-card-elev" aria-busy={loading}>
-        {/* Identity row: 120×64 logo + name + pills */}
+        {/* Identity row */}
         <div className="flex items-center gap-4 mb-4">
-          {loading ? <Skel w={120} h={64} r={12} /> : (
-            <Avatar url={branch?.logo_url} name={branch?.branch_name} width={120} height={64} />
+          {loading ? (
+            <Skel w={120} h={64} r={12} />
+          ) : (
+            <Avatar
+              url={branch?.logo_url}
+              name={branch?.branch_name}
+              width={120}
+              height={64}
+            />
           )}
           <div className="min-w-0">
             {loading ? (
@@ -78,11 +167,21 @@ export default function ViewBranch() {
               </>
             ) : (
               <>
-                <h3 className="vb-branch-name m-0">{branch?.branch_name || "—"}</h3>
+                <h3 className="vb-branch-name m-0">
+                  {branch?.branch_name || "—"}
+                </h3>
                 <div className="vb-badges mt-1 flex items-center gap-2">
-                  <span className={`ipx-pill ${isActive ? "ok" : "muted"}`}>{isActive ? "Active" : "Inactive"}</span>
-                  {branch?.branch_code && <span className="vb-code-chip">Code: {branch.branch_code}</span>}
-                  {branch?.branch_location && <span className="vb-code-chip"><FaMapMarkerAlt /> {branch.branch_location}</span>}
+                  <span className={`ipx-pill ${isActive ? "ok" : "muted"}`}>
+                    {isActive ? "Active" : "Inactive"}
+                  </span>
+                  {branch?.branch_code && (
+                    <span className="vb-code-chip">Code: {branch.branch_code}</span>
+                  )}
+                  {branch?.branch_location && (
+                    <span className="vb-code-chip">
+                      <FaMapMarkerAlt /> {branch.branch_location}
+                    </span>
+                  )}
                 </div>
               </>
             )}
@@ -94,16 +193,54 @@ export default function ViewBranch() {
           {/* Identity */}
           <div className="vb-block">
             <h4 className="vb-title">Identity</h4>
-            <KV k="Arabic Name" v={loading ? <Skel w="60%" /> : (branch?.branch_name_ar || "—")} />
-            <KV k="Address" v={loading ? (<><Skel w="80%" /><Skel w="50%" /></>) : (decodeHtml(branch?.branch_address) || "—")} />
+            <KV
+              k="Arabic Name"
+              v={loading ? <Skel w="60%" /> : branch?.branch_name_ar || "—"}
+            />
+            <KV
+              k="Address"
+              v={
+                loading ? (
+                  <>
+                    <Skel w="80%" />
+                    <Skel w="50%" />
+                  </>
+                ) : (
+                  decodeHtml(branch?.branch_address) || "—"
+                )
+              }
+            />
           </div>
 
           {/* Contacts */}
           <div className="vb-block">
             <h4 className="vb-title">Contacts</h4>
-            <KV k="Primary Phone" v={loading ? <Skel w="40%" /> : (<span className="flex items-center gap-2"><FaPhoneAlt className="opacity-70" />{branch?.branch_contact_number || "—"}</span>)} />
-            <KV k="Alternate Phone" v={loading ? <Skel w="40%" /> : (branch?.branch_alternative_number || "—")} />
-            <KV k="Email" v={loading ? <Skel w="60%" /> : (branch?.branch_email || "—")} />
+            <KV
+              k="Primary Phone"
+              v={
+                loading ? (
+                  <Skel w="40%" />
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <FaPhoneAlt className="opacity-70" />
+                    {branch?.branch_contact_number || "—"}
+                  </span>
+                )
+              }
+            />
+            <KV
+              k="Alternate Phone"
+              v={loading ? <Skel w="40%" /> : branch?.branch_alternative_number || "—"}
+            />
+            <KV
+              k="Email"
+              v={loading ? <Skel w="60%" /> : branch?.branch_email || "—"}
+            />
+            {/* NEW: Start Number */}
+            <KV
+              k="Invoice starting (6 digits)"
+              v={loading ? <Skel w="30%" /> : startNumber || "—"}
+            />
           </div>
 
           {/* Web */}
@@ -112,12 +249,21 @@ export default function ViewBranch() {
             <KV
               k="Website"
               v={
-                loading ? <Skel w="70%" /> :
-                branch?.branch_website ? (
-                  <a className="vb-link inline-flex items-center gap-2" href={branch.branch_website} target="_blank" rel="noreferrer">
-                    <FaGlobe /> {branch.branch_website} <FaExternalLinkAlt className="opacity-70" />
+                loading ? (
+                  <Skel w="70%" />
+                ) : branch?.branch_website ? (
+                  <a
+                    className="vb-link inline-flex items-center gap-2"
+                    href={branch.branch_website}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <FaGlobe /> {branch.branch_website}{" "}
+                    <FaExternalLinkAlt className="opacity-70" />
                   </a>
-                ) : "—"
+                ) : (
+                  "—"
+                )
               }
             />
           </div>
@@ -125,8 +271,11 @@ export default function ViewBranch() {
           {/* Meta */}
           <div className="vb-block">
             <h4 className="vb-title">Created By</h4>
-            <KV k="Name" v={loading ? <Skel w="40%" /> : (branch?.created_by || "—")} />
-            <KV k="Email" v={loading ? <Skel w="60%" /> : (branch?.created_by_email || "—")} />
+            <KV k="Name" v={loading ? <Skel w="40%" /> : branch?.created_by || "—"} />
+            <KV
+              k="Email"
+              v={loading ? <Skel w="60%" /> : branch?.created_by_email || "—"}
+            />
           </div>
         </div>
       </div>

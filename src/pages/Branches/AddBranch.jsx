@@ -58,6 +58,8 @@ export default function AddBranch() {
     contactNumber: "",
     altDial: "966",
     altNumber: "",
+    // invoice start number (6 digits)
+    startNumber: "",
     // logo
     logoFile: null,
     logoPreview: "",
@@ -150,6 +152,12 @@ export default function AddBranch() {
     update({ [name]: name === "status" ? Number(value) : value });
   };
 
+  // start_number: digits-only, max 6
+  const handleStartNumberChange = (e) => {
+    const digits = onlyDigits(e.target.value).slice(0, 6);
+    setForm((p) => ({ ...p, startNumber: digits }));
+  };
+
   // Database typically wants E.164 with +; keep outbound consistent
   const composeE164 = (dialDigitsStr, number) => {
     const n = onlyDigits(number);
@@ -203,6 +211,11 @@ export default function AddBranch() {
         return;
       }
 
+      // Validate 6-digit start number
+      if (!/^\d{6}$/.test(form.startNumber)) {
+        throw new Error("Invoice starting number must be exactly 6 digits.");
+      }
+
       // Build base payload
       const payload = {
         branch_name: form.branchName.trim(),
@@ -220,6 +233,8 @@ export default function AddBranch() {
         branch_location: form.location.trim(),
         branch_website: form.website.trim() || null,
         status: Number(form.status) || 0,
+        // NEW: start number to backend
+        start_number: form.startNumber, // 6-digit string
       };
 
       if (!payload.branch_name) throw new Error("Branch name is required.");
@@ -240,14 +255,13 @@ export default function AddBranch() {
         created = await storeBranch(payload, token);
       }
 
-      // Prefer wrapper you showed: { success, branch: { ... } }
       const record = created?.branch || created?.data || created || payload;
 
       toast.success("Branch created successfully");
       setModalData(record);
       setModalOpen(true);
 
-      // Reset: keep SA default, clear logo
+      // Reset
       setForm(() => ({
         branchName: "",
         branchNamear: "",
@@ -261,6 +275,7 @@ export default function AddBranch() {
         contactNumber: "",
         altDial: "966",
         altNumber: "",
+        startNumber: "",
         logoFile: null,
         logoPreview: "",
       }));
@@ -482,6 +497,28 @@ export default function AddBranch() {
               </div>
             </div>
 
+            {/* NEW: start_number (right after email) */}
+            <div className="my-2">
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Invoice starting (6 digits)
+              </label>
+              <input
+                name="startNumber"
+                value={form.startNumber}
+                onChange={handleStartNumberChange}
+                inputMode="numeric"
+                pattern="\d{6}"
+                maxLength={6}
+                placeholder="e.g., 100001"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none ring-emerald-500 focus:ring"
+                aria-describedby="start-number-help"
+                required
+              />
+              <p id="start-number-help" className="mt-1 text-xs text-slate-500">
+                Exactly 6 digits. Only numbers allowed.
+              </p>
+            </div>
+
             {/* 5) Contacts */}
             <div className="grid grid-cols-2 gap-4">
               <div className="my-4">
@@ -521,14 +558,9 @@ export default function AddBranch() {
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
                   Tip: Paste like{" "}
-                  <code className="rounded bg-slate-100 px-1">
-                    9665XXXXXXXX
-                  </code>{" "}
+                  <code className="rounded bg-slate-100 px-1">9665XXXXXXXX</code>{" "}
                   or{" "}
-                  <code className="rounded bg-slate-100 px-1">
-                    +9665XXXXXXXX
-                  </code>
-                  .
+                  <code className="rounded bg-slate-100 px-1">+9665XXXXXXXX</code>.
                 </p>
               </div>
               <div className="my-4">
@@ -587,6 +619,7 @@ export default function AddBranch() {
                     contactNumber: "",
                     altDial: "966",
                     altNumber: "",
+                    startNumber: "",
                     logoFile: null,
                     logoPreview: "",
                   }))

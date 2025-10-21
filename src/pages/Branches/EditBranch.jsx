@@ -42,6 +42,8 @@ const StatusToggle = ({ value, onChange, disabled }) => {
 };
 
 /* -------------- helpers -------------- */
+const onlyDigits = (s = "") => (s || "").replace(/\D+/g, "");
+
 const unwrapBranch = (res) =>
   res?.data?.branch ?? res?.data?.data ?? res?.data ?? null;
 
@@ -60,7 +62,6 @@ const getReturnedLogoUrl = (res) =>
   "";
 
 const getFirstErrorMessage = (e) => {
-  // Laravel-style: { message, errors: { field: ["msg"] } }
   const msg = e?.response?.data?.message || e?.message;
   const errors = e?.response?.data?.errors;
   if (errors && typeof errors === "object") {
@@ -82,6 +83,8 @@ const emptyBranch = {
   branch_address: "",
   status: 1,
   logo_url: "",
+  // NEW
+  start_number: "", // exactly 6 digits
 };
 
 const MAX_LOGO_MB = 2;
@@ -116,6 +119,15 @@ const EditBranch = () => {
         const res = await api.get(`/branch/${id}`, { signal: ctrl.signal });
         const b = unwrapBranch(res);
         if (!b) throw new Error("Branch details not found.");
+
+        // tolerate different API keys for start number
+        const startNo =
+          b.start_number ??
+          b.invoice_start_number ??
+          b.invoice_start ??
+          b.startNo ??
+          "";
+
         const normalized = {
           branch_name: b.branch_name || "",
           branch_name_ar: b.branch_name_ar || "",
@@ -128,7 +140,9 @@ const EditBranch = () => {
           branch_address: b.branch_address || "",
           status: coerceStatus(b.status),
           logo_url: b.logo_url || b.logo || "",
+          start_number: onlyDigits(String(startNo)).slice(0, 6) || "",
         };
+
         if (!aborted) {
           setBranch(normalized);
           setInitial(normalized);
@@ -176,6 +190,9 @@ const EditBranch = () => {
       setField(name, coerceStatus(value));
     } else if (name === "branch_code") {
       setField(name, value.toUpperCase());
+    } else if (name === "start_number") {
+      // digits only, clamp to 6
+      setField(name, onlyDigits(value).slice(0, 6));
     } else {
       setField(name, value);
     }
@@ -196,6 +213,10 @@ const EditBranch = () => {
       !/^https?:\/\/[^\s.]+\.[^\s]{2,}/i.test(branch.branch_website.trim())
     ) {
       return "Website should start with http:// or https://";
+    }
+    // NEW: enforce exactly 6 digits
+    if (!/^\d{6}$/.test(branch.start_number)) {
+      return "Invoice starting number must be exactly 6 digits.";
     }
     return "";
   };
@@ -221,6 +242,8 @@ const EditBranch = () => {
       branch_website: branch.branch_website.trim(),
       branch_address: branch.branch_address.trim(),
       status: Number(branch.status),
+      // NEW
+      start_number: branch.start_number, // 6-digit string
     };
 
     const needsMultipart = !!logoFile || logoRemoved;
@@ -258,7 +281,6 @@ const EditBranch = () => {
         );
       }
 
-      // prefer API-returned logo url if present
       const returnedLogo = getReturnedLogoUrl(res);
       const nextLogoUrl = logoRemoved ? "" : (returnedLogo || branch.logo_url || initial.logo_url);
 
@@ -301,11 +323,10 @@ const EditBranch = () => {
     setLogoPreview(dataURL);
     setLogoRemoved(false);
     return true;
-    };
+  };
 
   const openPicker = () => {
     if (fileInputRef.current) {
-      // allow selecting same file again
       fileInputRef.current.value = "";
       fileInputRef.current.click();
     }
@@ -404,7 +425,7 @@ const EditBranch = () => {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (!saving) doSave(true); // ONLY Save & Back
+            if (!saving) doSave(true); // Save & Back
           }}
           className="space-y-8"
         >
@@ -555,6 +576,27 @@ const EditBranch = () => {
                 />
               </label>
 
+              {/* NEW: Start Number (six digits) */}
+              <label className="block">
+                <span className="block text-sm font-medium text-slate-700">Invoice starting (6 digits)</span>
+                <input
+                  type="text"
+                  name="start_number"
+                  value={branch.start_number}
+                  onChange={handleChange}
+                  inputMode="numeric"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  placeholder="e.g., 100001"
+                  className="mt-1 w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  aria-describedby="start-number-help"
+                  required
+                />
+                <span id="start-number-help" className="text-xs text-slate-500">
+                  Exactly 6 digits. Only numbers allowed.
+                </span>
+              </label>
+
               {/* Location */}
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700">City / Location</span>
@@ -631,10 +673,9 @@ const EditBranch = () => {
               Cancel
             </button>
 
-            {/* ONLY Save & Back */}
+            {/* Save & Back */}
             <button
               type="submit"
-              onClick={() => {}}
               className="bg-indigo-600 text-white hover:bg-indigo-700 px-5 py-2.5 rounded-lg shadow transition disabled:opacity-60"
               disabled={saving || !dirty}
               title={!dirty ? "No changes to save" : ""}

@@ -8,6 +8,10 @@ import { IoMdRefresh } from "react-icons/io";
 /* ---------------- tiny helpers ---------------- */
 const cx = (...c) => c.filter(Boolean).join(" ");
 
+/* ----------- serial no helper ----------- */
+const slno = (rowIndex, meta) =>
+  (meta?.per_page || 0) * ((meta?.current_page || 1) - 1) + rowIndex + 1;
+
 const Skel = ({ w = "100%", h = 14, rounded = 8, className = "" }) => (
   <span
     className={cx("inline-block bg-slate-200 animate-pulse", className)}
@@ -22,10 +26,11 @@ const Skel = ({ w = "100%", h = 14, rounded = 8, className = "" }) => (
 
 const SkelRow = () => (
   <tr className="border-b">
+    <td className="p-3"><Skel h={32} w={60} /></td>
+    <td className="p-3"><Skel h={32} w={80} /></td>
     <td className="p-3"><Skel h={32} w={120} /></td>
     <td className="p-3"><Skel /></td>
     <td className="p-3"><Skel w={80} /></td>
-    <td className="p-3"><Skel w={120} /></td>
     <td className="p-3"><Skel w={160} /></td>
     <td className="p-3"><Skel w={130} /></td>
     <td className="p-3"><Skel w={80} /></td>
@@ -182,7 +187,7 @@ export default function AllBranches() {
     const t = (q || "").trim().toLowerCase();
     if (!t) return branches;
     return branches.filter((b) => {
-      const hay = `${b.branch_name ?? ""} ${b.branch_code ?? ""} ${b.branch_location ?? ""} ${b.branch_email ?? ""} ${b.branch_contact_number ?? ""}`.toLowerCase();
+      const hay = `${b.id ?? ""} ${b.branch_name ?? ""} ${b.branch_code ?? ""} ${b.branch_location ?? ""} ${b.branch_email ?? ""} ${b.branch_contact_number ?? ""}`.toLowerCase();
       return hay.includes(t);
     });
   }, [q, branches]);
@@ -244,7 +249,7 @@ export default function AllBranches() {
               <input
                 value={q}
                 onChange={(e) => { setQ(e.target.value); }}
-                placeholder="Search branch name, code, location, email…"
+                placeholder="Search (id, name, code, location, email)…"
                 className="pl-9 pr-3 py-2 w-72 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-400"
               />
             </div>
@@ -295,10 +300,19 @@ export default function AllBranches() {
             </div>
           )}
 
-          {!loading && filtered.map((b) => {
+          {!loading && filtered.map((b, idx) => {
             const phones = getPhones(b);
             return (
               <div key={b.id} className="border rounded-xl p-4 hover:shadow-sm transition">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                    SL No: {slno(idx, meta)}
+                  </span>
+                  <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                    ID: {b.id ?? "—"}
+                  </span>
+                </div>
+
                 <div className="flex items-center gap-3">
                   {b.logo_url ? (
                     <img
@@ -378,7 +392,7 @@ export default function AllBranches() {
 
                 <div className="mt-4 flex items-center gap-2">
                   <Link
-                    to={`/bbranch/viewbranch/${b.id}`}
+                    to={`/branch/viewbranch/${b.id}`}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border hover:bg-gray-50 text-sm"
                     title="View branch"
                   >
@@ -416,6 +430,8 @@ export default function AllBranches() {
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-100 text-gray-700 sticky top-0 z-10">
                   <tr>
+                    <th className="text-left p-3 font-medium w-20">SL No</th>
+                    {/* <th className="text-left p-3 font-medium w-24">ID</th> */}
                     <th className="text-left p-3 font-medium">Logo</th>
                     <th className="text-left p-3 font-medium">Branch Name</th>
                     <th className="text-left p-3 font-medium">Code</th>
@@ -436,16 +452,19 @@ export default function AllBranches() {
 
                   {!loading && filtered.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="p-6 text-center text-gray-500">
+                      <td colSpan={10} className="p-6 text-center text-gray-500">
                         {err ? `Error: ${err}` : "No branches found on this page."}
                       </td>
                     </tr>
                   )}
 
-                  {!loading && filtered.map((b) => {
+                  {!loading && filtered.map((b, idx) => {
                     const phones = getPhones(b);
                     return (
                       <tr key={b.id} className="hover:bg-gray-50">
+
+                        <td className="p-3 whitespace-nowrap">{slno(idx, meta)}</td>
+                        {/* <td className="p-3 whitespace-nowrap">{b.id ?? "—"}</td> */}
                         <td className="p-3">
                           {b.logo_url ? (
                             <img
@@ -460,6 +479,7 @@ export default function AllBranches() {
                           )}
                         </td>
 
+                        {/* Branch name */}
                         <td className="p-3 max-w-[260px]">
                           <Link
                             to={`/branches/${b.id}`}
@@ -473,8 +493,10 @@ export default function AllBranches() {
                           ) : null}
                         </td>
 
+                        {/* Code */}
                         <td className="p-3 whitespace-nowrap">{b.branch_code || "-"}</td>
 
+                        {/* Location */}
                         <td className="p-3 max-w-[280px]">
                           <div className="truncate" title={b.branch_location || ""}>{b.branch_location || "-"}</div>
                           {b.branch_address ? (
@@ -482,6 +504,7 @@ export default function AllBranches() {
                           ) : null}
                         </td>
 
+                        {/* Email */}
                         <td className="p-3 max-w-[260px]">
                           {b.branch_email ? (
                             <a
@@ -494,6 +517,7 @@ export default function AllBranches() {
                           ) : "-"}
                         </td>
 
+                        {/* Contact */}
                         <td className="p-3 whitespace-nowrap">
                           {phones.length
                             ? (
@@ -513,6 +537,7 @@ export default function AllBranches() {
                             : "-"}
                         </td>
 
+                        {/* Status */}
                         <td className="p-3">
                           <span
                             className={cx(
@@ -524,10 +549,11 @@ export default function AllBranches() {
                           </span>
                         </td>
 
+                        {/* Actions */}
                         <td className="p-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <Link
-                              to={`/bbranch/viewbranch/${b.id}`}
+                              to={`/branch/viewbranch/${b.id}`}
                               className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded border hover:bg-gray-50 text-sm"
                               title="View branch"
                             >
