@@ -68,7 +68,6 @@ const withAuth = (token, extra = {}) =>
   token ? { headers: { Authorization: `Bearer ${token}` }, ...extra } : { ...extra };
 
 /* ──────────────────────── Single / by id ───────────────────────── */
-
 /**
  * Fetch ONE branch by id from multiple common endpoints and unwrap/normalize.
  * Usage: const b = await getBranchByIdSmart(id, token)
@@ -143,27 +142,47 @@ export async function getAllBranches(params = {}, token) {
  * Returns a normalized array.
  */
 export async function getActiveBranches(params = {}, token) {
-  const attempts = [
-    { url: "/branches",        cfg: withAuth(token, { params: { status: 1, ...params } }) },
-    { url: "/branches/active", cfg: withAuth(token, { params }) },
-    { url: "/active-branches", cfg: withAuth(token, { params }) },
-    { url: "/branch/active",   cfg: withAuth(token, { params }) },
-    { url: "/api/branches",    cfg: withAuth(token, { params: { status: 1, ...params } }) },
-  ];
+  const all = [];
+  let page = 1;
+  let totalPages = 1;
 
-  for (const a of attempts) {
-    try {
-      const res = await api.get(a.url, a.cfg);
-      const list = normalizeArray(res).filter(isActive);
-      if (list.length) return list;
-    } catch (_) {}
-  }
-
-  // Broad fallback: fetch all, filter locally
   try {
-    const res = await api.get("/branches", withAuth(token, { params: { per_page: 500, ...params } }));
-    return normalizeArray(res).filter(isActive);
-  } catch {
+    do {
+      const res = await api.get("/branches", withAuth(token, { params: { status: 1, per_page: 100, page, ...params } }));
+      const raw = unwrap(res);
+
+      // detect nested paginator shape
+      const dataArray = firstArray(raw);
+      const items = dataArray.map(pick).filter(isActive);
+      all.push(...items);
+
+      // pagination meta
+      const meta = raw?.data ?? raw ?? {};
+      totalPages = meta.last_page ?? meta.data?.last_page ?? 1;
+      page++;
+    } while (page <= totalPages && totalPages > 1);
+
+    // if nothing came through, try alternate endpoints
+    if (!all.length) {
+      const attempts = [
+        { url: "/branches/active" },
+        { url: "/active-branches" },
+        { url: "/branch/active" },
+        { url: "/api/branches" },
+      ];
+
+      for (const a of attempts) {
+        try {
+          const res = await api.get(a.url, withAuth(token, { params: { status: 1, ...params } }));
+          const arr = normalizeArray(res).filter(isActive);
+          if (arr.length) return arr;
+        } catch (_) {}
+      }
+    }
+
+    return all.filter(isActive);
+  } catch (err) {
+    console.error("getActiveBranches error:", err);
     return [];
   }
 }

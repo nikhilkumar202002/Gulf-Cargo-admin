@@ -6,7 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import { useSelector } from "react-redux";
-import { createCargo, normalizeCargoToInvoice, listCargos, getNextInvoiceNo } from "../../api/createCargoApi";
+import { createCargo, normalizeCargoToInvoice, getNextInvoiceNo } from "../../api/createCargoApi";
 import {
   unwrapArray,
   idOf,
@@ -23,7 +23,7 @@ import {
 } from "../../utils/cargoHelpers";
 import { getActiveShipmentMethods } from "../../api/shipmentMethodApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
-import { getBranchUsers } from "../../api/branchApi";
+import { getBranchUsers, viewBranch } from "../../api/branchApi";
 import { getPartiesByCustomerType } from "../../api/partiesApi";
 import { getAllPaymentMethods } from "../../api/paymentMethod";
 import { getActiveDeliveryTypes } from "../../api/deliveryType";
@@ -175,7 +175,6 @@ const SkeletonCreateCargo = () => (
     </div>
   </div>
 );
-
 /* ---------- Initial Form ---------- */
 const buildInitialForm = (branchId = "") => ({
   branchId: branchId ? String(branchId) : "",
@@ -266,7 +265,7 @@ const options = [
 ];
 
 const incrementInvoiceString = (last = "") => {
-  if (!last) return "INV-000001";
+  if (!last) return "BR:000001";
   const m = String(last).trim().match(/^(.*?)(\d+)$/);
   if (!m) return `${last}-000001`;
   const [, prefix, digits] = m;
@@ -455,6 +454,54 @@ export default function CreateCargo() {
     };
   }, [token, tokenBranchId]);
 
+  
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const profile = await getProfile();
+        const userBranchId =
+          profile?.user?.branch?.id ||
+          profile?.data?.branch?.id ||
+          null;
+
+        if (!userBranchId) return;
+
+        const branchResponse = await viewBranch(userBranchId);
+        const branch =
+          branchResponse?.branch ||
+          branchResponse?.data?.branch ||
+          branchResponse;
+
+        const branchCode = branch?.branch_code || "BR";
+        const startNumber = branch?.start_number || "000001";
+        const invoiceValue = `${branchCode}:${startNumber}`;
+
+        // ✅ use functional update to merge safely
+        if (alive) {
+          setForm((prev) => ({
+            ...prev,
+            branchId: String(userBranchId),
+            invoiceNo: invoiceValue,
+          }));
+        }
+      } catch {
+        if (alive) {
+          setForm((prev) => ({
+            ...prev,
+            invoiceNo: "BR:000001",
+          }));
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []); // ✅ run once on mount
+
+
   /* collected by */
   useEffect(() => {
     if (form.collectedByRoleName !== "Driver") return;
@@ -508,11 +555,19 @@ export default function CreateCargo() {
       try {
         const next = await getNextInvoiceNo(bid);
         if (!alive) return;
-        setForm((f) => ({ ...f, branchId: bid, invoiceNo: next }));
+
+        // ✅ if API didn’t return a valid number, fallback to branch start number
+        let invoiceNo = next && String(next).trim()
+          ? next
+          : `${userProfile?.branch?.branch_code || "RD"}:${userProfile?.branch?.start_number || "000001"}`;
+
+        setForm((f) => ({ ...f, branchId: bid, invoiceNo }));
       } catch {
-        // Fallback if API is empty/new
         if (!alive) return;
-        setForm((f) => ({ ...f, branchId: bid, invoiceNo: f.invoiceNo || "INV-000001" }));
+
+        // ✅ final fallback — if both API and branch data fail
+        const fallbackNo = `INV-${userProfile?.branch?.start_number || "000001"}`;
+        setForm((f) => ({ ...f, branchId: bid, invoiceNo: fallbackNo }));
       }
     })();
     return () => { alive = false; };
@@ -706,15 +761,21 @@ export default function CreateCargo() {
     return missing;
   }, [form, boxes]);
 
-  const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
-    setForm({
-      ...buildInitialForm(branchId),
-      branchId: String(branchId || ""),
-      invoiceNo: nextInvoiceNo || "INV-000001",
-    });
-    setCollectedByOptions([]);
-    setBoxes([{ box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] }]);
-  }, []);
+const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
+  setForm((prev) => ({
+    ...buildInitialForm(branchId),
+    branchId: String(branchId || ""),
+    invoiceNo:
+      nextInvoiceNo ||
+      prev.invoiceNo || // ✅ keep already fetched invoice if it exists
+      "INV-000001",
+  }));
+  setCollectedByOptions([]);
+  setBoxes([
+    { box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] },
+  ]);
+}, []);
+
 
   const onResetClick = useCallback(() => {
     const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
@@ -1009,8 +1070,8 @@ export default function CreateCargo() {
       >
         <div
           className={`min-w-[260px] max-w-[360px] rounded-xl border px-4 py-3 shadow ${toast.variant === "error"
-              ? "border-rose-200 bg-rose-50 text-rose-800"
-              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            ? "border-rose-200 bg-rose-50 text-rose-800"
+            : "border-emerald-200 bg-emerald-50 text-emerald-800"
             }`}
         >
           <div className="flex items-start gap-3">
@@ -1070,38 +1131,38 @@ export default function CreateCargo() {
               {/* Collection Details */}
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 items-end py-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold tracking-wide text-slate-700">
-                    Collection Details
-                  </h3>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold tracking-wide text-slate-700">
+                      Collection Details
+                    </h3>
+                  </div>
+
+                  <div className="flex gap-5 w-full">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs uppercase tracking-wide text-slate-500">Invoice No</span>
+                      <span className="inline-flex items-center gap-2 rounded-md bg-gray-50 px-4 py-1.5 text-base font-semibold text-gray-900 tracking-wide border border-gray-200 shadow-sm">
+                        {form.invoiceNo || "BR:000001"}
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard.writeText(form.invoiceNo || "")}
+                          className="ml-2 rounded-md bg-white border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100 transition"
+                          title="Copy invoice number"
+                        >
+                          Copy
+                        </button>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs uppercase tracking-wide text-slate-500">Branch</span>
+                      <span className="inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm border border-slate-200">
+                        {branchNameFromProfile || "--"}
+                      </span>
+                    </div>
+
+                  </div>
+
                 </div>
-
-<div className="flex gap-5 w-full">
-<div className="flex items-center gap-2">
-                    <span className="text-xs uppercase tracking-wide text-slate-500">Invoice No</span>
-                    <span className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm border border-slate-200">
-                      {form.invoiceNo || "INV-000001"}
-                      <button
-                        type="button"
-                        onClick={() => navigator.clipboard.writeText(form.invoiceNo || "")}
-                        className="ml-1 rounded-md border border-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
-                        title="Copy invoice number"
-                      >
-                        Copy
-                      </button>
-                    </span>
-                  </div>
-
-                     <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase tracking-wide text-slate-500">Branch</span>
-                    <span className="inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm border border-slate-200">
-                      {branchNameFromProfile || "--"}
-                    </span>
-                  </div>
-
-</div>
-                 
-                  </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end py-3">
                   <div>
@@ -1424,8 +1485,8 @@ export default function CreateCargo() {
                             step="0.001"
                             title="Enter after packing"
                             className={`w-32 rounded-lg border px-2 py-1 text-right ${Number(box.box_weight || 0) <= 0
-                                ? "border-rose-300"
-                                : "border-slate-300"
+                              ? "border-rose-300"
+                              : "border-slate-300"
                               }`}
                             value={box.box_weight ?? 0}
                             onChange={(e) => setBoxWeight(boxIndex, e.target.value)}
@@ -1439,8 +1500,8 @@ export default function CreateCargo() {
                           onClick={() => removeBox(boxIndex)}
                           disabled={boxes.length <= 1}
                           className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-white ${boxes.length <= 1
-                              ? "bg-slate-300 cursor-not-allowed"
-                              : "bg-rose-600 hover:bg-rose-700"
+                            ? "bg-slate-300 cursor-not-allowed"
+                            : "bg-rose-600 hover:bg-rose-700"
                             }`}
                           title={
                             boxes.length <= 1
