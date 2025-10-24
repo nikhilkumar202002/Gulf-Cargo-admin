@@ -61,6 +61,14 @@ export const pickBranchId = (profileLike) => {
   return user?.branch_id ?? user?.branchId ?? user?.branch?.id ?? null;
 };
 
+export const getBranchName = (profile) => {
+  return profile?.user?.branch?.name ||
+    profile?.branch?.name ||
+    profile?.user?.branch_name ||
+    profile?.branch_name ||
+    "";
+};
+
 export const safeDecodeJwt = (jwt) => {
   if (!jwt || typeof jwt !== "string" || !jwt.includes(".")) return null;
   try { return JSON.parse(atob(jwt.split(".")[1])) || null; } catch { return null; }
@@ -95,4 +103,3 @@ export const addressFromParty = (p) => {
   ].filter(Boolean);
   return parts.join(", ");
 };
-

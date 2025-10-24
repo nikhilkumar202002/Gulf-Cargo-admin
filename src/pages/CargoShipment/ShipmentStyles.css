@@ -94,9 +94,12 @@ input.react-autosuggest__input {
     font-size: 25px;
 }
 .party-add-btn{
-    background-color: var(--primary-color);
-    color: white;
-    font-size: 16px;
-    font-family: "Inter";
-    font-weight: 600;
+    @apply inline-flex items-center gap-2 rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 transition-colors;
+}
+.party-add-btn:disabled {
+    @apply bg-slate-300 cursor-not-allowed;
+}
+
+.party-add-btn > svg {
+    @apply text-slate-300;
 }

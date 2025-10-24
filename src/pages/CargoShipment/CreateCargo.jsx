@@ -4,9 +4,14 @@ import React, {
   useRef,
   useState,
   useCallback,
-} from "react";
+} from 'react';
+import { useImmer } from 'use-immer';
 import { useSelector } from "react-redux";
-import { createCargo, normalizeCargoToInvoice, getNextInvoiceNo } from "../../api/createCargoApi";
+import {
+  createCargo,
+  normalizeCargoToInvoice,
+  getNextInvoiceNo,
+} from "../../api/createCargoApi";
 import {
   unwrapArray,
   idOf,
@@ -18,166 +23,42 @@ import {
   pickBranchId,
   safeDecodeJwt,
   toDec,
+  getBranchName,
   phoneFromParty,
   addressFromParty,
 } from "../../utils/cargoHelpers";
-import { getActiveShipmentMethods } from "../../api/shipmentMethodApi";
-import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
-import { getBranchUsers, viewBranch } from "../../api/branchApi";
-import { getPartiesByCustomerType } from "../../api/partiesApi";
-import { getAllPaymentMethods } from "../../api/paymentMethod";
-import { getActiveDeliveryTypes } from "../../api/deliveryType";
-import { getProfile } from "../../api/accountApi";
-import { getActiveCollected } from "../../api/collectedByApi";
-import { getActiveDrivers } from "../../api/driverApi";
+import {
+  getActiveShipmentMethods,
+  getActiveShipmentStatuses,
+  getBranchUsers,
+  viewBranch,
+  getActiveDeliveryTypes,
+  getProfile,
+  getActiveCollected,
+  getActiveDrivers,
+  getPartiesByCustomerType,
+  getAllPaymentMethods,
+} from '../../api';
 import InvoiceModal from "../../components/InvoiceModal";
-import { BsFillBoxSeamFill } from "react-icons/bs";
-import { Link } from "react-router-dom";
-import ItemAutosuggest from "./components/ItemAutosuggest";
 import "./ShipmentStyles.css";
 import SenderModal from "../SenderReceiver/modals/SenderModal";
 import ReceiverModal from "../SenderReceiver/modals/ReceiverModal";
 import { Toaster } from "react-hot-toast";
+import { PageHeader } from "./components/PageHeader";
+import { SkeletonCreateCargo } from "./components/CreateCargoSkeleton";
+
+import { CollectionDetails } from './components/CollectionDetails';
+import { PartyInfo } from './components/PartyInfo';
+import { ShipmentDetails } from './components/ShipmentDetails';
+import { ScheduleDetails } from './components/ScheduleDetails';
+import { BoxesSection } from './components/BoxesSection';
+import { ChargesAndSummary } from './components/ChargesAndSummary';
 
 const DEFAULT_STATUS_ID = 13;
-
-/* ---------- Small presentational skeletons ---------- */
-const Skel = ({ w = "100%", h = 12, className = "" }) => (
-  <div
-    className={`animate-pulse rounded bg-slate-200/80 ${className}`}
-    style={{ width: w, height: h }}
-  />
-);
-const SkelField = () => <Skel h={40} />;
-const SkelLine = ({ w = "60%", className = "" }) => (
-  <Skel w={w} h={12} className={className} />
-);
-
-const SkeletonCreateCargo = () => (
-  <div className="space-y-6">
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <SkelLine w="30%" className="mb-2" />
-        <SkelField />
-      </div>
-      <div>
-        <SkelLine w="45%" className="mb-2" />
-        <SkelField />
-      </div>
-      <div>
-        <SkelLine w="45%" className="mb-2" />
-        <SkelField />
-      </div>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {[0, 1].map((i) => (
-        <div key={i} className="space-y-3">
-          <SkelLine w="30%" />
-          <div>
-            <SkelLine w="40%" className="mb-2" />
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <SkelField />
-              </div>
-              <div className="w-[46px]">
-                <SkelField />
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border p-3 space-y-2">
-            <SkelLine w="90%" />
-            <SkelLine w="40%" />
-          </div>
-        </div>
-      ))}
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <SkelLine w="45%" className="mb-2" />
-        <SkelField />
-      </div>
-      <div>
-        <SkelLine w="45%" className="mb-2" />
-        <SkelField />
-      </div>
-      <div>
-        <SkelLine w="30%" className="mb-2" />
-        <SkelField />
-      </div>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {[0, 1, 2, 3].map((k) => (
-        <div key={k}>
-          <SkelLine w="50%" className="mb-2" />
-          <SkelField />
-        </div>
-      ))}
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <div className="md:col-span-3">
-        <SkelLine w="30%" className="mb-2" />
-        <SkelField />
-      </div>
-      <div className="space-y-2">
-        <SkelLine w="100%" />
-        <SkelLine w="80%" />
-        <SkelLine w="90%" />
-        <SkelLine w="70%" />
-      </div>
-    </div>
-    <div className="border p-4 rounded-lg">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
-        <SkelLine w="35%" />
-        <SkelLine w="20%" />
-      </div>
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr className="text-left text-gray-600">
-              {["Slno", "Name", "Pieces", "Actions"].map((h) => (
-                <th key={h} className="px-3 py-2">
-                  <SkelLine w="60%" />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: 3 }).map((_, r) => (
-              <tr key={r} className={r % 2 ? "bg-white" : "bg-gray-50"}>
-                {Array.from({ length: 4 }).map((__, c) => (
-                  <td key={c} className="px-3 py-2">
-                    <SkelLine w={c === 1 ? "90%" : "60%"} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex justify-end mt-4">
-        <div className="w-32">
-          <SkelField />
-        </div>
-      </div>
-    </div>
-    <div className="flex items-center justify-between">
-      <div className="w-40">
-        <SkelField />
-      </div>
-      <div className="flex gap-3">
-        <div className="w-28">
-          <SkelField />
-        </div>
-        <div className="w-48">
-          <SkelField />
-        </div>
-      </div>
-    </div>
-  </div>
-);
 /* ---------- Initial Form ---------- */
 const buildInitialForm = (branchId = "") => ({
   branchId: branchId ? String(branchId) : "",
+  branchName: "",
   invoiceNo: "",
   senderId: "",
   senderAddress: "",
@@ -227,7 +108,7 @@ const CHARGE_ROWS = [
 ];
 
 /* ---------- Items Autosuggest options ---------- */
-const options = [
+const itemOptions = [
   "Dates",
   "Almonds",
   "Cashew Nuts",
@@ -277,15 +158,16 @@ const incrementInvoiceString = (last = "") => {
 export default function CreateCargo() {
   const token = useSelector((s) => s.auth?.token);
 
-  // form FIRST
-  const [form, setForm] = useState(buildInitialForm());
-  const [methods, setMethods] = useState([]);
-  const [statuses, setStatuses] = useState([]);
-  const [senders, setSenders] = useState([]);
-  const [receivers, setReceivers] = useState([]);
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [deliveryTypes, setDeliveryTypes] = useState([]);
-  const [collectRoles, setCollectRoles] = useState([]);
+  const [form, updateForm] = useImmer(buildInitialForm());
+  const [options, setOptions] = useState({
+    methods: [],
+    statuses: [],
+    senders: [],
+    receivers: [],
+    paymentMethods: [],
+    deliveryTypes: [],
+    collectRoles: [],
+  });
   const [collectedByOptions, setCollectedByOptions] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -294,9 +176,7 @@ export default function CreateCargo() {
   const [invoiceShipment, setInvoiceShipment] = useState(null);
   const [senderOpen, setSenderOpen] = useState(false);
   const [receiverOpen, setReceiverOpen] = useState(false);
-  const [boxes, setBoxes] = useState([
-    { box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] },
-  ]);
+  const [boxes, updateBoxes] = useImmer([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1 }] }]);
   const [toast, setToast] = useState({
     visible: false,
     text: "",
@@ -304,6 +184,7 @@ export default function CreateCargo() {
   });
   const toastTimer = useRef(null);
 
+  // --- Toast helpers ---
   const showToast = useCallback((text, variant = "success", duration = 3500) => {
     try {
       clearTimeout(toastTimer.current);
@@ -321,7 +202,7 @@ export default function CreateCargo() {
     setToast((t) => ({ ...t, visible: false }));
   }, []);
 
-  /* ---------- derived weights ---------- */
+  // --- Derived weights ---
   const totalWeight = useMemo(() => {
     let sum = 0;
     for (const b of boxes) {
@@ -335,7 +216,7 @@ export default function CreateCargo() {
   const num = (v) =>
     v === null || v === undefined || v === "" ? 0 : Number(String(v).replace(/,/g, "")) || 0;
 
-  const toMoney = (v) => num(v).toFixed(2);
+  const toMoney = useCallback((v) => num(v).toFixed(2), []);
 
   /* ---------- Pure derived calculator for charges ---------- */
   const CHARGE_KEYS = [
@@ -402,105 +283,104 @@ export default function CreateCargo() {
   const tokenClaims = useMemo(() => safeDecodeJwt(token), [token]);
   const tokenBranchId = tokenClaims?.branch_id ?? tokenClaims?.branchId ?? null;
 
+  // --- Effects ---
   useEffect(() => {
     if (msg.text) showToast(msg.text, msg.variant || "success");
   }, [msg.text, msg.variant, showToast]);
 
-  /* initial load */
+  useEffect(() => {
+    updateForm(draft => {
+      draft.charges.no_of_pieces = boxes.length;
+    });
+  }, [boxes.length, updateForm]);
+
+  // Initial data load
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
-      setMsg({ text: "", variant: "" });
+      setMsg({ text: '', variant: '' });
       try {
-        const [me, m, st, pm, dt, roles] = await Promise.all([
-          getProfile(),
-          getActiveShipmentMethods(),
-          getActiveShipmentStatuses(),
-          getAllPaymentMethods(),
-          getActiveDeliveryTypes(),
-          getActiveCollected(),
-        ]);
+        // Step 1: Fetch profile to get the branch ID
+        const profileRes = await getProfile();
         if (!alive) return;
-        const profile = me?.data ?? me ?? null;
+        const profile = profileRes?.data ?? profileRes ?? null;
         setUserProfile(profile);
-        setMethods(unwrapArray(m));
-        setStatuses(unwrapArray(st));
-        setPaymentMethods(unwrapArray(pm));
-        setDeliveryTypes(unwrapArray(dt));
-        setCollectRoles(Array.isArray(roles?.data) ? roles.data : []);
-        const preferredBranchId = pickBranchId(profile) ?? tokenBranchId ?? "";
-        setForm((f) => buildInitialForm(preferredBranchId));
+        const preferredBranchId = pickBranchId(profile) ?? tokenBranchId ?? '';
+        const branchName = getBranchName(profile);
 
-        const [allSenders, allReceivers] = await Promise.all([
-          getPartiesByCustomerType(1),
-          getPartiesByCustomerType(2),
+        // Step 2: Fetch all other data in parallel
+        const [
+          methodsRes,
+          statusesRes,
+          paymentMethodsRes,
+          deliveryTypesRes,
+          rolesRes,
+          sendersRes,
+          receiversRes,
+          nextInvoiceRes,
+          branchRes,
+          staffRes,
+        ] = await Promise.all([
+          getActiveShipmentMethods(), // 0
+          getActiveShipmentStatuses(), // 1
+          getAllPaymentMethods(), // 2
+          getActiveDeliveryTypes(), // 3
+          getActiveCollected(), // 4
+          getPartiesByCustomerType(1), // 5
+          getPartiesByCustomerType(2), // 6
+          preferredBranchId ? getNextInvoiceNo(preferredBranchId) : Promise.resolve(null), // 7
+          preferredBranchId ? viewBranch(preferredBranchId) : Promise.resolve(null), // 8
+          preferredBranchId ? getBranchUsers(preferredBranchId) : Promise.resolve(null), // 9
         ]);
+
         if (!alive) return;
-        setSenders(unwrapArray(allSenders));
-        setReceivers(unwrapArray(allReceivers));
+
+        const roles = Array.isArray(rolesRes?.data) ? rolesRes.data : [];
+        const staffList = unwrapArray(staffRes);
+
+        setOptions({
+          methods: unwrapArray(methodsRes),
+          statuses: unwrapArray(statusesRes),
+          paymentMethods: unwrapArray(paymentMethodsRes),
+          deliveryTypes: unwrapArray(deliveryTypesRes),
+          collectRoles: Array.isArray(rolesRes?.data) ? rolesRes.data : [],
+          senders: unwrapArray(sendersRes),
+          receivers: unwrapArray(receiversRes),
+        });
+
+        setCollectedByOptions(staffList);
+
+        const nextInvoice = nextInvoiceRes && nextInvoiceRes !== 'INV-000001' ? nextInvoiceRes : null;
+        const branch = branchRes?.branch ?? branchRes?.data?.branch ?? branchRes;
+        const constructedInvoiceNo = branch ? `${branch.branch_code || 'BR'}:${branch.start_number || '000001'}` : '';
+        const invoiceNo = nextInvoice || constructedInvoiceNo;
+
+        updateForm(draft => {
+          draft.branchId = String(preferredBranchId);
+          draft.branchName = branchName;
+          draft.invoiceNo = invoiceNo;
+
+          // Default to 'Office' role and the current user
+          const officeRole = roles.find(r => r.name === 'Office');
+          const loggedInUserId = profile?.user?.id ?? profile?.id ?? null;
+          if (officeRole && loggedInUserId) {
+            draft.collectedByRoleId = String(officeRole.id);
+            draft.collectedByRoleName = officeRole.name;
+            draft.collectedByPersonId = String(loggedInUserId);
+          }
+        });
+
+        console.log('✅ Initial data loaded.', { invoiceNo });
       } catch (e) {
         if (!alive) return;
-        setMsg({
-          text: e?.details?.message || e?.message || "Failed to load options.",
-          variant: "error",
-        });
+        setMsg({ text: e?.message || "Failed to load initial data.", variant: "error" });
       } finally {
         if (alive) setLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [token, tokenBranchId]);
-
-  
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        const profile = await getProfile();
-        const userBranchId =
-          profile?.user?.branch?.id ||
-          profile?.data?.branch?.id ||
-          null;
-
-        if (!userBranchId) return;
-
-        const branchResponse = await viewBranch(userBranchId);
-        const branch =
-          branchResponse?.branch ||
-          branchResponse?.data?.branch ||
-          branchResponse;
-
-        const branchCode = branch?.branch_code || "BR";
-        const startNumber = branch?.start_number || "000001";
-        const invoiceValue = `${branchCode}:${startNumber}`;
-
-        // ✅ use functional update to merge safely
-        if (alive) {
-          setForm((prev) => ({
-            ...prev,
-            branchId: String(userBranchId),
-            invoiceNo: invoiceValue,
-          }));
-        }
-      } catch {
-        if (alive) {
-          setForm((prev) => ({
-            ...prev,
-            invoiceNo: "BR:000001",
-          }));
-        }
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []); // ✅ run once on mount
-
 
   /* collected by */
   useEffect(() => {
@@ -523,55 +403,12 @@ export default function CreateCargo() {
     };
   }, [form.collectedByRoleName]);
 
-  useEffect(() => {
-    const bidRaw = pickBranchId(userProfile) ?? tokenBranchId ?? null;
-    const bid = bidRaw != null ? String(bidRaw) : "";
-    if (bid && String(form.branchId) !== bid)
-      setForm((f) => ({ ...f, branchId: bid }));
-  }, [userProfile, tokenBranchId, form.branchId]);
-
   const loadOfficeStaff = useCallback(async () => {
-    const branchId = form.branchId || pickBranchId(userProfile) || tokenBranchId;
-    if (!branchId) {
-      setCollectedByOptions([]);
-      setMsg({
-        text: "Your profile has no branch; cannot load office staff.",
-        variant: "error",
-      });
-      return;
-    }
+    const branchId = form.branchId || tokenBranchId;
+    if (!branchId) return;
     const res = await getBranchUsers(branchId);
     setCollectedByOptions(unwrapArray(res));
-  }, [form.branchId, userProfile, tokenBranchId]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const bidRaw = pickBranchId(userProfile) ?? tokenBranchId ?? null;
-      const bid = bidRaw != null ? String(bidRaw) : "";
-      if (!bid) return;
-
-      // Prefill next invoice number from /cargos?branch_id=...
-      try {
-        const next = await getNextInvoiceNo(bid);
-        if (!alive) return;
-
-        // ✅ if API didn’t return a valid number, fallback to branch start number
-        let invoiceNo = next && String(next).trim()
-          ? next
-          : `${userProfile?.branch?.branch_code || "RD"}:${userProfile?.branch?.start_number || "000001"}`;
-
-        setForm((f) => ({ ...f, branchId: bid, invoiceNo }));
-      } catch {
-        if (!alive) return;
-
-        // ✅ final fallback — if both API and branch data fail
-        const fallbackNo = `INV-${userProfile?.branch?.start_number || "000001"}`;
-        setForm((f) => ({ ...f, branchId: bid, invoiceNo: fallbackNo }));
-      }
-    })();
-    return () => { alive = false; };
-  }, [userProfile, tokenBranchId]);
+  }, [form.branchId, tokenBranchId]);
 
   useEffect(() => {
     let alive = true;
@@ -602,33 +439,41 @@ export default function CreateCargo() {
 
   const onRoleChange = useCallback(
     async (e) => {
-      const roleId = e.target.value;
-      const role = collectRoles.find((r) => String(r.id) === String(roleId));
+      const roleId = e.target.value; // This is a string
+      const role = options.collectRoles.find((r) => String(r.id) === roleId);
       const roleName = role?.name || "";
-      setForm((f) => ({
-        ...f,
-        collectedByRoleId: roleId,
-        collectedByRoleName: roleName,
-        collectedByPersonId: "",
-      }));
+      updateForm(draft => {
+        draft.collectedByRoleId = roleId;
+        draft.collectedByRoleName = roleName;
+        draft.collectedByPersonId = '';
+      });
+
       try {
         if (roleName === "Driver") {
           const res = await getActiveDrivers();
           setCollectedByOptions(unwrapArray(res));
         } else if (roleName === "Office") {
-          await loadOfficeStaff();
+          const staffRes = await getBranchUsers(form.branchId || tokenBranchId);
+          const staffList = unwrapArray(staffRes);
+          setCollectedByOptions(staffList);
+
+          // Auto-select the current user if they are in the list
+          const loggedInUserId = userProfile?.user?.id ?? userProfile?.id ?? null;
+          const userInStaffList = staffList.find(staff => String(staff.id) === String(loggedInUserId));
+          if (userInStaffList) {
+            updateForm(draft => {
+              draft.collectedByPersonId = String(loggedInUserId);
+            });
+          }
         } else {
           setCollectedByOptions([]);
         }
       } catch {
         setCollectedByOptions([]);
-        setMsg({
-          text: "Failed to load list for the selected role.",
-          variant: "error",
-        });
+        setMsg({ text: "Failed to load list for the selected role.", variant: "error" });
       }
     },
-    [collectRoles, loadOfficeStaff]
+    [options.collectRoles, updateForm, form.branchId, tokenBranchId, userProfile]
   );
 
   /* ---------- BOX HELPERS ---------- */
@@ -636,107 +481,95 @@ export default function CreateCargo() {
     const nums = boxes
       .map((b) => Number(b.box_number))
       .filter((n) => Number.isFinite(n));
-    return nums.length ? String(Math.max(...nums) + 1) : String(boxes.length + 1);
+    return nums.length ? String(Math.max(...nums) + 1) : String(boxes.length + 1)
   }, [boxes]);
 
   const addBox = useCallback(() => {
     const nextNo = getNextBoxNumber();
-    setBoxes((prev) => [
-      ...prev,
-      { box_number: nextNo, box_weight: 0, items: [{ name: "", pieces: 1 }] },
-    ]);
-  }, [getNextBoxNumber]);
+    updateBoxes(draft => {
+      draft.push({ box_number: nextNo, box_weight: 0, items: [{ name: '', pieces: 1 }] });
+    });
+  }, [getNextBoxNumber, updateBoxes]);
 
   const removeBox = useCallback((boxIndex) => {
-    setBoxes((prev) =>
-      prev.length <= 1 ? prev : prev.filter((_, i) => i !== boxIndex)
-    );
-  }, []);
+    if (boxes.length <= 1) return;
+    updateBoxes(draft => {
+      draft.splice(boxIndex, 1);
+    });
+  }, [boxes.length, updateBoxes]);
 
   const setBoxWeight = useCallback((boxIndex, val) => {
-    setBoxes((prev) => {
-      const next = structuredClone(prev);
-      const b = next[boxIndex];
-      if (!b) return prev;
+    updateBoxes(draft => {
+      const box = draft[boxIndex];
+      if (!box) return;
       const n = Number.parseFloat(val);
-      b.box_weight = Number.isFinite(n) ? Math.max(0, n) : 0;
-      return next;
+      box.box_weight = Number.isFinite(n) ? Math.max(0, n) : 0;
     });
-  }, []);
+  }, [updateBoxes]);
 
   const addItemToBox = useCallback((boxIndex) => {
-    setBoxes((prev) => {
-      const next = structuredClone(prev);
-      const b = next[boxIndex];
-      if (!b) return prev;
-      b.items.push({ name: "", pieces: 1 });
-      return next;
+    updateBoxes(draft => {
+      draft[boxIndex]?.items.push({ name: '', pieces: 1 });
     });
-  }, []);
+  }, [updateBoxes]);
 
   const removeItemFromBox = useCallback(
     (boxIndex, itemIndex) => {
-      setBoxes((prev) => {
-        const next = structuredClone(prev);
-        const b = next[boxIndex];
-        if (!b || !b.items) return prev;
-        if (b.items.length <= 1) {
-          showToast("At least one item per box is required", "error");
-          return prev;
-        }
-        b.items.splice(itemIndex, 1);
-        return next;
-      });
+      if (boxes[boxIndex]?.items.length <= 1) {
+        showToast("At least one item per box is required", "error");
+        return;
+      }
+      updateBoxes(draft => {
+        draft[boxIndex]?.items.splice(itemIndex, 1);
+      })
     },
-    [showToast]
+    [boxes, showToast, updateBoxes]
   );
 
   const setBoxItem = useCallback((boxIdx, itemIdx, key, val) => {
-    setBoxes((prev) => {
-      const next = structuredClone(prev);
-      const it = next?.[boxIdx]?.items?.[itemIdx];
-      if (!it) return prev;
+    updateBoxes(draft => {
+      const it = draft?.[boxIdx]?.items?.[itemIdx];
+      if (!it) return;
       if (key === "pieces") {
         const n = Number.parseInt(val || 0, 10);
         it.pieces = Number.isNaN(n) ? 0 : Math.max(0, n);
       } else if (key === "name") {
         it.name = val;
       }
-      return next;
     });
-  }, []);
+  }, [updateBoxes]);
 
   /* selected parties + sync to form */
   const selectedSender = useMemo(
-    () => senders.find((s) => String(idOf(s)) === String(form.senderId)) || null,
-    [senders, form.senderId]
+    () => options.senders.find((s) => String(idOf(s)) === String(form.senderId)) || null,
+    [options.senders, form.senderId]
   );
   const selectedReceiver = useMemo(
-    () => receivers.find((r) => String(idOf(r)) === String(form.receiverId)) || null,
-    [receivers, form.receiverId]
+    () => options.receivers.find((r) => String(idOf(r)) === String(form.receiverId)) || null,
+    [options.receivers, form.receiverId]
   );
 
   useEffect(() => {
-    setForm((f) => ({
-      ...f,
-      senderAddress: addressFromParty(selectedSender) || "",
-      senderPhone: phoneFromParty(selectedSender) || "",
-    }));
-  }, [selectedSender]);
+    updateForm(draft => {
+      draft.senderAddress = addressFromParty(selectedSender) || '';
+      draft.senderPhone = phoneFromParty(selectedSender) || '';
+    });
+  }, [selectedSender, updateForm]);
 
   useEffect(() => {
-    setForm((f) => ({
-      ...f,
-      receiverAddress: addressFromParty(selectedReceiver) || "",
-      receiverPhone: phoneFromParty(selectedReceiver) || "",
-    }));
-  }, [selectedReceiver]);
+    updateForm(draft => {
+      draft.receiverAddress = addressFromParty(selectedReceiver) || '';
+      draft.receiverPhone = phoneFromParty(selectedReceiver) || '';
+    });
+  }, [selectedReceiver, updateForm]);
 
   // Unified handleChange – no extra recompute here (derived handles it)
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
+    updateForm(draft => {
+      draft[name] = value;
+    });
+  }, [updateForm]);
 
   /* validation */
   const validateBeforeSubmit = useCallback(() => {
@@ -762,38 +595,25 @@ export default function CreateCargo() {
   }, [form, boxes]);
 
 const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
-  setForm((prev) => ({
-    ...buildInitialForm(branchId),
-    branchId: String(branchId || ""),
-    invoiceNo:
-      nextInvoiceNo ||
-      prev.invoiceNo || // ✅ keep already fetched invoice if it exists
-      "INV-000001",
-  }));
+  updateForm(draft => {
+    const newForm = buildInitialForm(branchId);
+    newForm.invoiceNo = nextInvoiceNo || 'BR:000001';
+    newForm.branchId = String(branchId);
+    newForm.branchName = draft.branchName; // Preserve branch name
+    return newForm;
+  });
   setCollectedByOptions([]);
-  setBoxes([
-    { box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] },
-  ]);
-}, []);
-
+  updateBoxes([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1 }] }]);
+}, [updateForm, updateBoxes]);
 
   const onResetClick = useCallback(() => {
-    const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
-    setForm(buildInitialForm(nextBranchId));
+    const nextBranchId = form.branchId || tokenBranchId || "";
+    updateForm(buildInitialForm(nextBranchId));
     setCollectedByOptions([]);
-    setBoxes([{ box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] }]);
+    updateBoxes([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1 }] }]);
     setInvoiceShipment(null);
     showToast("Form reset.", "success");
-  }, [userProfile, tokenBranchId, showToast]);
-
-  const resetFormAfterSubmit = useCallback(() => {
-    const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? "";
-    setForm(buildInitialForm(nextBranchId));
-    setCollectedByOptions([]);
-    setBoxes([
-      { box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1 }] },
-    ]);
-  }, [userProfile, tokenBranchId]);
+  }, [form.branchId, tokenBranchId, showToast, updateForm, updateBoxes]);
 
   const submit = useCallback(
     async (e) => {
@@ -964,14 +784,12 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
 
         // Compute NEXT and show it instantly
         const nextNo = incrementInvoiceString(savedNo);
-        const nextBranchId = pickBranchId(userProfile) ?? tokenBranchId ?? form.branchId ?? "";
+        const nextBranchId = form.branchId || tokenBranchId || "";
         softResetForNext(nextBranchId, nextNo);
 
         showToast("Cargo created. Invoice ready.", "success");
       } catch (e2) {
-        const details =
-          e2?.response?.data?.errors ??
-          e2?.response?.data ??
+        const details = e2?.response?.data?.errors ?? e2?.response?.data ??
           e2?.details ??
           e2?.message;
         console.error("Create cargo failed:", details);
@@ -994,11 +812,9 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
       vatCost,
       totalWeight,
       validateBeforeSubmit,
-      showToast,
       derived.totalAmount,
       derived.rows,
       vatPercentage,
-      userProfile,
       tokenBranchId,
       softResetForNext,
     ]
@@ -1020,25 +836,21 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
     };
   }, [invoiceOpen, invoiceShipment?.booking_no]);
 
-  const branchNameFromProfile =
-    userProfile?.user?.branch?.name ||
-    userProfile?.branch?.name ||
-    userProfile?.user?.branch_name ||
-    userProfile?.branch_name ||
-    "";
-
   const reloadParties = useCallback(async () => {
     try {
       const [allSenders, allReceivers] = await Promise.all([
         getPartiesByCustomerType(1),
         getPartiesByCustomerType(2),
       ]);
-      setSenders(unwrapArray(allSenders));
-      setReceivers(unwrapArray(allReceivers));
+      setOptions(prev => ({
+        ...prev,
+        senders: unwrapArray(allSenders),
+        receivers: unwrapArray(allReceivers),
+      }));
     } catch {
       showToast("Failed to refresh parties", "error");
     }
-  }, [showToast]);
+  }, [showToast, setOptions]);
 
   const onPartyCreated = useCallback(
     async (created, role) => {
@@ -1049,12 +861,12 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
         created?.party?.id ??
         created?.data?.party?.id ??
         null;
-      if (role === "sender" && newId)
-        setForm((f) => ({ ...f, senderId: String(newId) }));
-      if (role === "receiver" && newId)
-        setForm((f) => ({ ...f, receiverId: String(newId) }));
+      updateForm(draft => {
+        if (role === 'sender' && newId) draft.senderId = String(newId);
+        if (role === 'receiver' && newId) draft.receiverId = String(newId);
+      });
     },
-    [reloadParties]
+    [reloadParties, updateForm]
   );
 
   /* ---------------------- UI ---------------------- */
@@ -1090,690 +902,62 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
 
       <div className="min-h-screen bg-gray-50 flex items-start justify-center p-6">
         <div className="w-full max-w-6xl bg-white rounded-2xl p-8">
-          <div className="add-cargo-header flex justify-between items-center">
-            <h2 className="header-cargo-heading flex items-center gap-2">
-              <span className="header-cargo-icon">
-                <BsFillBoxSeamFill />
-              </span>
-              Create Cargo
-            </h2>
-            <nav aria-label="Breadcrumb">
-              <ol className="flex items-center gap-2 text-sm">
-                <li>
-                  <Link
-                    to="/dashboard"
-                    className="text-gray-500 hover:text-gray-700 hover:underline"
-                  >
-                    Home
-                  </Link>
-                </li>
-                <li className="text-gray-400">/</li>
-                <li>
-                  <Link
-                    to="/cargo/allcargolist"
-                    className="text-gray-500 hover:text-gray-700 hover:underline"
-                  >
-                    Cargos
-                  </Link>
-                </li>
-                <li className="text-gray-400">/</li>
-                <li aria-current="page" className="text-gray-800 font-medium">
-                  Add Cargo
-                </li>
-              </ol>
-            </nav>
-          </div>
+          <PageHeader title="Create Cargo" />
 
           {loading ? (
             <SkeletonCreateCargo />
           ) : (
-            <form onSubmit={submit} onChange={handleChange} className="space-y-6">
-              {/* Collection Details */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 items-end py-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold tracking-wide text-slate-700">
-                      Collection Details
-                    </h3>
-                  </div>
+            <form onSubmit={submit} className="space-y-6">
+              <CollectionDetails
+                form={form}
+                onRoleChange={onRoleChange}
+                updateForm={updateForm}
+                collectedByOptions={collectedByOptions}
+                collectRoles={options.collectRoles}
+              />
 
-                  <div className="flex gap-5 w-full">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs uppercase tracking-wide text-slate-500">Invoice No</span>
-                      <span className="inline-flex items-center gap-2 rounded-md bg-gray-50 px-4 py-1.5 text-base font-semibold text-gray-900 tracking-wide border border-gray-200 shadow-sm">
-                        {form.invoiceNo || "BR:000001"}
-                        <button
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(form.invoiceNo || "")}
-                          className="ml-2 rounded-md bg-white border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100 transition"
-                          title="Copy invoice number"
-                        >
-                          Copy
-                        </button>
-                      </span>
-                    </div>
+              <PartyInfo
+                form={form}
+                updateForm={updateForm}
+                options={options}
+                loading={loading}
+                onSenderAdd={() => setSenderOpen(true)}
+                onReceiverAdd={() => setReceiverOpen(true)}
+                selectedSender={selectedSender}
+                selectedReceiver={selectedReceiver}
+              />
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs uppercase tracking-wide text-slate-500">Branch</span>
-                      <span className="inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 shadow-sm border border-slate-200">
-                        {branchNameFromProfile || "--"}
-                      </span>
-                    </div>
+              <ShipmentDetails
+                form={form}
+                updateForm={updateForm}
+                options={options}
+                loading={loading}
+              />
 
-                  </div>
+              <ScheduleDetails form={form} updateForm={updateForm} />
 
-                </div>
+              <BoxesSection
+                boxes={boxes}
+                addBox={addBox}
+                removeBox={removeBox}
+                setBoxWeight={setBoxWeight}
+                addItemToBox={addItemToBox}
+                removeItemFromBox={removeItemFromBox}
+                setBoxItem={setBoxItem}
+                itemOptions={itemOptions}
+              />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end py-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Collected By (Role)
-                    </label>
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      value={form.collectedByRoleId}
-                      onChange={onRoleChange}
-                    >
-                      <option value="">Select role</option>
-                      {collectRoles.map((r) => (
-                        <option key={r.id} value={String(r.id)}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Collected By (Person)
-                    </label>
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      value={form.collectedByPersonId}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          collectedByPersonId: e.target.value,
-                        }))
-                      }
-                      disabled={!form.collectedByRoleName}
-                    >
-                      <option value="">Select person</option>
-                      {collectedByOptions.map((opt, i) => {
-                        const valueId =
-                          form.collectedByRoleName === "Driver"
-                            ? opt?.id ?? opt?.driver_id ?? null
-                            : opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null;
-                        if (!valueId) return null;
-                        const label =
-                          form.collectedByRoleName === "Driver"
-                            ? prettyDriver(opt)
-                            : labelOf(opt);
-                        return (
-                          <option
-                            key={`${valueId}-${i}`}
-                            value={String(valueId)}
-                          >
-                            {label}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Parties */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold tracking-wide text-slate-700">
-                      Sender Info
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setSenderOpen(true);
-                      }}
-                      className="party-add-btn rounded-lg border px-3 py-1.5"
-                    >
-                      + Add
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
-                        Sender/Customer
-                      </label>
-                      <select
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        value={form.senderId}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, senderId: e.target.value }))
-                        }
-                        disabled={loading}
-                      >
-                        <option value="">Select a sender</option>
-                        {senders.map((s) => (
-                          <option key={String(s.id)} value={String(s.id)}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-[88px_1fr] gap-2 text-sm">
-                      <span className="text-slate-500">Address</span>
-                      <span className="rounded-lg bg-slate-50 px-3 py-2">
-                        {addressFromParty(selectedSender) ||
-                          form.senderAddress ||
-                          "—"}
-                      </span>
-                      <span className="text-slate-500">Phone</span>
-                      <span className="rounded-lg bg-slate-50 px-3 py-2">
-                        {phoneFromParty(selectedSender) ||
-                          form.senderPhone ||
-                          "—"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold tracking-wide text-slate-700">
-                      Receiver Info
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setReceiverOpen(true);
-                      }}
-                      className="party-add-btn rounded-lg border px-3 py-1.5 "
-                    >
-                      + Add
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
-                        Receiver/Customer
-                      </label>
-                      <select
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        value={form.receiverId}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, receiverId: e.target.value }))
-                        }
-                        disabled={loading}
-                      >
-                        <option value="">Select a receiver</option>
-                        {receivers.map((r) => (
-                          <option key={String(r.id)} value={String(r.id)}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-[88px_1fr] gap-2 text-sm">
-                      <span className="text-slate-500">Address</span>
-                      <span className="rounded-lg bg-slate-50 px-3 py-2">
-                        {addressFromParty(selectedReceiver) ||
-                          form.receiverAddress ||
-                          "—"}
-                      </span>
-                      <span className="text-slate-500">Phone</span>
-                      <span className="rounded-lg bg-slate-50 px-3 py-2">
-                        {phoneFromParty(selectedReceiver) ||
-                          form.receiverPhone ||
-                          "—"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Shipment & Payment */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold tracking-wide text-slate-700">
-                    Shipment & Payment
-                  </h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Shipping Method
-                    </label>
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      value={form.shippingMethodId}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          shippingMethodId: e.target.value,
-                        }))
-                      }
-                      disabled={loading}
-                    >
-                      <option value="">Select</option>
-                      {methods.map((m) => (
-                        <option key={String(idOf(m))} value={String(idOf(m))}>
-                          {labelOf(m)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Payment Method
-                    </label>
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      value={form.paymentMethodId}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          paymentMethodId: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select Payment Method</option>
-                      {paymentMethods.map((pm) => (
-                        <option key={String(pm.id)} value={String(pm.id)}>
-                          {pm.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Delivery Type
-                    </label>
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      value={form.deliveryTypeId}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, deliveryTypeId: e.target.value }))
-                      }
-                    >
-                      <option value="">Select</option>
-                      {deliveryTypes.map((t) => (
-                        <option key={String(t.id)} value={String(t.id)}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Schedule & Tracking */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold tracking-wide text-slate-700">
-                    Schedule & Tracking
-                  </h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Date
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      value={form.date}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, date: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Time
-                    </label>
-                    <input
-                      type="time"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      value={form.time}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, time: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      LRL Tracking Code
-                    </label>
-                    <input
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      value={form.lrlTrackingCode}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          lrlTrackingCode: e.target.value,
-                        }))
-                      }
-                      placeholder="LRL-XXXX (optional)"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Boxes & Items */}
-              <div className="space-y-4">
-                {boxes.map((box, boxIndex) => (
-                  <div
-                    key={boxIndex}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-                  >
-                    <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div className="flex flex-wrap items-center gap-4">
-                        <div className="text-sm font-semibold text-slate-800">
-                          Box No:{" "}
-                          <span className="ml-2 inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 px-2 py-0.5">
-                            {box.box_number}
-                          </span>
-                        </div>
-                        <label className="flex items-center gap-2 text-sm">
-                          <span className="text-slate-600">Box Weight (kg)</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.001"
-                            title="Enter after packing"
-                            className={`w-32 rounded-lg border px-2 py-1 text-right ${Number(box.box_weight || 0) <= 0
-                              ? "border-rose-300"
-                              : "border-slate-300"
-                              }`}
-                            value={box.box_weight ?? 0}
-                            onChange={(e) => setBoxWeight(boxIndex, e.target.value)}
-                            placeholder="0.000"
-                          />
-                        </label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => removeBox(boxIndex)}
-                          disabled={boxes.length <= 1}
-                          className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-white ${boxes.length <= 1
-                            ? "bg-slate-300 cursor-not-allowed"
-                            : "bg-rose-600 hover:bg-rose-700"
-                            }`}
-                          title={
-                            boxes.length <= 1
-                              ? "At least one box is required"
-                              : "Remove this box"
-                          }
-                        >
-                          Remove Box
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
-                      <table className="min-w-full text-sm">
-                        <thead className="bg-slate-50 text-slate-600">
-                          <tr className="text-left">
-                            <th className="px-3 py-2 w-12 text-center">Sl.</th>
-                            <th className="px-3 py-2">Item</th>
-                            <th className="px-3 py-2 w-28 text-right">Pieces</th>
-                            <th className="px-3 py-2 w-24 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {box.items.map((it, itemIndex) => (
-                            <tr
-                              key={itemIndex}
-                              className={
-                                itemIndex % 2 ? "bg-white" : "bg-slate-50/50"
-                              }
-                            >
-                              <td className="px-3 py-2 text-center text-slate-500">
-                                {itemIndex + 1}
-                              </td>
-                              <td className="px-3 py-2">
-                                <ItemAutosuggest
-                                  value={it.name}
-                                  onChange={(v) =>
-                                    setBoxItem(boxIndex, itemIndex, "name", v)
-                                  }
-                                  options={options}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-                                  placeholder="0"
-                                  value={it.pieces}
-                                  onChange={(e) =>
-                                    setBoxItem(
-                                      boxIndex,
-                                      itemIndex,
-                                      "pieces",
-                                      Number.parseInt(e.target.value || 0, 10) ||
-                                      0
-                                    )
-                                  }
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    removeItemFromBox(boxIndex, itemIndex)
-                                  }
-                                  className="inline-flex rounded-lg bg-rose-500 px-2 py-1 text-white hover:bg-rose-600"
-                                >
-                                  Delete
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => addItemToBox(boxIndex)}
-                        className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
-                      >
-                        Add Item
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Remarks & Charges + Summary */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">
-                    Remarks & Charges
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
-                        Special remarks
-                      </label>
-                      <input
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        value={form.specialRemarks}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, specialRemarks: e.target.value }))
-                        }
-                        placeholder="(optional) Handle with care, fragile goods."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
-                        VAT %
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-                        placeholder="0.00"
-                        value={form.vatPercentage}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            vatPercentage: Number.parseFloat(e.target.value || 0) || 0,
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  {/* Charges Matrix */}
-                  <div className="mt-6 rounded-xl border border-slate-200 overflow-hidden">
-                    <div className="bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 grid grid-cols-[200px_120px_120px_120px] gap-3">
-                      <div>Charges</div>
-                      <div>Quantity</div>
-                      <div>Unit Rate</div>
-                      <div>Amount</div>
-                    </div>
-                    <div className="p-4">
-                      {CHARGE_ROWS.map(([key, label]) => {
-                        const row = form.charges[key] || { qty: 0, rate: 0 };
-                        const qtyValue = key === "total_weight" ? totalWeight : row.qty;
-                        const amountValue = derived.rows[key]?.amount ?? 0;
-                        return (
-
-                          <div
-                            key={key}
-                            className="flex flex-wrap md:flex-nowrap items-center gap-3 mb-2"
-                          >
-                            {/* Label */}
-                            <div className="text-sm text-slate-700 w-full ">
-                              {label}
-                            </div>
-
-                            {/* Qty */}
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                              value={qtyValue}
-                              onChange={(e) =>
-                                setForm((f) => ({
-                                  ...f,
-                                  charges: {
-                                    ...f.charges,
-                                    [key]: {
-                                      ...(f.charges[key] || { qty: 0, rate: 0 }),
-                                      qty: key === "total_weight" ? totalWeight : Number(e.target.value || 0),
-                                    },
-                                  },
-                                }))
-                              }
-                              readOnly={key === "total_weight"}
-                            />
-
-                            {/* Unit Rate */}
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                              value={row.rate}
-                              onChange={(e) =>
-                                setForm((f) => ({
-                                  ...f,
-                                  charges: {
-                                    ...f.charges,
-                                    [key]: {
-                                      ...(f.charges[key] || { qty: 0, rate: 0 }),
-                                      rate: Number(e.target.value || 0),
-                                    },
-                                  },
-                                }))
-                              }
-                            />
-
-                            {/* Amount */}
-                            <input
-                              readOnly
-                              className="w-full md:basis-[120px] md:shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right"
-                              value={amountValue.toFixed(2)}
-                            />
-                          </div>
-
-                        );
-                      })}
-
-                      <div className="mt-4 grid grid-cols-[200px_1fr] items-center gap-3">
-                        <div className="text-sm text-slate-700">No. of Pcs</div>
-                        <input
-                          type="number"
-                          min="0"
-                          className="rounded-lg border border-slate-300 px-3 py-2"
-                          value={form.charges.no_of_pieces}
-                          onChange={(e) =>
-                            setForm((f) => ({
-                              ...f,
-                              charges: {
-                                ...f.charges,
-                                no_of_pieces: Number(e.target.value || 0),
-                              },
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="mt-3 grid grid-cols-[200px_1fr] items-center gap-3">
-                        <div className="text-sm font-medium text-slate-800">
-                          Total Amount
-                        </div>
-                        <input
-                          readOnly
-                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right"
-                          value={derived.totalAmount.toFixed(2)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Summary */}
-                <div className="lg:col-span-1">
-                  <div className="lg:sticky lg:top-20 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h3 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">
-                      Summary
-                    </h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between text-slate-700">
-                        <span>Subtotal</span>
-                        <b>{subtotal.toFixed(2)}</b>
-                      </div>
-                      <div className="flex justify-between text-slate-700">
-                        <span>Bill Charges</span>
-                        <b>{toMoney(billCharges)}</b>
-                      </div>
-                      <div className="flex justify-between text-slate-700">
-                        <span>VAT</span>
-                        <b>{vatCost.toFixed(2)}</b>
-                      </div>
-                      <div className="mt-1 flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
-                        <span>Total (Net)</span>
-                        <span>{netTotal.toFixed(2)}</span>
-                      </div>
-                      <div className="mt-2 flex justify-between text-xs text-slate-600">
-                        <span>Total Weight</span>
-                        <span>{totalWeight.toFixed(3)} kg</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <ChargesAndSummary
+                form={form}
+                updateForm={updateForm}
+                totalWeight={totalWeight}
+                derived={derived}
+                subtotal={subtotal}
+                billCharges={billCharges}
+                vatCost={vatCost}
+                netTotal={netTotal}
+                toMoney={toMoney}
+              />
 
               {/* Add Box + Actions */}
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
