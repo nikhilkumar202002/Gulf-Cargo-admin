@@ -211,6 +211,8 @@ function normalizeCargoToInvoice(raw) {
     total_cost: cargo.total_cost ?? cargo.net_total ?? cargo.total ?? 0,
     bill_charges: cargo.bill_charges ?? cargo.bill ?? 0,
     vat_cost: cargo.vat_cost ?? cargo.tax ?? cargo.vat ?? 0,
+    // Look at the root object first, then the nested `cargo` object.
+    no_of_pieces: raw.no_of_pieces ?? cargo.no_of_pieces ?? cargo.charges?.no_of_pieces ?? (Array.isArray(cargo.boxes) ? cargo.boxes.length : 0),
     net_total: cargo.net_total ?? cargo.total_cost ?? cargo.total ?? 0,
     total_weight: cargo.total_weight ?? cargo.weight ?? cargo.gross_weight ?? 0,
 

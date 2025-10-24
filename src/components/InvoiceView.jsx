@@ -23,7 +23,10 @@ const fmtMoney = (n, currency = DEFAULT_CURRENCY) => {
 };
 
 const s = (v, d = "—") => (v === null || v === undefined || String(v).trim() === "" ? d : v);
-const pickPhoneFromBranch = (b) => s(b?.branch_contact_number || b?.branch_alternative_number, "—");
+const pickPhoneFromBranch = (b) => {
+  if (!b) return "—";
+  return [b.branch_contact_number, b.branch_alternative_number].filter(Boolean).join(" / ");
+};
 
 // Safe numeric picker from multiple paths (no "—" fallback)
 const pickNum = (obj, paths) => {
@@ -216,22 +219,10 @@ const getLoggedInUser = () => {
 
 /** Try to read pieces from common fields; else sum item qty */
 const computePieces = (sh) => {
-  const direct = pick(sh, [
-    "no_of_pieces", "total_pieces", "pieces", "piece_count",
-    "charges.no_of_pieces", "summary.total_pieces"
-  ], null);
-  let n = Number(String(direct ?? "").replace(/,/g, ""));
-  if (Number.isFinite(n) && n > 0) return n;
-
-  // sum from items
-  const items = Array.isArray(sh?.items) ? sh.items : [];
-  let sum = 0;
-  for (const it of items) {
-    const qty = it?.piece_no ?? it?.qty ?? it?.quantity ?? it?.pieces ?? it?.count;
-    const q = Number(String(qty ?? "").replace(/,/g, ""));
-    if (Number.isFinite(q)) sum += q;
-  }
-  return sum || 0;
+  if (!sh) return 0;
+  // This now correctly reads the box count passed directly from the CreateCargo component.
+  const pieces = pick(sh, ["no_of_pieces"], 0);
+  return Number(pieces) || 0;
 };
 
 /** Pick a reasonable shipment date (booking/shipment/created) */
@@ -241,8 +232,7 @@ const pickShipmentDate = (sh) => {
     sh?.created_at, sh?.createdAt, sh?.date,
   ].filter(Boolean);
   const raw = candidates[0];
-  if (!raw) return "";
-  const d = new Date(raw);
+  const d = raw ? new Date(raw) : new Date(); // Default to today's date
   if (isNaN(d.getTime())) return String(raw);
   return d.toLocaleDateString("en-GB"); // DD/MM/YYYY
 };
@@ -534,13 +524,17 @@ const docId = isSender
   const getPhone = (p, side, sh, pickFn) =>
     p?.phones ||
     pickFn?.(sh?.[side], ["contact_number", "whatsapp_number"], "") ||
-    pickFn?.(
-      sh,
-      side === "sender"
-        ? ["sender_phone", "shipper_phone", "sender_mobile"]
-        : ["receiver_phone", "consignee_phone", "receiver_mobile"],
-      ""
-    );
+    [
+      pickFn?.(
+        sh,
+        side === "sender"
+          ? ["sender_phone", "shipper_phone", "sender_mobile"]
+          : ["receiver_phone", "consignee_phone", "receiver_mobile"],
+        ""
+      ),
+      pickFn?.(sh, side === "sender" ? ["sender_whatsapp_number"] : ["receiver_whatsapp_number"], ""),
+    ]
+      .filter(Boolean).join(" / ");
 
   const getPincode = (p, side, sh, pickFn) =>
     p?.pincode ||
@@ -641,7 +635,7 @@ const docId = isSender
                 <img
                   src={branch?.logo_url || InvoiceLogo}
                   alt={branch?.branch_name || "Gulf Cargo"}
-                  className="h-16 object-contain"
+                  className="h-12 object-contain"
                 />
                 {/* <div className="header-invoice-address mt-1 text-slate-700">
                   BRANCH: {branch?.branch_name ||
@@ -656,9 +650,9 @@ const docId = isSender
               {/* MIDDLE: QR */}
               <div className="invoice-qrcode flex items-center justify-center">
                 <img
-                  src={buildQrUrl(trackUrl, 160)}
+                  src={buildQrUrl(trackUrl, 120)}
                   alt="Invoice QR (Track this package)"
-                  className="h-36 w-36 rounded bg-white p-1 ring-1 ring-slate-200"
+                  className="h-28 w-28 rounded bg-white p-1 ring-1 ring-slate-200"
                 />
               </div>
 
@@ -764,7 +758,7 @@ const docId = isSender
       <div className="flex items-start">
         <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Tel</div>
         <div className="mx-1">:</div>
-        <div className="invoice-parties-text">{senderParty?.tel || getPhone(senderParty, "sender", shipment, pick) || "—"}</div>
+        <div className="invoice-parties-text">{getPhone(senderParty, "sender", shipment, pick) || "—"}</div>
       </div>
 
       <div className="flex items-start">
@@ -841,7 +835,7 @@ const docId = isSender
       <div className="flex items-start">
         <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Tel</div>
         <div className="mx-1">:</div>
-        <div className="invoice-parties-text">{receiverParty?.tel || getPhone(receiverParty, "receiver", shipment, pick) || "—"}</div>
+        <div className="invoice-parties-text">{getPhone(receiverParty, "receiver", shipment, pick) || "—"}</div>
       </div>
     </div>
   </div>

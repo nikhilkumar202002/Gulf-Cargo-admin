@@ -687,7 +687,7 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
         return;
       }
 
-      const boxWeights = boxes
+      const boxWeights = [...boxes]
         .sort((a, b) => Number(a.box_number ?? 0) - Number(b.box_number ?? 0))
         .map((box) => {
           const w = Number(box.box_weight ?? box.weight ?? 0);
@@ -761,8 +761,14 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
         // ✅ One API call only
         const res = await createCargo(payload);
 
-        // Normalize for invoice modal
-        const normalized = normalizeCargoToInvoice(res);
+        // After saving, use the *sent payload* as the source of truth for the invoice,
+        // merging in any new data from the response (like a final booking_no).
+        const invoiceData = {
+          ...payload, // Start with the data we just saved
+          ...res,     // Override with anything new from the server response
+        };
+        const normalized = normalizeCargoToInvoice(invoiceData);
+
         if ((!normalized.booking_no || String(normalized.booking_no).trim() === "") && normalized.boxes) {
           const keys = Object.keys(normalized.boxes).filter((k) => String(k).trim() !== "");
           if (keys.length) {
@@ -812,11 +818,17 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
       vatCost,
       totalWeight,
       validateBeforeSubmit,
-      derived.totalAmount,
-      derived.rows,
-      vatPercentage,
       tokenBranchId,
       softResetForNext,
+      showToast,
+      setMsg,
+      setLoading,
+      setInvoiceShipment,
+      setInvoiceOpen,
+      // Add derived values to ensure the payload is always fresh
+      derived.totalAmount,
+      derived.rows,
+      vatPercentage
     ]
   );
 

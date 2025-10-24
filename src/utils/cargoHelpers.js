@@ -85,8 +85,14 @@ export const coalesce = (...vals) => {
   return "";
 };
 
-export const phoneFromParty = (p) =>
-  p ? coalesce(p.contact_number, p.whatsapp_number, p.phone, p.mobile) : "";
+export const phoneFromParty = (p) => {
+  if (!p) return "";
+  const phoneCode = coalesce(p.phone_code, p.country_code);
+  const mainNumber = coalesce(p.contact_number, p.phone, p.mobile);
+  const contact = phoneCode && mainNumber ? `${phoneCode} ${mainNumber}` : mainNumber;
+  const whatsapp = coalesce(p.whatsapp_number, p.whatsapp);
+  return [contact, whatsapp].filter((v, i, a) => v && a.indexOf(v) === i).join(" / ");
+};
 
 export const addressFromParty = (p) => {
   if (!p) return "";
