@@ -271,7 +271,7 @@ export default function CreateCargo() {
       totalAmount: Number(totalAmount.toFixed(2)),
     };
   }, [form?.charges, totalWeight]);
-
+  
   // Values that depend on `derived` (no early access issues)
   const subtotal = derived.subtotal;
   const billCharges = derived.billCharges;
@@ -595,16 +595,27 @@ export default function CreateCargo() {
   }, [form, boxes]);
 
 const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
+  const roles = options.collectRoles;
+  const profile = userProfile;
+
   updateForm(draft => {
     const newForm = buildInitialForm(branchId);
     newForm.invoiceNo = nextInvoiceNo || 'BR:000001';
     newForm.branchId = String(branchId);
     newForm.branchName = draft.branchName; // Preserve branch name
+
+    // Restore default 'Collected By' fields
+    const officeRole = roles.find(r => r.name === 'Office');
+    const loggedInUserId = profile?.user?.id ?? profile?.id ?? null;
+    if (officeRole && loggedInUserId) {
+      newForm.collectedByRoleId = String(officeRole.id);
+      newForm.collectedByRoleName = officeRole.name;
+      newForm.collectedByPersonId = String(loggedInUserId);
+    }
     return newForm;
   });
-  setCollectedByOptions([]);
   updateBoxes([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1 }] }]);
-}, [updateForm, updateBoxes]);
+}, [updateForm, updateBoxes, options.collectRoles, userProfile]);
 
   const onResetClick = useCallback(() => {
     const nextBranchId = form.branchId || tokenBranchId || "";
@@ -614,6 +625,18 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
     setInvoiceShipment(null);
     showToast("Form reset.", "success");
   }, [form.branchId, tokenBranchId, showToast, updateForm, updateBoxes]);
+
+  const handleChargeChange = useCallback((key, field, value) => {
+    updateForm(draft => {
+      if (draft.charges[key]) {
+        if (field === 'qty' && key !== 'total_weight') {
+          draft.charges[key].qty = Number(value || 0);
+        } else if (field === 'rate') {
+          draft.charges[key].rate = Number(value || 0);
+        }
+      }
+    });
+  }, [updateForm]);
 
   const submit = useCallback(
     async (e) => {
@@ -962,6 +985,7 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
               <ChargesAndSummary
                 form={form}
                 updateForm={updateForm}
+                onChargeChange={handleChargeChange}
                 totalWeight={totalWeight}
                 derived={derived}
                 subtotal={subtotal}

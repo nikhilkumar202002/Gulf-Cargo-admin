@@ -14,7 +14,7 @@ const CHARGE_ROWS = [
   ["discount", "Discount"],
 ];
 
-export const ChargesAndSummary = React.memo(({ form, updateForm, totalWeight, derived, subtotal, billCharges, vatCost, netTotal, toMoney }) => {
+export const ChargesAndSummary = React.memo(({ form, updateForm, onChargeChange, totalWeight, derived, subtotal, billCharges, vatCost, netTotal, toMoney }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-6">
@@ -78,11 +78,7 @@ export const ChargesAndSummary = React.memo(({ form, updateForm, totalWeight, de
                         step="0.01"
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
                         value={qtyValue}
-                        onChange={(e) => updateForm(draft => {
-                          if (key !== 'total_weight') {
-                            draft.charges[key].qty = Number(e.target.value || 0);
-                          }
-                        })}
+                        onChange={(e) => onChargeChange(key, 'qty', e.target.value)}
                         readOnly={key === "total_weight"}
                       />
                     </td>
@@ -93,9 +89,7 @@ export const ChargesAndSummary = React.memo(({ form, updateForm, totalWeight, de
                         step="0.01"
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
                         value={row.rate}
-                        onChange={(e) => updateForm(draft => {
-                          draft.charges[key].rate = Number(e.target.value || 0);
-                        })}
+                        onChange={(e) => onChargeChange(key, 'rate', e.target.value)}
                       />
                     </td>
                     <td className="px-3 py-2">

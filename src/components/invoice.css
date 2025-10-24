@@ -226,6 +226,24 @@
     -webkit-region-break-inside: avoid !important;
   }
 
+/* keep uniform padding and visible empty rows */
+.items-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  --cell-px: 8px;
+  --cell-py: 6px;
+  --row-h: 24px;
+  --lh: 1.3;
+}
+.items-table :is(th, td){
+  padding: var(--cell-py) var(--cell-px) !important;
+  line-height: var(--lh) !important;
+  height: var(--row-h) !important;
+  border: 1px solid #1f2937; /* slate-800 */
+  vertical-align: middle;
+  overflow: hidden;
+}
+
   /* table header/footer repeat correctly */
   .invoice-table thead, .box-summary-table thead { display: table-header-group !important; }
   .invoice-table tfoot, .box-summary-table tfoot { display: table-footer-group !important; }

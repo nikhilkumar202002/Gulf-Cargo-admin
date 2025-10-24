@@ -1,8 +1,10 @@
   // src/pages/InvoiceOnly.jsx
   import React, { useEffect, useMemo, useState } from "react";
   import { useParams, useLocation } from "react-router-dom";
+  import { addressFromParty, phoneFromParty } from "../utils/cargoHelpers";
   import { normalizeCargoToInvoice, getCargoById } from "../api/createCargoApi";
   import { getPartyById, getParties } from "../api/partiesApi";
+  import { getBranchByIdSmart } from "../api/branchApi";
   import InvoiceLogo from "../assets/Logo.png";
   import "./invoice.css";
 
@@ -21,6 +23,11 @@
     }
   };
 
+  const s = (v, d = "—") => (v === null || v === undefined || String(v).trim() === "" ? d : v);
+  const pickPhoneFromBranch = (b) => {
+    if (!b) return "—";
+    return [b.branch_contact_number, b.branch_alternative_number].filter(Boolean).join(" / ");
+  };
   const getTrackCode = (s) =>
   s?.track_code ?? s?.tracking_code ?? s?.tracking_no ?? s?.trackingNumber ?? "";
 
@@ -113,20 +120,6 @@
       return s + (Number.isFinite(n) ? n : 0);
     }, 0);
 
-  /* ---------------- Company header ---------------- */
-  const COMPANY = {
-    arHeadingLine1: "شركة سواحل الخليج للنقل",
-    arHeadingLine2: "البحري",
-    nameEn: "GULF CARGO AGENCY",
-    addr: "NEAR VFS GLOBAL KINGKHALID ROAD-HAIL",
-    phones: "0503433723-0568778615,",
-    email: "gulfcargoksahail@gmail.com",
-    vatNo: "310434479300003",
-    branchLabel: "GULF CARGO KSA HAIL",
-    slCode: "HL401667",
-    defaultShipmentType: "IND AIR",
-  };
-
   /* ---------------- Party helpers ---------------- */
   const parsePartyList = (res) => {
     if (Array.isArray(res)) return res;
@@ -136,29 +129,22 @@
     return [];
   };
 
-  const joinAddress = (p) => {
-    const parts = [
-      p?.address, p?.address_line1, p?.address_line2, p?.street, p?.locality, p?.area, p?.district,
-      p?.city, p?.state, p?.country, p?.postal_code ?? p?.pincode ?? p?.zip,
-    ].filter(Boolean);
-    return parts.join(", ");
-  };
-
-  const formatPhones = (p) => {
-    const vals = [p?.contact_number, p?.phone, p?.mobile, p?.mobile_number, p?.contact].filter(Boolean);
-    const whats = p?.whatsapp_number ?? p?.whatsapp ?? null;
-    const a = [];
-    if (vals.length) a.push(`${vals.join(" / ")}`);
-    if (whats) a.push(` ${whats}`);
-    return a.join("  •  ");
-  };
+  const joinAddress = (p) => p?.address || "";
 
   const extractParty = (p) => ({
     id: p?.id ?? null,
     name: p?.name || "—",
     email: p?.email || "",
+    document_type: p?.document_type || "",
+    document_id: p?.document_id || "",
+    tel: p?.contact_number || p?.whatsapp_number || "",
+    address_line: p?.address || "",
+    post: p?.city || "",            
+    pin: p?.postal_code || "",
+    dist: p?.district || "",
+    state: p?.state || "",
     address: joinAddress(p),
-    phones: formatPhones(p),
+    phones: phoneFromParty(p),
     raw: p,
   });
 
@@ -183,7 +169,34 @@
   const buildQrUrl = (url, size = 160) =>
     `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}`;
 
+  /* ---------- Read logged-in user from localStorage (for branch.id fallback) ---------- */
+  const getLoggedInUser = () => {
+    try {
+      const keys = ["auth", "user", "authUser", "profile", "currentUser"];
+      for (const k of keys) {
+        const raw = localStorage.getItem(k);
+        if (!raw) continue;
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === "object") return obj.user || obj;
+      }
+    } catch {}
+    return null;
+  };
+
   /* ---------------- Component ---------------- */
+  const computePieces = (sh) => {
+    if (!sh) return 0;
+    const pieces = pick(sh, ["no_of_pieces", "charges.no_of_pieces"], 0);
+    return Number(pieces) || 0;
+  };
+
+  const pickShipmentDate = (sh) => {
+    const candidates = [sh?.booking_date, sh?.shipment_date, sh?.invoice_date, sh?.created_at, sh?.createdAt, sh?.date].filter(Boolean);
+    const raw = candidates[0];
+    const d = raw ? new Date(raw) : new Date(); // Default to today's date
+    if (isNaN(d.getTime())) return String(raw);
+    return d.toLocaleDateString("en-GB"); // DD/MM/YYYY
+  };
   export default function InvoiceOnly({ shipment: injected = null, modal = false }) {
     const { id } = useParams();
     const location = useLocation();
@@ -196,7 +209,9 @@
 
     const [senderParty, setSenderParty] = useState(null);
     const [receiverParty, setReceiverParty] = useState(null);
+    const [branch, setBranch] = useState(null);
 
+    const loggedInUser = useMemo(() => getLoggedInUser(), []);
     const trackUrl = buildTrackUrl(shipment);
 
     // boot: prefer prop → route state → fetch by id
@@ -224,6 +239,39 @@
       })();
     }, [id, injected, hydratedFromState]);
 
+    /* ------------- Fetch branch (shipment ids first, then user's branch id) ------------- */
+    useEffect(() => {
+      if (!shipment && !loggedInUser) return;
+
+      // Collect plausible branch IDs
+      const idCandidates = [
+        shipment?.branch_id,
+        shipment?.branch?.id,
+        shipment?.origin_branch_id,
+        loggedInUser?.branch?.id,
+        loggedInUser?.branch_id,
+      ]
+        .map((v) => (v == null ? null : String(v).trim()))
+        .filter(Boolean);
+
+      if (!idCandidates.length) return;
+
+      let alive = true;
+      (async () => {
+        for (const bid of idCandidates) {
+          try {
+            const b = await getBranchByIdSmart(bid);
+            if (b && alive) {
+              setBranch(b);
+              return;
+            }
+          } catch {}
+        }
+        if (alive) setBranch(null);
+      })();
+
+      return () => { alive = false; };
+    }, [shipment, loggedInUser]);
     // fetch Sender/Receiver party once we have shipment basics
     useEffect(() => {
       if (!shipment) return;
@@ -269,17 +317,27 @@
           } catch {}
         }
 
-        const address = isSender
-          ? pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")
-          : pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "");
-        const phone = isSender
-          ? pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")
-          : pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "");
-        const email = isSender
+       const address = isSender
+    ? pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")
+    : pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "");
+
+  const phone = isSender
+    ? pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")
+    : pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "");
+
+  const email = isSender
           ? pick(shipment, ["sender_email", "shipper_email"], "")
           : pick(shipment, ["receiver_email", "consignee_email"], "");
 
-        return { id: null, name: name || "—", email, address, phones: phone };
+  // pull possible doc ids from the shipment for the fallback
+  const docId = isSender
+    ? pick(shipment, ["sender_document_id", "shipper_document_id", "document_id"], "")
+    : pick(shipment, ["receiver_document_id", "consignee_document_id", "document_id"], "");
+
+        return extractParty({
+          id: null, name: name || "—", email, contact_number: phone, address,
+          city: "", postal_code: "", district: "", state: "", document_id: docId,
+        });
       };
 
       (async () => {
@@ -413,13 +471,17 @@
     const getPhone = (p, side, sh, pickFn) =>
       p?.phones ||
       pickFn?.(sh?.[side], ["contact_number", "whatsapp_number"], "") ||
-      pickFn?.(
-        sh,
-        side === "sender"
-          ? ["sender_phone", "shipper_phone", "sender_mobile"]
-          : ["receiver_phone", "consignee_phone", "receiver_mobile"],
-        ""
-      );
+      [
+        pickFn?.(
+          sh,
+          side === "sender"
+            ? ["sender_phone", "shipper_phone", "sender_mobile"]
+            : ["receiver_phone", "consignee_phone", "receiver_mobile"],
+          ""
+        ),
+        pickFn?.(sh, side === "sender" ? ["sender_whatsapp_number"] : ["receiver_whatsapp_number"], ""),
+      ]
+        .filter(Boolean).join(" / ");
 
     const getPincode = (p, side, sh, pickFn) =>
       p?.pincode ||
@@ -428,13 +490,26 @@
 
     const ROWS_PER_COL = 15;
 
-    const computedSubtotal = 0; // you removed amounts in the item table display
-    const apiSubtotalNum = toNum(shipment?.subtotal);
-    const subtotal = apiSubtotalNum > 0 ? apiSubtotalNum : computedSubtotal;
+    // --- DIRECT from API fields (robust, no math here) ---
+    const num = (v) =>
+      v === null || v === undefined || v === "" ? 0 : Number(String(v).replace(/,/g, "")) || 0;
 
-    const tax = toNum(shipment?.tax ?? shipment?.tax_amount ?? shipment?.vat_cost ?? 0);
-    const bill = toNum(shipment?.bill_charges ?? shipment?.bill ?? 0);
-    const total = toNum(shipment?.total_cost ?? shipment?.net_total ?? subtotal + bill + tax);
+    const subtotal = num(
+      pick(shipment, [
+        "amount_total_weight",
+        "charges.amount_total_weight",
+        "total_cost",                 // sent from CreateCargo
+        "subtotal",                   // any backend alias
+        "summary.subtotal",           // nested alias (defensive)
+      ], 0)
+    );
+
+    // Bill charges, VAT, and final total — read directly, but with aliases
+    const bill  = num(pick(shipment, ["bill_charges", "summary.bill_charges", "charges.bill"], 0));
+    const tax   = num(pick(shipment, ["vat_cost", "vat_amount", "summary.vat_cost"], 0));
+    const total = num(
+      pick(shipment, ["total_amount", "net_total", "grand_total", "summary.total"], 0)
+    );
 
     const colA = items.slice(0, ROWS_PER_COL);
     const colB = items.slice(ROWS_PER_COL, ROWS_PER_COL * 2);
@@ -451,7 +526,25 @@
     );
 
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-slate-50">    
+        <style>{`
+        @media print {
+          @page { size: A4; margin: 12mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body * { visibility: hidden !important; }
+          #invoice-sheet, #invoice-sheet * { visibility: visible !important; }
+          #invoice-sheet {
+            width: 100%;
+            margin: 0 !important;
+            position: static !important;
+            box-shadow: none !important;
+            border: 0 !important;
+          }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          tr, td, th { break-inside: avoid; page-break-inside: avoid; }
+        }
+        `}</style>
     
 
         {!modal && (
@@ -475,252 +568,369 @@
           </div>
         )}
 
-        <main className="mx-auto max-w-5xl p-4">
+        <main className="flex justify-center items-center mx-auto max-w-5xl p-4 invoice-main-section">
           <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm uppercase">
             {/* Header */}
             <div className="px-1 pt-1">
               <div className="grid grid-cols-3 items-start">
+                {/* LEFT: Logo + Branch + Address */}
                 <div className="invoice-logo">
-                  <img src={InvoiceLogo} alt="Gulf Cargo" className="h-16 object-contain" />
-                  <div className="header-invoice-address mt-1 text-slate-700">
-                    BRANCH: {pick(shipment, ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"], "—")}
+                  <img
+                    src={branch?.logo_url || InvoiceLogo}
+                    alt={branch?.branch_name || "Gulf Cargo"}
+                    className="h-12 object-contain"
+                  />
+                  {/* <div className="header-invoice-address mt-1 text-slate-700">
+                    BRANCH: {branch?.branch_name ||
+                      pick(shipment, ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"], "—")}
+                  </div> */}
+                  {/* Address (optional small line) */}
+                  <div className="header-invoice-address mt-0.5 text-[11px] text-slate-600 normal-case">
+                    {s(branch?.branch_address, "")}
                   </div>
                 </div>
 
+                {/* MIDDLE: QR */}
                 <div className="invoice-qrcode flex items-center justify-center">
                   <img
-                    src={buildQrUrl(trackUrl, 160)}
+                    src={buildQrUrl(trackUrl, 120)}
                     alt="Invoice QR (Track this package)"
-                    className="h-36 w-36 rounded bg-white p-1 ring-1 ring-slate-200"
+                    className="h-28 w-28 rounded bg-white p-1 ring-1 ring-slate-200"
                   />
                 </div>
 
+                {/* RIGHT: Arabic name + Phone + Email */}
                 <div className="text-center sm:text-right">
                   <div className="text-[11px] font-semibold leading-tight text-indigo-900">
-                    <div>{COMPANY.arHeadingLine1}{COMPANY.arHeadingLine2}</div>
+                     <div className="header-invoice-branch-name mt-1 text-slate-700">
+                    {branch?.branch_name ||
+                      pick(shipment, ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"], "—")}
                   </div>
-                  <div className="text-[11px] header-invoice-heading mt-1 font-semibold text-rose-700">{COMPANY.nameEn}</div>
-                  <p className="text-[11px] header-invoice-address text-xs mt-1 font-medium text-slate-800">{COMPANY.phones}</p>
-                  <p className="text-[11px] header-invoice-address text-xs text-slate-700">{COMPANY.email}</p>
+                  </div>
+                  <div className="header-invoice-branch-arname">
+                    {s(branch?.branch_name_ar, "شركة سواحل الخليج للنقل البحري")}
+                  </div>
+                  <p className="header-invoice-branch-contact mt-1 font-medium text-slate-800">
+                    {pickPhoneFromBranch(branch)}
+                  </p>
+                  {/* <p className="header-invoice-branch-contact text-slate-700">
+                    {s(branch?.branch_email, "—")}
+                  </p> */}
                 </div>
               </div>
 
               <div className="mt-3 grid grid-cols-1 items-center gap-2 rounded bg-rose-600 px-2 py-1 text-white sm:grid-cols-3">
                 <div className="text-xs">
-                  <div className="invoice-top-header">VAT NO. : {COMPANY.vatNo}</div>
-                  <div className="invoice-top-header">SHIPMENT TYPE: {shipment?.method || COMPANY.defaultShipmentType}</div>
+                  <div className="invoice-top-header">VAT NO. : {branch?.vat_no || "310434479300003"}</div>
+                  <div className="invoice-top-header">SHIPMENT TYPE: {shipment?.method || "IND AIR"}</div>
                 </div>
                 <div className="text-center">
                   <div className="invoice-top-header">فاتورة ضريبة مبسطة</div>
                   <div className="invoice-top-header">SIMPLIFIED TAX INVOICE</div>
                 </div>
                 <div className="text-right text-xs">
-                  {/* <div className="invoice-top-header">
-                    {pick(shipment, ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"], "—")}
-                  </div> */}
                   <div className="invoice-top-header">
+                    <div className="tracking-invoice-content-track-no">{getTrackCode(shipment) || "—"}</div>
                     <span className="inline-flex items-center gap-1 rounded-md bg-black px-2 py-1 text-white font-semibold tracking-wide">
-                      <span className="invoice-number-text opacity-80">INV No. :</span>
-                      <span className="invoice-number-text">{shipment?.booking_no || shipment?.invoice_no || "—"}</span>
+                      <span className="invoice-number-text">{billNo}</span>
                     </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Meta */}
-            <div className="grid grid-cols-5 gap-4  px-2 py-1.5 sm:grid-cols-5">
-              <div>
-                <div className="tracking-invoice-heading">Track No.</div>
-                <div className="tracking-invoice-content-track-no">{getTrackCode(shipment) || "—"}</div>
+        <div
+  className="
+    section-three-bg
+    grid gap-4 border-slate-200 px-2 py-2
+    [grid-template-columns:1fr]
+    md:[grid-template-columns:1fr_2fr_1fr]
+  "
+>
+  {/* SHIPPER (2fr) */}
+  <div className="relative rounded-lg border border-slate-200 p-3 pt-6">
+    <div className="absolute -top-3 left-3 rounded-tr-2xl rounded-bl-2xl bg-rose-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
+      Shipper
+    </div>
+
+    <div className=" text-[11px]">
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Name</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text font-semibold text-slate-900">
+          {getName(senderParty, "sender", shipment) || "—"}
+        </div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">ID No</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">
+         {senderParty?.document_id || pick(shipment, ["sender_document_id","shipper_document_id"], "—")}
+
+        </div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Tel</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{getPhone(senderParty, "sender", shipment, pick) || "—"}</div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">No. of Pcs</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{computePieces(shipment)}</div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Weight</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{totalWeightDisplay} kg</div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Date</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{pickShipmentDate(shipment) || "—"}</div>
+      </div>
+    </div>
+  </div>
+
+  {/* CONSIGNEE (2fr) */}
+  <div className="relative rounded-lg border border-slate-200 p-3 pt-6">
+    <div className="absolute -top-3 left-3 rounded-tr-2xl rounded-bl-2xl bg-rose-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
+      Consignee
+    </div>
+
+    <div className="text-[11px]">
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Name</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text font-semibold text-slate-900">
+          {getName(receiverParty, "receiver", shipment) || "—"}
+        </div>
+      </div>
+
+      <div className="flex">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Adress</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text whitespace-pre-wrap">
+          {receiverParty?.address_line || getAddress(receiverParty, "receiver", shipment, pick) || "—"}
+        </div>
+      </div>
+
+      {/* <div className="flex items-start">
+        <div className="w-15 shrink-0 text-slate-700">Village</div>
+        <div className="mx-1">:</div>
+        <div>{receiverParty?.raw?.village || ""}</div>
+      </div> */}
+
+      {/* Post + PIN on one line */}
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Post</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text flex flex-wrap items-baseline gap-4">
+          <span>{receiverParty?.post || pick(receiverParty?.raw || {}, ["city"], "—")}</span>
+          <span className="text-slate-700">PIN:</span>
+          <span>{receiverParty?.pin || pick(receiverParty?.raw || {}, ["postal_code", "pincode", "zip"], "—")}</span>
+        </div>
+      </div>
+
+      {/* Dist + State on one line */}
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Dist</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text flex flex-wrap items-baseline gap-4">
+          <span>{receiverParty?.dist || pick(receiverParty?.raw || {}, ["district"], "—")}</span>
+          <span className="text-slate-700">State :</span>
+          <span>{receiverParty?.state || pick(receiverParty?.raw || {}, ["state"], "—")}</span>
+        </div>
+      </div>
+
+      <div className="flex items-start">
+        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Tel</div>
+        <div className="mx-1">:</div>
+        <div className="invoice-parties-text">{getPhone(receiverParty, "receiver", shipment, pick) || "—"}</div>
+      </div>
+    </div>
+  </div>
+
+  {/* BOX SUMMARY (1fr) */}
+  <div className="self-start">
+    <div className="mt-2 ml-auto w-[150px] overflow-hidden ">
+      <table className="text-[11px] ">
+        <thead className="box-weight-table-header">
+          <tr className="text-center">
+            <th className="border border-slate-800 px-2 py-1 w-[30px]">S.No</th>
+            <th className="border border-slate-800 px-2 py-1">Box No.</th>
+            <th className="border border-slate-800 px-2 py-1 w-[65px]">Weight</th>
+          </tr>
+        </thead>
+        <tbody className="box-weight-table-body">
+          {boxRows.length > 0 ? (
+            boxRows.map((row, idx) => (
+              <tr key={idx} className="text-center">
+                <td className="border border-slate-800 px-2 py-1">{row.sl}</td>
+                <td className="border border-slate-800 px-2 py-1">{billNo}</td>
+                <td className="border border-slate-800 px-2 py-1">{row.weight}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td className="border border-slate-800 px-2 py-2 text-center text-slate-500" colSpan={3}>
+                No box weights
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<section className="px-1 py-1">
+  <div className="flex justify-between items-center my-1">
+    <div className="invoice-cargo-heading">Cargo Items</div>
+    <div className="invoice-weight-text">Total Weight: {totalWeightDisplay} kg</div>
+  </div>
+
+  <div className="grid grid-cols-2 gap-3">
+    {/* LEFT TABLE */}
+    <div className="print-avoid">
+      <table className="items-table h-full w-full table-fixed border-collapse text-[11px]">
+        <colgroup>
+          <col style={{ width: "44px" }} />
+          <col />
+          <col style={{ width: "70px" }} />
+          <col style={{ width: "50px" }} />
+        </colgroup>
+        <thead>
+          <tr className="text-center">
+            <th className="border border-slate-800">SL NO.</th>
+            <th className="border border-slate-800 text-left">ITEMS</th>
+            <th className="border border-slate-800">BOX NO.</th>
+            <th className="border border-slate-800">QTY</th>
+          </tr>
+        </thead>
+        <tbody>
+          {colA.map((it, idx) => (
+            <tr key={`A-${idx}`} className="align-top">
+              <td className="border border-slate-800 text-center">{it ? it.idx : ""}</td>
+              <td className="border border-slate-800 uppercase">{it ? (it.name || "—") : ""}</td>
+              <td className="border border-slate-800 text-center">{it ? (it.boxLabel || "—") : ""}</td>
+              <td className="border border-slate-800 text-center">{it ? (it.qty || "—") : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    {/* RIGHT TABLE */}
+  {/* RIGHT TABLE — continuous, totals in tfoot, fillers keep totals at bottom */}
+<div className="print-avoid">
+  {(() => {
+    const MAX_ROWS = ROWS_PER_COL; // you already use 15; keep it consistent
+    const rightRows = colB.slice(0, MAX_ROWS);
+    const fillerCount = Math.max(0, MAX_ROWS - rightRows.length);
+    const fillers = Array.from({ length: fillerCount });
+
+    return (
+      <table className="items-table w-full table-fixed border-collapse text-[11px]">
+        <colgroup>
+          <col style={{ width: "44px" }} />
+          <col />
+          <col style={{ width: "70px" }} />
+          <col style={{ width: "50px" }} />
+        </colgroup>
+
+        <thead>
+          <tr className="text-center">
+            <th className="border border-slate-800">S. NO</th>
+            <th className="border border-slate-800 text-left">ITEMS</th>
+            <th className="border border-slate-800">BOX NO.</th>
+            <th className="border border-slate-800">QTY</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {/* actual rows */}
+          {rightRows.map((it, idx) => (
+            <tr key={`B-${idx}`} className="align-top">
+              <td className="border border-slate-800 text-center">{it ? it.idx : ""}</td>
+              <td className="border border-slate-800 uppercase">{it ? (it.name || "—") : ""}</td>
+              <td className="border border-slate-800 text-center">{it ? (it.boxLabel || "—") : ""}</td>
+              <td className="border border-slate-800 text-center">{it ? (it.qty || "—") : ""}</td>
+            </tr>
+          ))}
+
+          {/* filler rows to push totals to bottom */}
+          {fillers.map((_, i) => (
+            <tr key={`B-fill-${i}`}>
+              <td className="border border-slate-800 text-center">&nbsp;</td>
+              <td className="border border-slate-800">&nbsp;</td>
+              <td className="border border-slate-800 text-center">&nbsp;</td>
+              <td className="border border-slate-800 text-center">&nbsp;</td>
+            </tr>
+          ))}
+        </tbody>
+
+        <tfoot>
+          <tr>
+            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
+              <div className="flex justify-between">
+                <span className="uppercase">Total</span>
+                <span className="ml-2 text-right">المجموع</span>
               </div>
-              <div>
-                <div className="tracking-invoice-heading">Box No.</div>
-                <div className="tracking-invoice-content">{shipment?.booking_no || shipment?.invoice_no || "—"}</div>
+            </td>
+            <td className="border border-slate-800 text-right">
+              {fmtMoney(subtotal, currency).replace(/[A-Z]{3}\s?/, "").trim()}
+            </td>
+          </tr>
+
+          <tr>
+            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
+              <div className="flex justify-between">
+                <span className="uppercase">Bill Charges</span>
+                <span className="ml-2 text-right">رسوم الفاتورة</span>
               </div>
-              <div>
-                <div className="tracking-invoice-heading">Branch</div>
-                <div className="tracking-invoice-content">
-                  {pick(shipment, ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"], "—")}
-                </div>
+            </td>
+            <td className="border border-slate-800 text-right">
+              {fmtMoney(bill, currency).replace(/[A-Z]{3}\s?/, "").trim()}
+            </td>
+          </tr>
+
+          <tr>
+            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
+              <div className="flex justify-between">
+                <span className="uppercase">VAT %</span>
+                <span className="ml-2 text-right">ضريبة القيمة المضافة %</span>
               </div>
-              <div>
-                <div className="tracking-invoice-heading">Delivery Type</div>
-                <div className="tracking-invoice-content">{shipment?.delivery_type || "—"}</div>
+            </td>
+            <td className="border border-slate-800 text-right">
+              {fmtMoney(tax, currency).replace(/[A-Z]{3}\s?/, "").trim()}
+            </td>
+          </tr>
+
+          <tr className="font-semibold">
+            <td className="border border-slate-800 text-right uppercase" colSpan={3}>
+              <div className="flex justify-between">
+                <span>Net Total</span>
+                <span className="ml-2 text-right">المجموع الصافي</span>
               </div>
-              <div>
-                <div className="tracking-invoice-heading">Payment Method</div>
-                <div className="tracking-invoice-content">{shipment?.payment_method || "—"}</div>
-              </div>
-            </div>
+            </td>
+            <td className="border border-slate-800 text-right">
+              {fmtMoney(total, currency).replace(/[A-Z]{3}\s?/, "").trim()}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    );
+  })()}
+</div>
 
-            {/* Parties + Box summary */}
-            <div className="section-three-bg grid grid-cols-1 gap-6 border-slate-200 px-2 py-2
-                  sm:[grid-template-columns:1fr_1fr_1fr]">
-  
-              <div>
-                <div className="invoice-parties-header text-xs font-medium uppercase tracking-wide text-slate-500">Shipper</div>
-                <div className="mt-1 invoice-parties-content grid grid-cols-[60px_1fr] text-sm">
-                  <span className="invoice-parties-label text-slate-500">Name:</span>
-                  <span className="invoice-parties-text">{getName(senderParty, "sender", shipment)}</span>
-
-                  <span className="invoice-parties-label text-slate-500">Address:</span>
-                  <span className="invoice-parties-text whitespace-pre-wrap">
-                    {getAddress(senderParty, "sender", shipment, pick)}
-                  </span>
-
-                  <span className="invoice-parties-label text-slate-500">Pin code:</span>
-                  <span className="invoice-parties-text">{getPincode(senderParty, "sender", shipment, pick)}</span>
-
-                  <span className="invoice-parties-label text-slate-500">Phone:</span>
-                  <span className="invoice-parties-text">{getPhone(senderParty, "sender", shipment, pick)}</span>
-                </div>
-              </div>
-
-              {/* Consignee */}
-              <div>
-                <div className="invoice-parties-header text-xs font-medium tracking-wide text-slate-500">Consignee</div>
-                <div className="mt-1 invoice-parties-content grid grid-cols-[60px_1fr] text-sm">
-                  <span className="invoice-parties-label text-slate-500">Name:</span>
-                  <span className="invoice-parties-text">{getName(receiverParty, "receiver", shipment)}</span>
-
-                  <span className="invoice-parties-label text-slate-500">Address:</span>
-                  <span className="invoice-parties-text whitespace-pre-wrap">
-                    {getAddress(receiverParty, "receiver", shipment, pick)}
-                  </span>
-
-                  <span className="invoice-parties-label text-slate-500">Pincode:</span>
-                  <span className="invoice-parties-text">{getPincode(receiverParty, "receiver", shipment, pick)}</span>
-
-                  <span className="invoice-parties-label text-slate-500">Phone:</span>
-                  <span className="invoice-parties-text">{getPhone(receiverParty, "receiver", shipment, pick)}</span>
-                </div>
-              </div>
-
-              {/* Box Summary */}
-              <div>
-                {/* <div className="invoice-parties-header text-xs font-medium uppercase tracking-wide text-slate-500">Boxes</div> */}
-
-                <div className="mt-2 overflow-hidden border border-slate-200">
-                  <table className="box-summary-table min-w-full text-sm">
-                    <thead className="box-weight-table-header text-slate-600">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Sl No</th>
-                        <th className="px-3 py-2 text-left">Box No</th>
-                        <th className="px-3 py-2 text-right">Weight</th>
-                      </tr>
-                    </thead>
-                    <tbody className="box-weight-table-body">
-                      {boxRows.length > 0 ? (
-                        boxRows.map((row, idx) => (
-                          <tr key={idx} className={idx % 2 ? "bg-white" : "bg-slate-50/50"}>
-                            <td className="px-3 py-2">{row.boxNo}</td>
-                            <td className="px-3 py-2">{shipment?.booking_no || shipment?.invoice_no || "—"}</td>
-                            <td className="px-3 py-2 text-right">{row.weight} kg</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td className="px-3 py-3 text-slate-500" colSpan={3}>
-                            No box weights
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Items (two columns) */}
-            <div className="px-1 py-1">
-              <div className="flex justify-between my-1">
-                <div className="invoice-cargo-heading">Cargo Items</div>
-                <div className="invoice-weight-text">Total Weight: {totalWeightDisplay} kg</div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 py-2 sm:grid-cols-2 lg:grid-cols-2">
-                {/* Column A */}
-                <div className="lg:col-span-1">
-                  <table className="min-w-full border-separate border-spacing-0 avoid-break">
-                    <thead className="invoice-table-header">
-                      <tr>
-                        <th className="w-12 border border-slate-200 px-1 py-1 text-left uppercase tracking-wider">Sl.No</th>
-                        <th className="border-t border-b border-slate-200 px-1 py-1 text-left uppercase tracking-wider">Items</th>
-                        <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider">Box No.</th>
-                        <th className="border border-slate-200 px-1 py-1 text-right uppercase tracking-wider">Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody className="invoice-table-content">
-                      {colA.map((it, idx) => (
-                        <tr key={`A-${idx}`} className="align-top">
-                          <td className="border-x border-b border-slate-200 px-1 py-1">{it ? it.idx : ""}</td>
-                          <td className="border-b border-slate-200 px-1 py-1 ">{it ? it.name || "—" : <span className="opacity-0">pad</span>}</td>
-                          <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
-                            {it ? it.boxLabel || "—" : ""}
-                          </td>
-                          <td className="border-x border-b border-slate-200 px-1 py-1 text-right text-sm text-slate-900">
-                            {it ? it.qty || "—" : ""}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Column B */}
-                <div className="lg:col-span-1">
-                  <table className="min-w-full border-separate border-spacing-0">
-                    <thead className="invoice-table-header">
-                      <tr>
-                        <th className="w-12 border px-1 py-1 text-left uppercase tracking-wider">S.No</th>
-                        <th className="border-t border-b border-slate-200 px-1 py-1 text-left text-[11px] font-semibold uppercase tracking-wider">Items</th>
-                        <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider">Box No.</th>
-                        <th className="border border-slate-200 px-1 py-1 text-right text-[11px] font-semibold uppercase tracking-wider">Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody className="invoice-table-content">
-                      {colB.map((it, idx) => (
-                        <tr key={`B-${idx}`} className="align-top">
-                          <td className="border-x border-b border-slate-200 px-1 py-1">{it ? it.idx : ""}</td>
-                          <td className="border-b border-slate-200 px-1 py-1">{it ? it.name || "—" : <span className="opacity-0">pad</span>}</td>
-                          <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right">{it ? it.boxLabel || "—" : ""}</td>
-                          <td className="border-x border-b border-slate-200 px-1 py-1.5 text-right ">{it ? it.qty || "—" : ""}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  {overflowCount > 0 && (
-                    <div className="mt-2 text-[11px] text-slate-500">
-                      +{overflowCount} more item{overflowCount > 1 ? "s" : ""} (not shown to preserve space for terms)
-                    </div>
-                  )}
-                </div>
-
-                {/* Totals */}
-                <div className="lg:col-span-1 avoid-break">
-                  <div className="mx-auto w-full rounded-xl border-slate-200 p-1 ">
-                    <div className="total-card-list flex justify-between text-sm text-slate-700">
-                      <div className="invoice-bill-content">Subtotal</div>
-                      <div className="font-medium text-slate-900">{fmtMoney(subtotal, currency)}</div>
-                    </div>
-                    <div className="total-card-list flex justify-between text-sm text-slate-700">
-                      <div className="invoice-bill-content">Bill Charges</div>
-                      <div className="total-card-list font-medium text-slate-900">{fmtMoney(bill, currency)}</div>
-                    </div>
-                    <div className="flex justify-between text-sm text-slate-700">
-                      <div className="invoice-bill-content">Vat%</div>
-                      <div className="total-card-list text-slate-900">{fmtMoney(tax, currency)}</div>
-                    </div>
-                    <div className="total-card-money mt-1 flex justify-between border-t border-slate-200 pt-1 text-base font-semibold text-slate-900">
-                      <div className="invoice-bill-total">Net Total</div>
-                      <div>{fmtMoney(shipment?.total_cost ?? shipment?.net_total ?? total, currency)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+  </div>
+</section>
 
             {/* Footer */}
             <div className="border-t border-slate-200 px-1 py-2">
