@@ -12,6 +12,7 @@ import { staffRegister } from "../../api/accountApi";
 import { FaUserCheck } from "react-icons/fa";
 import { Toaster, toast } from "react-hot-toast";
 import StaffModal from "./components/StaffModal";
+import axiosInstance from "../../api/axiosInstance";
 import { Link } from "react-router-dom";
 import "./StaffStyles.css";
 
@@ -72,6 +73,56 @@ const sniffDialFromTyped = (val, dialSet) => {
   return null;
 };
 
+const resolveFileUrl = (src) => {
+  if (!src || /^https?:\/\//i.test(src) || /^data:image/i.test(src)) {
+    return src || "";
+  }
+  const base = (axiosInstance.defaults.baseURL || "").replace(/\/+$/, "");
+  const path = String(src).replace(/^\/+/, "");
+  return base && path ? `${base}/${path}` : path;
+};
+/**
+ * Normalizes the user object from the API response to match the structure
+ * expected by the StaffModal component.
+ * @param {object} user The raw user object from the API.
+ * @param {object} formState The current state of the form to get related data.
+ * @returns {object} A display-ready user object.
+ */
+const normalizeUserForDisplay = (user, formState) => {
+  if (!user) return null;
+
+  const { roles, branches, visas, docTypes } = formState.options;
+  const role = roles.find(r => String(getId(r)) === String(user.role_id));
+  const branch = branches.find(b => String(getId(b)) === String(user.branch_id));
+  const visaType = visas.find(v => String(getId(v)) === String(user.visa_type_id)); 
+  const docTypeId = user.document_type_id ?? user.document_id;
+  const docType = docTypes.find(d => String(getId(d)) === String(docTypeId));
+
+  const fullContact = (user.phone_code && user.contact_number)
+    ? `${normalizeCode(user.phone_code)}${user.contact_number}`
+    : user.contact_number;
+
+  return {
+    ...user,
+    contact_full: fullContact,
+    role: { id: user.role_id, name: role ? getRoleLabel(role) : user.role },
+    branch: { id: user.branch_id, name: branch ? getBranchLabel(branch) : 'Unknown' },
+    visa: {
+      type_id: user.visa_type_id,
+      type_name: visaType ? getVisaTypeLabel(visaType) : 'Unknown',
+      expiry: user.visa_expiry_date,
+      status: user.visa_status,
+    },
+    documents: {
+      document_type_id: docTypeId,
+      document_type_name: docType ? getDocTypeLabel(docType) : 'Unknown',
+      document_number: user.document_number,
+      files: (user.documents || []).map(file => typeof file === 'string' ? resolveFileUrl(file) : file),
+    },
+    profile_pic: resolveFileUrl(user.profile_pic),
+  };
+};
+
 /* ---------- component ---------- */
 const StaffCreate = () => {
   const token = useSelector((s) => s.auth?.token);
@@ -114,7 +165,7 @@ const StaffCreate = () => {
   const [submitMsg, setSubmitMsg] = useState({ text: "", variant: "" });
 
   const [phoneCodes, setPhoneCodes] = useState([]);
-  const [phoneCode, setPhoneCode] = useState("+91");
+  const [phoneCode, setPhoneCode] = useState("+966");
   const [phoneCodeId, setPhoneCodeId] = useState("");
 
   // Build dial sets/maps from API list
@@ -219,10 +270,16 @@ const StaffCreate = () => {
 
   useEffect(() => {
     if (Array.isArray(phoneCodes) && phoneCodes.length && !phoneCodeId) {
-      const india = phoneCodes.find((c) => extractDial(c) === "+91");
-      if (india) {
-        setPhoneCodeId(String(getId(india)));
-        setPhoneCode(extractDial(india));
+      const saudi = phoneCodes.find((c) => extractDial(c) === "+966");
+      if (saudi) {
+        setPhoneCodeId(String(getId(saudi)));
+        setPhoneCode(extractDial(saudi));
+      } else {
+        const firstCode = phoneCodes[0];
+        if (firstCode) {
+          setPhoneCodeId(String(getId(firstCode)));
+          setPhoneCode(extractDial(firstCode));
+        }
       }
     }
   }, [phoneCodes, phoneCodeId]);
@@ -374,7 +431,16 @@ const StaffCreate = () => {
       if (!user) throw new Error("Unexpected response from server.");
 
       toast.success(res?.message || "Staff registered successfully");
-      setModalData(user);
+      const displayUser = normalizeUserForDisplay(user, {
+        options: { roles, branches, visas, docTypes },
+        form: {
+          appointmentDate,
+          visaExpiryDate,
+          visaStatus,
+          documentNumber,
+        }
+      });
+      setModalData(displayUser);
       setModalOpen(true);
       setSubmitMsg({ text: res?.message || "User registered successfully.", variant: "success" });
       resetFields();
@@ -506,7 +572,7 @@ const StaffCreate = () => {
             </div>
           </div>
 
-          {/* Row 2b */}
+          {/* Row 2b: Contact and Role */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div data-field="contactNumber">
               <label className="block text-sm font-medium text-gray-700">Contact Number</label>
@@ -535,12 +601,7 @@ const StaffCreate = () => {
                     </option>
                     {Array.isArray(phoneCodes) && phoneCodes.map((c, i) => {
                       const dial = extractDial(c);
-                      const name = c?.name ?? c?.country ?? c?.country_name ?? c?.iso2 ?? "";
-                      return (
-                        <option key={String(getId(c) ?? i)} value={String(getId(c))}>
-                          {dial}{name ? ` — ${name}` : ""}
-                        </option>
-                      );
+                      return <option key={String(getId(c) ?? i)} value={String(getId(c))}>{dial}</option>;
                     })}
                   </select>
                   {err("phoneCodeId") && <p id="phonecode-err" className="text-xs text-red-600 mt-1">{errors.phoneCodeId}</p>}
@@ -590,6 +651,31 @@ const StaffCreate = () => {
               </div>
             </div>
 
+            <div data-field="selectedRole">
+              <label className="block text-sm font-medium text-gray-700">Staff Role *</label>
+              <select
+                className={inputClass("selectedRole")}
+                disabled={loadingRoles}
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                onBlur={() => markTouched("selectedRole")}
+                aria-invalid={!!err("selectedRole")}
+                aria-describedby="role-err"
+                required
+              >
+                <option value="">{loadingRoles ? "Loading roles..." : "Select Role"}</option>
+                {!loadingRoles && roles.map((r) => (
+                  <option key={getId(r)} value={String(getId(r))}>
+                    {getRoleLabel(r)}
+                  </option>
+                ))}
+              </select>
+              {err("selectedRole") && <p id="role-err" className="text-xs text-red-600 mt-1">{errors.selectedRole}</p>}
+            </div>
+          </div>
+
+          {/* Row 2b */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div data-field="selectedBranch">
               <label className="block text-sm font-medium text-gray-700">Staff Branch *</label>
               <select
@@ -619,46 +705,6 @@ const StaffCreate = () => {
               {err("selectedBranch") && (
                 <p id="branch-err" className="text-xs text-red-600 mt-1">{errors.selectedBranch}</p>
               )}
-            </div>
-          </div>
-
-          {/* Row 3 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div data-field="status">
-              <label className="block text-sm font-medium text-gray-700">Staff Status *</label>
-              <select
-                className={inputClass("status")}
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                onBlur={() => markTouched("status")}
-                required
-              >
-                <option value="">Select Status</option>
-                <option value="1">Active</option>
-                <option value="0">Inactive</option>
-              </select>
-            </div>
-
-            <div data-field="selectedRole">
-              <label className="block text-sm font-medium text-gray-700">Staff Role *</label>
-              <select
-                className={inputClass("selectedRole")}
-                disabled={loadingRoles}
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value)}
-                onBlur={() => markTouched("selectedRole")}
-                aria-invalid={!!err("selectedRole")}
-                aria-describedby="role-err"
-                required
-              >
-                <option value="">{loadingRoles ? "Loading roles..." : "Select Role"}</option>
-                {!loadingRoles && roles.map((r) => (
-                  <option key={getId(r)} value={String(getId(r))}>
-                    {getRoleLabel(r)}
-                  </option>
-                ))}
-              </select>
-              {err("selectedRole") && <p id="role-err" className="text-xs text-red-600 mt-1">{errors.selectedRole}</p>}
             </div>
           </div>
 
@@ -697,28 +743,6 @@ const StaffCreate = () => {
 
           {/* Row 5 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div data-field="selectedDocType">
-              <label className="block text-sm font-medium text-gray-700">Document Type *</label>
-              <select
-                className={inputClass("selectedDocType")}
-                disabled={loadingDocTypes}
-                value={selectedDocType}
-                onChange={(e) => setSelectedDocType(e.target.value)}
-                onBlur={() => markTouched("selectedDocType")}
-                aria-invalid={!!err("selectedDocType")}
-                aria-describedby="doctype-err"
-                required
-              >
-                <option value="">{loadingDocTypes ? "Loading document types..." : "Select Document Type"}</option>
-                {!loadingDocTypes && docTypes.map((d) => (
-                  <option key={getId(d)} value={String(getId(d))}>
-                    {getDocTypeLabel(d)}
-                  </option>
-                ))}
-              </select>
-              {err("selectedDocType") && <p id="doctype-err" className="text-xs text-red-600 mt-1">{errors.selectedDocType}</p>}
-            </div>
-
             <div data-field="selectedVisaType">
               <label className="block text-sm font-medium text-gray-700">Type of Visa *</label>
               <select
@@ -741,28 +765,6 @@ const StaffCreate = () => {
               </select>
               {err("selectedVisaType") && <p id="visatype-err" className="text-xs text-red-600 mt-1">{errors.selectedVisaType}</p>}
             </div>
-          </div>
-
-          {/* Row 6 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div data-field="documents">
-              <label className="block text-sm font-medium text-gray-700">Upload Document(s) *</label>
-              <input
-                ref={docRef}
-                type="file"
-                multiple
-                accept="application/pdf,image/jpeg,image/png,image/webp"
-                className={`mt-1 w-full text-gray-700 border rounded-lg px-3 py-2 cursor-pointer ${err("documents") ? "border-red-500" : "border-gray-300"}`}
-                onBlur={() => markTouched("documents")}
-                aria-invalid={!!err("documents")}
-                aria-describedby="docs-err"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                You can select multiple files. They’ll be sent as <code>documents[]</code>. Max 2MB each.
-              </p>
-              {err("documents") && <p id="docs-err" className="text-xs text-red-600 mt-1">{errors.documents}</p>}
-            </div>
 
             <div data-field="visaStatus">
               <label className="block text-sm font-medium text-gray-700">Visa Status *</label>
@@ -783,21 +785,65 @@ const StaffCreate = () => {
             </div>
           </div>
 
-          {/* Document Number */}
-          <div data-field="documentNumber">
-            <label className="block text-sm font-medium text-gray-700">Document Number *</label>
+          {/* Row 6 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div data-field="selectedDocType">
+              <label className="block text-sm font-medium text-gray-700">Document Type *</label>
+              <select
+                className={inputClass("selectedDocType")}
+                disabled={loadingDocTypes}
+                value={selectedDocType}
+                onChange={(e) => setSelectedDocType(e.target.value)}
+                onBlur={() => markTouched("selectedDocType")}
+                aria-invalid={!!err("selectedDocType")}
+                aria-describedby="doctype-err"
+                required
+              >
+                <option value="">{loadingDocTypes ? "Loading document types..." : "Select Document Type"}</option>
+                {!loadingDocTypes && docTypes.map((d) => (
+                  <option key={getId(d)} value={String(getId(d))}>
+                    {getDocTypeLabel(d)}
+                  </option>
+                ))}
+              </select>
+              {err("selectedDocType") && <p id="doctype-err" className="text-xs text-red-600 mt-1">{errors.selectedDocType}</p>}
+            </div>
+
+            <div data-field="documentNumber">
+              <label className="block text-sm font-medium text-gray-700">Document Number *</label>
+              <input
+                type="text"
+                placeholder="Enter Document Number"
+                className={inputClass("documentNumber")}
+                value={documentNumber}
+                onChange={(e) => setDocumentNumber(e.target.value)}
+                onBlur={() => markTouched("documentNumber")}
+                aria-invalid={!!err("documentNumber")}
+                aria-describedby="docnum-err"
+                required
+              />
+              {err("documentNumber") && <p id="docnum-err" className="text-xs text-red-600 mt-1">{errors.documentNumber}</p>}
+            </div>
+          </div>
+
+          {/* Document Upload */}
+          <div data-field="documents">
+            <label className="block text-sm font-medium text-gray-700">Upload Document(s) *</label>
             <input
-              type="text"
-              placeholder="Enter Document Number"
-              className={inputClass("documentNumber")}
-              value={documentNumber}
-              onChange={(e) => setDocumentNumber(e.target.value)}
-              onBlur={() => markTouched("documentNumber")}
-              aria-invalid={!!err("documentNumber")}
-              aria-describedby="docnum-err"
+              ref={docRef}
+              type="file"
+              multiple
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              className={`mt-1 w-full text-gray-700 border rounded-lg px-3 py-2 cursor-pointer ${err("documents") ? "border-red-500" : "border-gray-300"}`}
+              onBlur={() => markTouched("documents")}
+              aria-invalid={!!err("documents")}
+              aria-describedby="docs-err"
               required
             />
-            {err("documentNumber") && <p id="docnum-err" className="text-xs text-red-600 mt-1">{errors.documentNumber}</p>}
+            <p className="text-xs text-gray-500 mt-1">
+              You can select multiple files. They’ll be sent as <code>documents[]</code>. Max 2MB each.
+            </p>
+            {err("documents") && <p id="docs-err" className="text-xs text-red-600 mt-1">{errors.documents}</p>}
           </div>
 
           {/* Buttons */}

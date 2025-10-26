@@ -24,7 +24,8 @@ export default function StaffModal({ open, onClose, data }) {
   const Pill = ({ v, activeBg = "emerald" }) => {
     const active =
       String(v).toLowerCase() === "active" ||
-      String(v) === "1" ||
+      String(v) === "1" || // string '1'
+      v === 1 || // number 1
       String(v).toLowerCase() === "true";
     return (
       <span
@@ -67,7 +68,7 @@ export default function StaffModal({ open, onClose, data }) {
               {/* Primary */}
               <Row label="Name" value={data.name} />
               <Row label="Email" value={data.email} />
-              <Row label="Contact" value={data.phone_code ? `${data.phone_code}${data.contact_number}` : data.contact_number} />
+              <Row label="Contact" value={data.contact_full} />
               <Row label="Status"><Pill v={data.status} activeBg="emerald" /></Row>
 
               {/* Role / Branch */}

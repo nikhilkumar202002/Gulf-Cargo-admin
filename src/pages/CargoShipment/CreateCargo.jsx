@@ -176,7 +176,7 @@ export default function CreateCargo() {
   const [invoiceShipment, setInvoiceShipment] = useState(null);
   const [senderOpen, setSenderOpen] = useState(false);
   const [receiverOpen, setReceiverOpen] = useState(false);
-  const [boxes, updateBoxes] = useImmer([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1 }] }]);
+  const [boxes, updateBoxes] = useImmer([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1, item_weight: 0 }] }]);
   const [toast, setToast] = useState({
     visible: false,
     text: "",
@@ -487,7 +487,7 @@ export default function CreateCargo() {
   const addBox = useCallback(() => {
     const nextNo = getNextBoxNumber();
     updateBoxes(draft => {
-      draft.push({ box_number: nextNo, box_weight: 0, items: [{ name: '', pieces: 1 }] });
+      draft.push({ box_number: nextNo, box_weight: 0, items: [{ name: '', pieces: 1, item_weight: 0 }] });
     });
   }, [getNextBoxNumber, updateBoxes]);
 
@@ -509,7 +509,7 @@ export default function CreateCargo() {
 
   const addItemToBox = useCallback((boxIndex) => {
     updateBoxes(draft => {
-      draft[boxIndex]?.items.push({ name: '', pieces: 1 });
+      draft[boxIndex]?.items.push({ name: '', pieces: 1, item_weight: 0 });
     });
   }, [updateBoxes]);
 
@@ -535,6 +535,9 @@ export default function CreateCargo() {
         it.pieces = Number.isNaN(n) ? 0 : Math.max(0, n);
       } else if (key === "name") {
         it.name = val;
+      } else if (key === "item_weight") {
+        const n = Number.parseFloat(val);
+        it.item_weight = Number.isFinite(n) ? Math.max(0, n) : 0;
       }
     });
   }, [updateBoxes]);
@@ -563,13 +566,13 @@ export default function CreateCargo() {
     });
   }, [selectedReceiver, updateForm]);
 
-  // Unified handleChange – no extra recompute here (derived handles it)
-  const handleChange = useCallback((e) => {
-    const { name, value } = e.target;
-    updateForm(draft => {
-      draft[name] = value;
-    });
-  }, [updateForm]);
+  // // Unified handleChange – no extra recompute here (derived handles it)
+  // const handleChange = useCallback((e) => {
+  //   const { name, value } = e.target;
+  //   updateForm(draft => {
+  //     draft[name] = value;
+  //   });
+  // }, [updateForm]);
 
   /* validation */
   const validateBeforeSubmit = useCallback(() => {
@@ -614,14 +617,14 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
     }
     return newForm;
   });
-  updateBoxes([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1 }] }]);
+  updateBoxes([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1, item_weight: 0 }] }]);
 }, [updateForm, updateBoxes, options.collectRoles, userProfile]);
 
   const onResetClick = useCallback(() => {
     const nextBranchId = form.branchId || tokenBranchId || "";
     updateForm(buildInitialForm(nextBranchId));
     setCollectedByOptions([]);
-    updateBoxes([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1 }] }]);
+    updateBoxes([{ box_number: '1', box_weight: 0, items: [{ name: '', pieces: 1, item_weight: 0 }] }]);
     setInvoiceShipment(null);
     showToast("Form reset.", "success");
   }, [form.branchId, tokenBranchId, showToast, updateForm, updateBoxes]);
@@ -637,6 +640,128 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
       }
     });
   }, [updateForm]);
+
+const buildCargoPayload = (currentForm, currentBoxes, derivedValues) => {
+  const { subtotal, billCharges, totalAmount, rows: R } = derivedValues;
+  const totalWeightVal = Number(totalWeight.toFixed(3));
+  const vatPercentageVal = Number(currentForm.vatPercentage || 0);
+  const vatCostVal = Number(((subtotal * vatPercentageVal) / 100).toFixed(2));
+
+  // ---- build payload ----
+  const grouped = {};
+  currentBoxes.forEach((box, bIdx) => {
+    const bn = String(box.box_number ?? bIdx + 1);
+    const numericWeight = Number(box.box_weight ?? box.weight ?? 0);
+    const boxWeightNum = Number.isFinite(numericWeight) ? Math.max(0, numericWeight) : 0;
+    if (!grouped[bn]) grouped[bn] = { items: [] };
+    let putWeightOnFirstItem = true;
+    (box.items || []).forEach((it) => {
+      const pieces = Number(it.pieces || 0);
+      const itemWeight = putWeightOnFirstItem ? boxWeightNum : 0;
+      putWeightOnFirstItem = false;
+      grouped[bn].items.push({
+        slno: String(grouped[bn].items.length + 1),
+        box_number: bn,
+        name: it.name || "",
+        piece_no: String(pieces),
+        unit_price: toDec(0, 2),
+        total_price: toDec(0, 2),
+        weight: toDec(itemWeight, 3),
+      });
+    });
+  });
+  const ordered = {};
+  Object.keys(grouped).sort((a, b) => Number(a) - Number(b)).forEach((k) => (ordered[k] = grouped[k]));
+
+  const flatItems = [];
+  currentBoxes.forEach((box, bIdx) => {
+    const bn = String(box.box_number ?? bIdx + 1);
+    const boxW = Number(box.box_weight ?? box.weight ?? 0) || 0;
+    const list = Array.isArray(box.items) && box.items.length ? box.items : [{ name: "", pieces: 0 }];
+    let putWeightOnFirst = true;
+    list.forEach((it, i) => {
+      const name = (it.name && String(it.name).trim()) || `Box ${bn} contents`;
+      const pcs = Number.isFinite(Number(it.pieces)) ? Number(it.pieces) : 0;
+      flatItems.push({
+        slno: String(i + 1),
+        box_number: bn,
+        name,
+        piece_no: String(pcs),
+        unit_price: "0.00",
+        total_price: "0.00",
+        weight: (putWeightOnFirst ? boxW : 0).toFixed(3),
+      });
+      putWeightOnFirst = false;
+    });
+  });
+
+  const boxWeights = [...currentBoxes]
+    .sort((a, b) => Number(a.box_number ?? 0) - Number(b.box_number ?? 0))
+    .map((box) => {
+      const w = Number(box.box_weight ?? box.weight ?? 0);
+      const wn = Number.isFinite(w) ? Math.max(0, w) : 0;
+      return wn.toFixed(3);
+    });
+
+  return {
+    branch_id: Number(currentForm.branchId),
+    booking_no: currentForm.invoiceNo,
+    sender_id: Number(currentForm.senderId),
+    receiver_id: Number(currentForm.receiverId),
+    shipping_method_id: Number(currentForm.shippingMethodId),
+    payment_method_id: Number(currentForm.paymentMethodId),
+    status_id: Number(currentForm.statusId || DEFAULT_STATUS_ID),
+    date: currentForm.date,
+    time: currentForm.time,
+    collected_by: currentForm.collectedByRoleName || "",
+    collected_by_id: Number(currentForm.collectedByRoleId),
+    name_id: Number(currentForm.collectedByPersonId),
+    lrl_tracking_code: currentForm.lrlTrackingCode || null,
+    delivery_type_id: Number(currentForm.deliveryTypeId),
+    special_remarks: currentForm.specialRemarks || null,
+    items: flatItems,
+    total_cost: +subtotal.toFixed(2),
+    vat_percentage: +vatPercentageVal.toFixed(2),
+    vat_cost: +vatCostVal.toFixed(2),
+    net_total: +totalAmount.toFixed(2),
+    total_weight: totalWeightVal,
+    box_weight: boxWeights,
+    boxes: ordered,
+    quantity_total_weight: R.total_weight.qty,
+    unit_rate_total_weight: R.total_weight.rate,
+    amount_total_weight: R.total_weight.amount,
+    quantity_duty: R.duty.qty,
+    unit_rate_duty: R.duty.rate,
+    amount_duty: R.duty.amount,
+    quantity_packing_charge: R.packing_charge.qty,
+    unit_rate_packing_charge: R.packing_charge.rate,
+    amount_packing_charge: R.packing_charge.amount,
+    quantity_additional_packing_charge: R.additional_packing_charge.qty,
+    unit_rate_additional_packing_charge: R.additional_packing_charge.rate,
+    amount_additional_packing_charge: R.additional_packing_charge.amount,
+    quantity_insurance: R.insurance.qty,
+    unit_rate_insurance: R.insurance.rate,
+    amount_insurance: R.insurance.amount,
+    quantity_awb_fee: R.awb_fee.qty,
+    unit_rate_awb_fee: R.awb_fee.rate,
+    amount_awb_fee: R.awb_fee.amount,
+    quantity_vat_amount: R.vat_amount.qty,
+    unit_rate_vat_amount: R.vat_amount.rate,
+    amount_vat_amount: R.vat_amount.amount,
+    quantity_volume_weight: R.volume_weight.qty,
+    unit_rate_volume_weight: R.volume_weight.rate,
+    amount_volume_weight: R.volume_weight.amount,
+    quantity_other_charges: R.other_charges.qty,
+    unit_rate_other_charges: R.other_charges.rate,
+    amount_other_charges: R.other_charges.amount,
+    quantity_discount: R.discount.qty,
+    unit_rate_discount: R.discount.rate,
+    amount_discount: R.discount.amount,
+    bill_charges: +billCharges.toFixed(2),
+    total_amount: totalAmount,
+    no_of_pieces: Number(currentForm.charges.no_of_pieces || 0),
+  };
+};
 
   const submit = useCallback(
     async (e) => {
@@ -658,125 +783,11 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
         return;
       }
 
-      // ---- build payload (unchanged) ----
-      const grouped = {};
-      boxes.forEach((box, bIdx) => {
-        const bn = String(box.box_number ?? bIdx + 1);
-        const numericWeight = Number(box.box_weight ?? box.weight ?? 0);
-        const boxWeightNum = Number.isFinite(numericWeight) ? Math.max(0, numericWeight) : 0;
-        if (!grouped[bn]) grouped[bn] = { items: [] };
-        let putWeightOnFirstItem = true;
-        (box.items || []).forEach((it) => {
-          const pieces = Number(it.pieces || 0);
-          const itemWeight = putWeightOnFirstItem ? boxWeightNum : 0;
-          putWeightOnFirstItem = false;
-          grouped[bn].items.push({
-            slno: String(grouped[bn].items.length + 1),
-            box_number: bn,
-            name: it.name || "",
-            piece_no: String(pieces),
-            unit_price: toDec(0, 2),
-            total_price: toDec(0, 2),
-            weight: toDec(itemWeight, 3),
-          });
-        });
-      });
-      const ordered = {};
-      Object.keys(grouped).sort((a, b) => Number(a) - Number(b)).forEach((k) => (ordered[k] = grouped[k]));
-
-      const flatItems = [];
-      boxes.forEach((box, bIdx) => {
-        const bn = String(box.box_number ?? bIdx + 1);
-        const boxW = Number(box.box_weight ?? box.weight ?? 0) || 0;
-        const list = Array.isArray(box.items) && box.items.length ? box.items : [{ name: "", pieces: 0 }];
-        let putWeightOnFirst = true;
-        list.forEach((it, i) => {
-          const name = (it.name && String(it.name).trim()) || `Box ${bn} contents`;
-          const pcs = Number.isFinite(Number(it.pieces)) ? Number(it.pieces) : 0;
-          flatItems.push({
-            slno: String(i + 1),
-            box_number: bn,
-            name,
-            piece_no: String(pcs),
-            unit_price: "0.00",
-            total_price: "0.00",
-            weight: (putWeightOnFirst ? boxW : 0).toFixed(3),
-          });
-          putWeightOnFirst = false;
-        });
-      });
-      if (flatItems.length === 0) {
+      const payload = buildCargoPayload(form, boxes, derived);
+      if (payload.items.length === 0) {
         setMsg({ text: "Add at least one box or item.", variant: "error" });
         return;
       }
-
-      const boxWeights = [...boxes]
-        .sort((a, b) => Number(a.box_number ?? 0) - Number(b.box_number ?? 0))
-        .map((box) => {
-          const w = Number(box.box_weight ?? box.weight ?? 0);
-          const wn = Number.isFinite(w) ? Math.max(0, w) : 0;
-          return wn.toFixed(3);
-        });
-
-      const R = derived.rows;
-      const payload = {
-        branch_id: Number(form.branchId),
-        booking_no: form.invoiceNo, // we send what we have; backend may override
-        sender_id: Number(form.senderId),
-        receiver_id: Number(form.receiverId),
-        shipping_method_id: Number(form.shippingMethodId),
-        payment_method_id: Number(form.paymentMethodId),
-        status_id: Number(form.statusId || DEFAULT_STATUS_ID),
-        date: form.date,
-        time: form.time,
-        collected_by: form.collectedByRoleName || "",
-        collected_by_id: Number(form.collectedByRoleId),
-        name_id: Number(form.collectedByPersonId),
-        lrl_tracking_code: form.lrlTrackingCode || null,
-        delivery_type_id: Number(form.deliveryTypeId),
-        special_remarks: form.specialRemarks || null,
-        items: flatItems,
-        total_cost: +subtotal.toFixed(2),
-        vat_percentage: +vatPercentage.toFixed(2),
-        vat_cost: +vatCost.toFixed(2),
-        net_total: +derived.totalAmount.toFixed(2),
-        total_weight: Number(totalWeight.toFixed(3)),
-        box_weight: boxWeights,
-        boxes: ordered,
-        quantity_total_weight: R.total_weight.qty,
-        unit_rate_total_weight: R.total_weight.rate,
-        amount_total_weight: R.total_weight.amount,
-        quantity_duty: R.duty.qty,
-        unit_rate_duty: R.duty.rate,
-        amount_duty: R.duty.amount,
-        quantity_packing_charge: R.packing_charge.qty,
-        unit_rate_packing_charge: R.packing_charge.rate,
-        amount_packing_charge: R.packing_charge.amount,
-        quantity_additional_packing_charge: R.additional_packing_charge.qty,
-        unit_rate_additional_packing_charge: R.additional_packing_charge.rate,
-        amount_additional_packing_charge: R.additional_packing_charge.amount,
-        quantity_insurance: R.insurance.qty,
-        unit_rate_insurance: R.insurance.rate,
-        amount_insurance: R.insurance.amount,
-        quantity_awb_fee: R.awb_fee.qty,
-        unit_rate_awb_fee: R.awb_fee.rate,
-        amount_awb_fee: R.awb_fee.amount,
-        quantity_vat_amount: R.vat_amount.qty,
-        unit_rate_vat_amount: R.vat_amount.rate,
-        amount_vat_amount: R.vat_amount.amount,
-        quantity_volume_weight: R.volume_weight.qty,
-        unit_rate_volume_weight: R.volume_weight.rate,
-        amount_volume_weight: R.volume_weight.amount,
-        quantity_other_charges: R.other_charges.qty,
-        unit_rate_other_charges: R.other_charges.rate,
-        amount_other_charges: R.other_charges.amount,
-        quantity_discount: R.discount.qty,
-        unit_rate_discount: R.discount.rate,
-        amount_discount: R.discount.amount,
-        bill_charges: +billCharges.toFixed(2),
-        total_amount: derived.totalAmount,
-        no_of_pieces: Number(form.charges.no_of_pieces || 0),
-      };
 
       try {
         setLoading(true);
@@ -834,24 +845,11 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
       }
     },
     [
-      boxes,
       form,
-      subtotal,
-      billCharges,
-      vatCost,
-      totalWeight,
       validateBeforeSubmit,
-      tokenBranchId,
       softResetForNext,
-      showToast,
-      setMsg,
-      setLoading,
-      setInvoiceShipment,
-      setInvoiceOpen,
-      // Add derived values to ensure the payload is always fresh
-      derived.totalAmount,
-      derived.rows,
-      vatPercentage
+      derived,
+      boxes,
     ]
   );
 

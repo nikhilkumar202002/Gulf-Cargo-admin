@@ -187,6 +187,7 @@ export default function EditStaff() {
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState("");
   const [avatarRemoved, setAvatarRemoved] = useState(false);
+  const [avatarFetchAttempted, setAvatarFetchAttempted] = useState(false);
 
   // docs
   const [newDocs, setNewDocs] = useState([]);
@@ -199,6 +200,7 @@ export default function EditStaff() {
     try {
       const res = await axiosInstance.get(url, { responseType: "blob" });
       const blobUrl = URL.createObjectURL(res.data);
+      setAvatarFetchAttempted(true);
       setAvatarPreview(blobUrl);
     } catch {
       // final fallback: try adding /storage if path implies it
@@ -208,11 +210,12 @@ export default function EditStaff() {
         try {
           const res2 = await axiosInstance.get(patched, { responseType: "blob" });
           const blobUrl2 = URL.createObjectURL(res2.data);
+          setAvatarFetchAttempted(true);
           setAvatarPreview(blobUrl2);
         } catch {/* give up */}
       }
     }
-  };
+  };  
 
   useEffect(() => {
     let cancel = false;
@@ -243,6 +246,7 @@ export default function EditStaff() {
         setAvatarPreview(avatarAbs);
         setAvatarRemoved(false);
         setAvatarFile(null);
+        setAvatarFetchAttempted(false);
         setNewDocs([]);
         setRemoveDocIds(new Set());
       } catch (e) {
@@ -443,10 +447,12 @@ export default function EditStaff() {
                             src={avatarPreview}
                             alt="avatar"
                             className="h-full w-full object-cover"
-                            onError={() => {
+                            onError={(e) => {
                               const raw = f.avatar_url || "";
                               const url = resolveFileUrl(raw);
-                              if (url && !/^data:/i.test(avatarPreview)) fetchProtectedImage(url);
+                              if (url && !avatarFetchAttempted && !/^data:/i.test(avatarPreview)) {
+                                fetchProtectedImage(url);
+                              }
                             }}
                             loading="lazy"
                             referrerPolicy="no-referrer"

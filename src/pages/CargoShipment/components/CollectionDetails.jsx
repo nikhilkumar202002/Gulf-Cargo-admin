@@ -10,7 +10,7 @@ export const CollectionDetails = React.memo(({ form, onRoleChange, updateForm, c
     return collectedByOptions.find(opt => {
       const valueId = form.collectedByRoleName === "Driver"
         ? opt?.id ?? opt?.driver_id ?? null
-        : opt?.staff_id ?? opt?.user_id ?? opt?.id ?? null;
+        : opt?.user_id ?? opt?.staff_id ?? opt?.id ?? null;
       return String(valueId) === String(form.collectedByPersonId);
     });
   }, [form.collectedByPersonId, form.collectedByRoleName, collectedByOptions]);

@@ -51,6 +51,27 @@ export default function Header() {
     navigate("/login", { replace: true });
   };
 
+  const updateProfileState = (profile) => {
+    if (!profile) return;
+    const nm = typeof profile?.name === "string" ? profile.name : "User";
+    const rawPic = profile?.profile_pic || "";
+    const pic = resolveAssetUrl(rawPic) || "/avatar.png";
+    const bObj = profile?.branch;
+    const bName =
+      (bObj && typeof bObj.name === "string" && bObj.name) ||
+      (typeof profile?.branch_name === "string" && profile.branch_name) ||
+      (typeof bObj === "string" ? bObj : "") ||
+      "";
+    const bIdRaw = (bObj && bObj.id != null ? bObj.id : profile?.branch_id);
+    const bId = bIdRaw != null && !Number.isNaN(Number(bIdRaw)) ? Number(bIdRaw) : null;
+
+    setUserName(nm);
+    setAvatarUrl(pic);
+    setBranchName(String(bName));
+    setBranchId(bId);
+    dispatch(setBranchGlobal({ branchId: bId, branchName: String(bName) }));
+  };
+
   useEffect(() => {
     const onUnauthorized = () => handleLogout();
     window.addEventListener("auth:unauthorized", onUnauthorized);
@@ -58,38 +79,33 @@ export default function Header() {
   }, []); // eslint-disable-line
 
   useEffect(() => {
-    let cancelled = false;
+    // --- OPTIMIZATION: Load from cache first, then fetch latest ---
+
+    // 1. Immediately try to load from localStorage
+    try {
+      const authData = JSON.parse(localStorage.getItem("auth") || "{}");
+      const cachedProfile = authData?.user;
+      if (cachedProfile) {
+        updateProfileState(cachedProfile);
+        setLoadingProfile(false); // Stop loading skeleton immediately
+      }
+    } catch {
+      // Cached data might be invalid, proceed to fetch
+    }
+
+    // 2. Fetch latest profile from API in the background
     (async () => {
-      setLoadingProfile(true);
       try {
         const payload = await getProfile();
         const profile = payload?.user ?? payload?.data?.user ?? payload;
-        const nm = typeof profile?.name === "string" ? profile.name : "User";
-        const rawPic = profile?.profile_pic || "";
-        const pic = resolveAssetUrl(rawPic) || "/avatar.png";
-        const bObj = profile?.branch;
-        const bName =
-          (bObj && typeof bObj.name === "string" && bObj.name) ||
-          (typeof profile?.branch_name === "string" && profile.branch_name) ||
-          (typeof bObj === "string" ? bObj : "") ||
-          "";
-        const bIdRaw = (bObj && bObj.id != null ? bObj.id : profile?.branch_id);
-        const bId = bIdRaw != null && !Number.isNaN(Number(bIdRaw)) ? Number(bIdRaw) : null;
-
-        if (!cancelled) {
-          setUserName(nm);
-          setAvatarUrl(pic);
-          setBranchName(String(bName));
-          setBranchId(bId);
-          dispatch(setBranchGlobal({ branchId: bId, branchName: String(bName) }));
-        }
+        updateProfileState(profile);
       } catch (e) {
-        // ignore
+        console.error("Failed to fetch latest profile", e);
       } finally {
-        if (!cancelled) setLoadingProfile(false);
+        // Ensure loading is off, even if initial cache load failed
+        setLoadingProfile(false);
       }
     })();
-    return () => { cancelled = true; };
   }, [dispatch]);
 
   useEffect(() => {
@@ -98,8 +114,7 @@ export default function Header() {
       { id: 2, message: "Invoice generated successfully 📄" },
       { id: 3, message: "New update available, please refresh 🔄" },
     ];
-    const t = setTimeout(() => setNotifications(dummy), 800);
-    return () => clearTimeout(t);
+    setNotifications(dummy);
   }, []);
 
   useEffect(() => {

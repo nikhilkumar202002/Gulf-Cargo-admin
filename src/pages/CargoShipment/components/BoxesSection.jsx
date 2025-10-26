@@ -70,6 +70,7 @@ export const BoxesSection = React.memo(({
                   <th className="px-3 py-2 w-12 text-center">Sl.</th>
                   <th className="px-3 py-2">Item</th>
                   <th className="px-3 py-2 w-28 text-right">Pieces</th>
+                  <th className="px-3 py-2 w-32 text-right">Weight (kg)</th>
                   <th className="px-3 py-2 w-24 text-right">Actions</th>
                 </tr>
               </thead>
@@ -92,6 +93,18 @@ export const BoxesSection = React.memo(({
                         placeholder="0"
                         value={it.pieces}
                         onChange={(e) => setBoxItem(boxIndex, itemIndex, "pieces", Number.parseInt(e.target.value || 0, 10) || 0)}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                        placeholder="0.000"
+                        value={it.item_weight ?? 0}
+                        onChange={(e) => setBoxItem(boxIndex, itemIndex, "item_weight", e.target.value)}
+                        title="Optional item weight"
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
