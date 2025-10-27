@@ -7,6 +7,7 @@ import { Toaster, toast } from "react-hot-toast";
 import { getPartyById, getParties } from "../../api/partiesApi";
 import { getUserById } from "../../api/accountApi";
 import { getCargoById, updateCargo, normalizeCargoToInvoice } from "../../api/createCargoApi";
+import BillModal from "./components/BillModal";
 
 /** Charge keys we handle (aligns with your response) */
 const CHARGE_KEYS = [
@@ -86,6 +87,9 @@ export default function EditCargo({ cargoId: propCargoId, onSaved, onCancel, isM
   const navigate = useNavigate();
   const [state, setState] = useState(initialState);
 
+  const [invoiceData, setInvoiceData] = useState(null);
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+
   const { sender, receiver, collectedBy, detailsLoading } = state;
 
 
@@ -108,6 +112,7 @@ export default function EditCargo({ cargoId: propCargoId, onSaved, onCancel, isM
     f.branch_label = c.branch_name || "";
     f.collected_by_role = c.collected_by || "";
     f.collected_by_person_id = c.name_id || c.collected_by_person_id || null;
+    f.collected_by_person = c.collected_by_person || ""; // Add this line
     f.sender_id = String(c.sender_id || "");
     f.sender_name = c.sender_name || "";
     f.receiver_id = String(c.receiver_id || "");
@@ -348,6 +353,18 @@ if (f.items.length === 0) {
     return { subtotal, vat, grand: subtotal + vat };
   }, [state.form]);
 
+  // --- Auto-calculate total weight from boxes ---
+  useEffect(() => {
+    const totalWeightFromBoxes = (state.form.items || []).reduce(
+      (sum, box) => sum + n(box.box_weight),
+      0
+    );
+    setForm(f => ({
+      ...f,
+      quantity_total_weight: totalWeightFromBoxes,
+    }));
+  }, [state.form.items, setForm, n]);
+
   // --- UI helpers ---
   const ReadonlyField = ({ label, value }) => (
     <div>
@@ -432,6 +449,26 @@ if (f.items.length === 0) {
     });
   }, [setForm, n]);
 
+  const handlePrint = () => {
+    const payload = formatForApi(state.form, state.originalCargo);
+
+    // The invoice component needs sender/receiver names, which might not be in the payload.
+    // We'll merge them from the form state and the fetched details to ensure they appear on the invoice.
+    const dataForInvoice = {
+      ...payload,
+      sender: sender, // Use the full sender object
+      receiver: receiver, // Use the full receiver object
+      sender_name: sender?.name || state.form.sender_name,
+      receiver_name: receiver?.name || state.form.receiver_name,
+      branch_name: state.form.branch_label,
+      shipping_method: state.form.shipping_method_name,
+      payment_method: state.form.payment_method_name,
+    };
+
+    setInvoiceData(dataForInvoice);
+    setInvoiceModalOpen(true);
+  };
+
 // --- Submit ---
 const onSubmit = async (e) => {
   e.preventDefault();
@@ -466,6 +503,54 @@ const onSubmit = async (e) => {
   }
 };
 
+  // --- UI: Skeleton Loader ---
+  const Skel = ({ w = "100%", h = 12, className = "" }) => (
+    <div
+      className={`animate-pulse rounded bg-slate-200/80 ${className}`}
+      style={{ width: w, height: h }}
+    />
+  );
+  const SkelField = ({ h = 38 }) => <Skel h={h} />;
+  const SkelLine = ({ w = "40%", className = "mb-1" }) => <Skel w={w} h={10} className={className} />;
+
+  const SkeletonEditCargo = () => (
+    <div className="max-w-7xl mx-auto bg-white p-6 rounded-xl shadow-sm space-y-8">
+      <div className="flex items-center justify-between">
+        <Skel w="200px" h={24} />
+        <div className="text-right space-y-1">
+          <Skel w="150px" h={14} />
+          <Skel w="120px" h={14} />
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <div key={i}><SkelLine /><SkelField /></div>)}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="border rounded-lg p-4 space-y-2">
+              <SkelLine w="30%" />
+              <SkelField />
+              <div className="grid grid-cols-2 gap-4 mt-3"><SkelField /> <SkelField /></div>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => <div key={i}><SkelLine /><SkelField /></div>)}
+        </div>
+      </div>
+
+      <div className="border rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4"><Skel h={38} w="200px" /><Skel h={38} w="200px" /></div>
+          <Skel h={28} w="100px" />
+        </div>
+        <Skel h={120} />
+      </div>
+    </div>
+  );
+
   // --- Render ---
   if (!id) {
     return (
@@ -478,14 +563,7 @@ const onSubmit = async (e) => {
     );
   }
 
-  const Skel = ({ w = "100%", h = 12, className = "" }) => (
-    <div
-      className={`animate-pulse rounded bg-slate-200/80 ${className}`}
-      style={{ width: w, height: h }}
-    />
-  );
-
-  if (state.loading) return <div className="p-6">Loading…</div>;
+  if (state.loading) return <div className="p-6"><SkeletonEditCargo /></div>;
 
   const resolveInvoice = (form) => {
     return form.invoice_number || form.booking_no || form.bookingNo || '—';
@@ -508,10 +586,10 @@ const onSubmit = async (e) => {
         className="max-w-7xl mx-auto bg-white p-6 rounded-xl shadow-sm space-y-8"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Edit Cargo #{id}</h2>
+          <h2 className="text-xl font-semibold">Edit Cargo</h2>
           <div className="text-right text-sm text-gray-600 space-y-0.5">
             <div>Invoice: <span className="font-medium">{(()=>{const v=resolveInvoice(state.form); return v ? String(v) : '—';})()}</span></div>
-            <div>LRL: <span className="font-medium">{state.form?.lrl_tracking_code || '—'}</span></div>
+            {/* <div>LRL: <span className="font-medium">{state.form?.lrl_tracking_code || '—'}</span></div> */}
           </div>
         </div>
 
@@ -527,7 +605,7 @@ const onSubmit = async (e) => {
             />
             <ReadonlyField
               label="Collected By (Person)"
-              value={collectedBy?.full_name || collectedBy?.staff_name || collectedBy?.name || "—"}
+              value={collectedBy?.full_name || collectedBy?.staff_name || collectedBy?.name || f.collected_by_person || "—"}
             />
           </div>
 
@@ -541,7 +619,7 @@ const onSubmit = async (e) => {
                 <>
                   <ReadonlyField label="Sender/Customer" value={sender?.name || f.sender_name} />
                   <div className="grid grid-cols-2 gap-4 mt-3">
-                    <ReadonlyField label="Address" value={sender?.address || "—"} />
+                    <ReadonlyField label="Address" value={sender?.address_line || sender?.address || "—"} />
                     <ReadonlyField label="Phone" value={sender?.contact_number || "—"} />
                   </div>
                 </>
@@ -737,6 +815,7 @@ const onSubmit = async (e) => {
                       type="text"
                       value={f[`quantity_${k}`] ?? ''}
                       onChange={(e) => handleChargeChange(k, 'qty', e.target.value)}
+                      readOnly={k === 'total_weight'}
                       className="w-full border rounded-md px-2 py-1"
                     />
                   </td>
@@ -801,6 +880,13 @@ const onSubmit = async (e) => {
         <div className="flex justify-end gap-3 pt-4 border-t">
           <button
             type="button"
+            onClick={handlePrint}
+            className="mr-auto border px-4 py-2 rounded-md bg-sky-50 text-sky-700 hover:bg-sky-100"
+          >
+            Print Invoice
+          </button>
+          <button
+            type="button"
             onClick={onCancel || (() => navigate(-1))}
             className="border px-4 py-2 rounded-md hover:bg-gray-100"
           >
@@ -817,6 +903,12 @@ const onSubmit = async (e) => {
           </button>
         </div>
       </form>
+
+      <BillModal
+        open={invoiceModalOpen}
+        onClose={() => setInvoiceModalOpen(false)}
+        shipment={invoiceData}
+      />
     </div>
   );
 }
