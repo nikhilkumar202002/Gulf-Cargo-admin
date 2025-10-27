@@ -1,5 +1,5 @@
 // src/pages/Cargos/AllCargoList.jsx
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { GiCargoCrate } from "react-icons/gi";
@@ -108,18 +108,15 @@ export default function AllCargoList() {
   }, []);
 
   /* ---------------- Fetch Cargos ---------------- */
- const fetchCargos = async () => {
-  setLoading(true);
-  setError("");
-  try {
-    let page = 1;
-    let all = [];
-    let hasNext = true;
+  const [pagination, setPagination] = useState({ total: 0, lastPage: 1 });
 
-    while (hasNext) {
+  const fetchCargos = async (pageToFetch = 1) => {
+    setLoading(true);
+    setError("");
+    try {
       const response = await listCargos({
-        page,
-        per_page: 100, // adjust if backend limits this
+        page: pageToFetch,
+        per_page: perPage,
         sender_name: filter.sender || undefined,
         receiver_name: filter.receiver || undefined,
         from_date: filter.fromDate || undefined,
@@ -127,46 +124,53 @@ export default function AllCargoList() {
         status_id: filter.status || undefined,
       });
 
-      const data =
-        Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(response?.items)
-          ? response.items
-          : Array.isArray(response)
-          ? response
-          : [];
+      // Handle common Laravel pagination structures
+      const data = response?.data || response?.items || response || [];
+      const list = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
 
-      if (data.length === 0) break;
-
-      all = [...all, ...data];
-      // console.log(`✅ Page ${page} fetched: ${data.length} cargos`);
-      page++;
-
-      // stop when less than per_page is returned
-      hasNext = data.length >= 100;
+      setAllCargos(list);
+      setPagination({
+        total: data?.total || response?.total || 0,
+        lastPage: data?.last_page || response?.last_page || 1,
+      });
+    } catch (e) {
+      setError(e?.message || "Failed to load cargos.");
+      setAllCargos([]);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setAllCargos(all);
-  } catch (e) {
-    
-    setError(e?.message || "Failed to load cargos.");
-    setAllCargos([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  // This is a ref to hold the timeout for debouncing
+  const debounceTimeoutRef = useRef(null);
 
   useEffect(() => {
-    fetchCargos();
-  }, []); // fetch on mount
+    // Clear any existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set a new timeout to fetch data after 500ms of inactivity
+    debounceTimeoutRef.current = setTimeout(() => {
+      fetchCargos(page);
+    }, 500);
+
+    // Cleanup function to clear the timeout if the component unmounts
+    // or if dependencies change again before the timeout fires.
+    return () => clearTimeout(debounceTimeoutRef.current);
+  }, [page, filter, perPage]); // Re-fetch when page, filters, or items per page change
 
   /* ---------------- Filters ---------------- */
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
+    // When a filter changes, reset to page 1 and update the filter value
+    setPage(1);
     setFilter((f) => ({ ...f, [name]: value }));
   };
 
-  const applyFilters = () => fetchCargos();
+  const applyFilters = () => {
+    fetchCargos(1);
+  };
   const resetFilters = () => {
     setFilter(initialFilter);
     fetchCargos();
@@ -174,12 +178,12 @@ export default function AllCargoList() {
 
   /* ---------------- Pagination (Client Side) ---------------- */
   const totalItems = allCargos.length;
-  const totalPages = Math.ceil(totalItems / perPage);
+  const totalPages = pagination.lastPage;
 
   const pagedCargos = useMemo(() => {
-    const start = (page - 1) * perPage;
-    return allCargos.slice(start, start + perPage);
-  }, [allCargos, page, perPage]);
+    // Data is already paged by the server
+    return allCargos;
+  }, [allCargos]);
 
   const handleNextPage = () => {
     if (page < totalPages) setPage((p) => p + 1);
@@ -193,7 +197,7 @@ export default function AllCargoList() {
   const handleExcelExport = () => {
     if (!allCargos.length) return alert("No cargos to export.");
 
-    const toRows = allCargos.map((c) => ({
+    const toRows = pagedCargos.map((c) => ({
       ID: c.id,
       "Booking No": c.booking_no,
       Branch: c.branch_name,
@@ -241,7 +245,8 @@ export default function AllCargoList() {
           <div className="flex items-center gap-2">
             <GiCargoCrate className="h-6 w-6 text-[#ED2624]" />
             <h1 className="text-xl font-semibold text-slate-900">All Cargo</h1>
-            <span className="ml-3 rounded-lg bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-800 ring-1 ring-indigo-300">
+            <span className="ml-3 rounded-lg bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-800 ring-1 ring-indigo-300"
+            >
               Total Cargos: {totalItems}
             </span>
           </div>
@@ -320,13 +325,6 @@ export default function AllCargoList() {
               onChange={handleFilterChange}
               className="rounded-lg bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200 focus:ring-indigo-300"
             />
-            <button
-              onClick={applyFilters}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#262262] px-3 py-2 text-sm font-medium text-white hover:bg-[#161436]"
-            >
-              <IoIosSearch className="h-4 w-4" />
-              Search
-            </button>
           </div>
         </div>
 
@@ -430,7 +428,7 @@ export default function AllCargoList() {
           <div className="mt-4 flex items-center justify-between">
             <div className="text-sm text-slate-600">
               Page <b>{page}</b> of <b>{totalPages}</b> — Showing{" "}
-              <b>{perPage}</b> per page (Total: <b>{totalItems}</b>)
+              <b>{pagedCargos.length}</b> per page (Total: <b>{pagination.total}</b>)
             </div>
             <div className="flex items-center gap-2">
               <button

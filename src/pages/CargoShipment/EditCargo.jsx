@@ -181,9 +181,6 @@ f.items = Array.from(itemsByBox.values()).sort((a, b) => n(a.box_number) - n(b.b
 if (f.items.length === 0) {
   f.items = [{ box_number: "1", box_weight: 0, items: [{ name: "", pieces: 1, item_weight: 0 }] }];
 }
-
-    console.log("📦 Parsed items loaded into form:", f.items);
-
     return f;
   };
 
@@ -285,7 +282,7 @@ if (f.items.length === 0) {
         loading: false,
       }));
     } catch (e) {
-      console.error(e);
+      
       setState(s => ({ ...s, loading: false, error: "Failed to load cargo." }));
       toast.error("Failed to load cargo.");
     }
@@ -321,7 +318,7 @@ if (f.items.length === 0) {
         setState(s => ({ ...s, sender: senderData, receiver: receiverData, collectedBy: collectedByData, detailsLoading: false }));
 
       } catch (e) {
-        console.error("Failed to load party details", e);
+  
         if (alive) setState(s => ({ ...s, detailsLoading: false }));
       }
     })();
@@ -359,11 +356,14 @@ if (f.items.length === 0) {
       (sum, box) => sum + n(box.box_weight),
       0
     );
-    setForm(f => ({
-      ...f,
-      quantity_total_weight: totalWeightFromBoxes,
-    }));
-  }, [state.form.items, setForm, n]);
+    // Only update if the value has changed to prevent re-render loops
+    if (totalWeightFromBoxes !== state.form.quantity_total_weight) {
+      setForm(f => ({
+        ...f,
+        quantity_total_weight: totalWeightFromBoxes,
+      }));
+    }
+  }, [state.form.items]);
 
   // --- UI helpers ---
   const ReadonlyField = ({ label, value }) => (
@@ -485,8 +485,6 @@ const onSubmit = async (e) => {
   setState((s) => ({ ...s, saving: true }));
   try {
     const payload = formatForApi(f, originalCargo);
-    console.log("🔄 Updating cargo:", finalId, payload);
-
     await toast.promise(updateCargo(finalId, payload), {
       loading: "Saving…",
       success: "Updated successfully",
@@ -496,7 +494,7 @@ const onSubmit = async (e) => {
     if (onSaved) onSaved();
     else navigate(-1);
   } catch (e1) {
-    console.error("❌ Update error", e1);
+
     toast.error("Save failed");
   } finally {
     setState((s) => ({ ...s, saving: false }));

@@ -202,7 +202,7 @@ function buildCargoPayload(currentForm, currentBoxes, derivedValues, totalWeight
  */
 async function getCargoById(id) {
   if (!id) throw new Error("getCargoById requires id");
-  const endpoints = [`/cargos/${id}`, `/cargo/${id}`, `/public/api/cargo/${id}`, `/public/api/cargos/${id}`];
+  const endpoints = [`/cargos/${id}`, `/cargo/${id}`, `/public/api/cargo/${id}`, `/public/api/cargos/${id}`, `/api/cargo/show/${id}`];
   let lastErr = null;
   for (const ep of endpoints) {
     try {
