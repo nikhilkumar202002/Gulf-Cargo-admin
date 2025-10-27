@@ -1,9 +1,9 @@
 // src/pages/PhysicalBills/BillsViews.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
-import { getPhysicalBills, importCustomShipments } from "../../api/billApi";
+import { getPhysicalBills, importCustomShipments,deletePhysicalBill  } from "../../api/billApi";
 import { Link } from "react-router-dom";
-import { FiEye, FiSearch, FiUpload, FiFilter, FiInbox } from "react-icons/fi";
+import { FiEye, FiSearch, FiUpload, FiFilter, FiInbox,FiEdit2, FiTrash2  } from "react-icons/fi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 
 function BillsViews() {
@@ -14,6 +14,10 @@ function BillsViews() {
   const [page, setPage] = useState(1);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+const [selectedBill, setSelectedBill] = useState(null);
+
   const pageSize = 10;
 
   /** ---------- small utils ---------- */
@@ -41,8 +45,6 @@ function BillsViews() {
   const pcs = (r) => num(r?.pcs ?? r?.pieces);
   const weight = (r) => num(r?.weight ?? r?.total_weight ?? r?.gross_weight);
 
-  const statusText = (r) => str(r?.status || r?.current_status || r?.state).trim();
-
   const isoDate = (r) => r?.created_at || r?.date || r?.createdDate || r?.created_at_utc || null;
 
   const fmtDate = (v) => {
@@ -62,6 +64,12 @@ function BillsViews() {
       return str(v);
     }
   };
+
+  const handleView = (bill) => {
+  setSelectedBill(bill);
+  setViewModalOpen(true);
+};
+
 
   /** ---------- data fetch ---------- */
   const fetchBills = async () => {
@@ -193,49 +201,89 @@ useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [totalPages, page]);
 
+  const loadBills = async () => {
+  setLoading(true);
+  try {
+    const list = await getPhysicalBills();
+    setRows(list);
+  } catch (err) {
+    console.error("Failed to load bills:", err);
+    toast.error("Failed to load bills");
+  } finally {
+    setLoading(false);
+  }
+};
+
+useEffect(() => {
+  loadBills();
+}, []);
+
+const handleDelete = async (id) => {
+  if (!id) return toast.error("Invalid bill ID");
+  if (!window.confirm("Are you sure you want to delete this bill?")) return;
+
+  try {
+    const res = await deletePhysicalBill(id);
+    toast.success(res?.message || "Bill deleted successfully");
+    await fetchBills(); // reload
+  } catch (error) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      "Failed to delete bill.";
+    toast.error(msg);
+    console.error("Delete failed:", error);
+  }
+};
+
+
   /** ---------- UI ---------- */
   return (
-   <section className="mx-auto max-w-6xl px-3 sm:px-4 py-6 sm:py-8">
+   <section className="mx-auto max-w-6xl px-4 sm:px-6 py-8 font-[Inter]">
   <Toaster position="top-right" />
 
-  {/* Page header */}
-  <header className="mb-6">
-    <div className="flex items-center justify-between gap-3">
+  {/* Header */}
+  <header className="mb-8">
+    <div className="flex items-center justify-between flex-wrap gap-3">
       <div>
-        <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-slate-900">
+        <h2 className="text-2xl font-semibold text-slate-900 tracking-tight">
           Bills
         </h2>
-        <p className="text-xs sm:text-sm text-slate-500">List of physical bills</p>
+        <p className="text-sm text-slate-500">
+          Manage and review all your physical bills in one place.
+        </p>
       </div>
-      {/* Quick count (optional) */}
-      <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
-        <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
-          Total:&nbsp;<span className="font-medium text-slate-700">{rows.length}</span>
+
+      {/* Quick Count */}
+      <div className="hidden sm:flex items-center gap-2">
+        <span className="inline-flex items-center rounded-full bg-gradient-to-r from-emerald-50 to-sky-50 border border-slate-200 px-3 py-1 text-sm">
+          Total:&nbsp;<span className="font-semibold text-slate-800">{rows.length}</span>
         </span>
       </div>
     </div>
   </header>
 
-  {/* Controls card */}
-  <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      {/* Left: search + status */}
-      <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
+  {/* Filters */}
+  <div className="mb-6 rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/70 p-4 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.04)]">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Search + Filter */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center w-full">
+        {/* Search */}
         <div className="relative w-full sm:w-72">
           <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search bill no, destination, method…"
+            placeholder="Search by bill no, destination, or method"
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
               setPage(1);
             }}
-            className="w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-200"
+            className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-sky-300 focus:ring-2 focus:ring-sky-200 transition"
           />
         </div>
 
-        {/* Status filter */}
+        {/* Status Dropdown */}
         <div className="relative shrink-0">
           <FiFilter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <select
@@ -244,7 +292,7 @@ useEffect(() => {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="w-full sm:w-56 appearance-none rounded-lg border border-slate-200 bg-white pl-10 pr-8 py-2 text-sm focus:border-emerald-300 focus:ring-2 focus:ring-emerald-200"
+            className="appearance-none w-full sm:w-56 rounded-xl border border-slate-200 bg-white pl-10 pr-8 py-2.5 text-sm text-slate-800 shadow-sm focus:border-emerald-300 focus:ring-2 focus:ring-emerald-200 transition"
           >
             <option value="">All Status</option>
             {statusList.map((s) => (
@@ -253,13 +301,12 @@ useEffect(() => {
               </option>
             ))}
           </select>
-          {/* tiny caret */}
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">▾</span>
         </div>
       </div>
 
-      {/* Right: Import */}
-      <div className="flex items-center gap-2">
+      {/* Import Button */}
+      <div>
         <input
           ref={fileInputRef}
           type="file"
@@ -271,8 +318,7 @@ useEffect(() => {
           type="button"
           onClick={onPickFile}
           disabled={uploading}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:opacity-60"
-          title="Import from Excel"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-emerald-500 text-white px-4 py-2.5 text-sm font-medium shadow-md hover:shadow-lg transition focus:outline-none focus:ring-2 focus:ring-sky-300 disabled:opacity-60"
         >
           <FiUpload className="h-4 w-4" />
           {uploading ? "Importing…" : "Import Excel"}
@@ -281,21 +327,17 @@ useEffect(() => {
     </div>
   </div>
 
-  {/* Table card */}
-  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div className="relative overflow-x-auto">
+  {/* Table */}
+  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
+    <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
-        <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur supports-[backdrop-filter]:bg-slate-50/75 text-slate-700">
-          <tr className="border-b border-slate-200">
-            <th className="px-4 py-3 font-semibold">SL No</th>
-            <th className="px-4 py-3 font-semibold">Invoice / Bill No</th>
-            <th className="px-4 py-3 font-semibold">Pcs</th>
-            <th className="px-4 py-3 font-semibold">Weight (kg)</th>
-            <th className="px-4 py-3 font-semibold">Shipment Method</th>
-            <th className="px-4 py-3 font-semibold">Destination</th>
-            <th className="px-4 py-3 font-semibold">Date</th>
-            <th className="px-4 py-3 font-semibold">Status</th>
-            <th className="px-4 py-3 font-semibold">Actions</th>
+        <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-50 to-slate-100 text-slate-700 uppercase text-xs tracking-wide border-b border-slate-200">
+          <tr>
+            {["SL No", "Invoice / Bill No", "Pcs", "Weight (kg)", "Method", "Destination", "Date", "Status", "Actions"].map((th) => (
+              <th key={th} className="px-4 py-3 font-semibold whitespace-nowrap">
+                {th}
+              </th>
+            ))}
           </tr>
         </thead>
 
@@ -312,14 +354,14 @@ useEffect(() => {
             ))
           ) : paged.length === 0 ? (
             <tr>
-              <td colSpan={9} className="px-6 py-12">
-                <div className="flex flex-col items-center justify-center text-center">
+              <td colSpan={9} className="px-6 py-12 text-center">
+                <div className="flex flex-col items-center justify-center text-slate-500">
                   <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400">
                     <FiInbox className="h-5 w-5" />
                   </div>
-                  <div className="text-slate-700 font-medium">No bills found</div>
+                  <div className="font-medium text-slate-700">No bills found</div>
                   <p className="mt-1 text-sm text-slate-500">
-                    Try adjusting your search or filters.
+                    Try adjusting your filters or search query.
                   </p>
                 </div>
               </td>
@@ -332,7 +374,6 @@ useEffect(() => {
               const dVal = fmtDate(isoDate(r));
               const statusVal = statusLabel(r);
 
-              // status chip color (very light heuristic)
               const statusColor =
                 /delivered|booked|forwarded|arrived|cleared|out for delivery/i.test(statusVal)
                   ? "emerald"
@@ -345,7 +386,7 @@ useEffect(() => {
               return (
                 <tr
                   key={r?.id ?? `${billNo(r)}-${isoDate(r) ?? slno}`}
-                  className={idx % 2 ? "bg-slate-50/20" : "bg-white hover:bg-slate-50/60"}
+                  className="hover:bg-slate-50/60 transition-colors"
                 >
                   <td className="px-4 py-3 text-slate-600">{slno}</td>
                   <td className="px-4 py-3 font-medium text-slate-900">{billNo(r) || "—"}</td>
@@ -356,16 +397,15 @@ useEffect(() => {
                   <td className="px-4 py-3 text-slate-700">{dVal || "—"}</td>
                   <td className="px-4 py-3">
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium
-                        ${
-                          statusColor === "emerald"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : statusColor === "amber"
-                            ? "border-amber-200 bg-amber-50 text-amber-700"
-                            : statusColor === "rose"
-                            ? "border-rose-200 bg-rose-50 text-rose-700"
-                            : "border-slate-200 bg-slate-50 text-slate-700"
-                        }`}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                        statusColor === "emerald"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : statusColor === "amber"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : statusColor === "rose"
+                          ? "border-rose-200 bg-rose-50 text-rose-700"
+                          : "border-slate-200 bg-slate-50 text-slate-700"
+                      }`}
                     >
                       <span
                         className={`h-1.5 w-1.5 rounded-full ${
@@ -382,31 +422,36 @@ useEffect(() => {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {r?.id ? (
+                    <div className="flex items-center gap-2">
                       <Link
-                        to={`/bill/view/${r.id}`}
+                        to={r.id ? `/bill/view/${r.id}` : `/bill/view?bill_no=${encodeURIComponent(billNo(r))}`}
                         state={{ row: r }}
                         title="View"
                         aria-label="View bill"
-                        className="inline-flex items-center rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100 hover:text-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-200 transition"
+                        className="inline-flex items-center rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100 hover:text-sky-800 focus:ring-2 focus:ring-sky-200 transition"
                       >
                         <FiEye className="h-4 w-4" />
-                        <span className="sr-only">View</span>
                       </Link>
-                    ) : billNo(r) ? (
-                      <Link
-                        to={`/bill/view/view?bill_no=${encodeURIComponent(billNo(r))}`}
-                        state={{ row: r }}
-                        title="View"
-                        aria-label="View bill"
-                        className="inline-flex items-center rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100 hover:text-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-200 transition"
+
+                     <Link
+                          to={`/bill/edit/${r.id}`}
+                          title="Edit"
+                          aria-label="Edit bill"
+                          className="inline-flex items-center rounded-md bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 focus:ring-2 focus:ring-emerald-200 transition"
+                        >
+                          <FiEdit2 className="h-4 w-4" />
+                      </Link>
+
+                   <button
+                        title="Delete"
+                        aria-label="Delete bill"
+                        onClick={() => handleDelete(r?.id)}
+                        className="inline-flex items-center rounded-md bg-rose-50 p-2 text-rose-700 hover:bg-rose-100 hover:text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-200 transition"
                       >
-                        <FiEye className="h-4 w-4" />
-                        <span className="sr-only">View</span>
-                      </Link>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
+                        <FiTrash2 className="h-4 w-4" />
+                      </button>
+
+                    </div>
                   </td>
                 </tr>
               );
@@ -416,22 +461,22 @@ useEffect(() => {
       </table>
     </div>
 
-    {/* Footer / pagination */}
-    <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 p-3 sm:flex-row sm:p-4">
+    {/* Pagination */}
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200 p-4 bg-gradient-to-r from-white to-slate-50/50">
       <div className="text-xs sm:text-sm text-slate-600">
         Page <span className="font-medium">{safePage}</span> of{" "}
         <span className="font-medium">{totalPages}</span>
       </div>
       <div className="flex items-center gap-2">
         <button
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={safePage === 1}
         >
           Prev
         </button>
         <button
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
           onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
           disabled={safePage === totalPages}
         >
@@ -441,6 +486,7 @@ useEffect(() => {
     </div>
   </div>
 </section>
+
 
   );
 }

@@ -126,6 +126,7 @@ const CreateShipmentBill = lazy(() => import("../pages/Bills/CreateShipmentBill"
 const ShipmentBillView = lazy(() => import("../pages/Bills/ShipmentBillView"));
 const EditStaff = lazy(() => import("../pages/Staffs/EditStaff"));
 const SingleBill = lazy(() => import("../pages/Bills/SingleBill"));
+const BillEdit = lazy(() => import("../pages/Bills/BillEdit"));
 
 /* ---------------- helpers ---------------- */
 const AuthRedirect = () => {
@@ -217,7 +218,7 @@ const router = createBrowserRouter([
       { path: "shipmentstatus/view", element: <ShipmentStatusView /> },
 
       { path: "cargo/allcargolist", element: <CargoList /> },
-      { path: "cargo/:id", element: <EditCargo /> },
+      { path: "cargo/edit/:id", element: <EditCargo /> },
       { path: "cargo/view/:id", element: <ViewCargo /> },
 
       { path: "paymenttype/view", element: <PaymentTypeList /> },
@@ -237,7 +238,8 @@ const router = createBrowserRouter([
       { path: "deliverytype/list", element: <ListDeliveryType /> },
       { path: "invoice/:id", element: <InvoiceOnly /> },
       { path: "bill/view/:id", element: <SingleBill /> },
-      
+      { path: "bill/edit/:id", element: <BillEdit  /> },
+
       {
         path: "roles/allroles",
         element: (

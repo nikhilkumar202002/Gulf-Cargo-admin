@@ -1,3 +1,4 @@
+// src/pages/.../SenderForm.jsx
 import React from "react";
 import { Toaster, toast } from "react-hot-toast";
 
@@ -17,8 +18,6 @@ import {
   composeE164,
   useSelectDigitTypeahead,
 } from "../../../utils/senderFormHelper";
-
-// previous version for reference  :contentReference[oaicite:3]{index=3}
 
 const CUSTOMER_TYPE_SENDER = 1;
 const fieldBase =
@@ -51,6 +50,7 @@ export default function SenderForm({ onClose, onCreated }) {
   const [submitLoading, setSubmitLoading] = React.useState(false);
   const [submitError, setSubmitError] = React.useState("");
 
+  /* ---------------- Profile ---------------- */
   React.useEffect(() => {
     (async () => {
       try {
@@ -67,6 +67,7 @@ export default function SenderForm({ onClose, onCreated }) {
     })();
   }, []);
 
+  /* ---------------- Document Types ---------------- */
   React.useEffect(() => {
     (async () => {
       try {
@@ -83,6 +84,7 @@ export default function SenderForm({ onClose, onCreated }) {
     })();
   }, []);
 
+  /* ---------------- Phone Codes ---------------- */
   React.useEffect(() => {
     (async () => {
       try {
@@ -99,6 +101,7 @@ export default function SenderForm({ onClose, onCreated }) {
     })();
   }, []);
 
+  /* ---------------- Helpers ---------------- */
   const allDialCodes = React.useMemo(() => {
     const raw = (Array.isArray(phoneCodes) ? phoneCodes : [])
       .map(getDialCode)
@@ -140,15 +143,13 @@ export default function SenderForm({ onClose, onCreated }) {
     const f = new FormData();
     for (const [k, v] of Object.entries(filtered)) f.append(k, v);
     form.documents.forEach((file) => f.append("documents[]", file, file.name));
-    if (form.documents.length === 1)
-      f.append("document", form.documents[0], form.documents[0].name);
     return f;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.senderIdType || !form.senderId) {
-      setSubmitError("Sender: Name, ID Type, and Document ID are required.");
+    if (!form.name) {
+      setSubmitError("Sender name is required.");
       return;
     }
     try {
@@ -183,43 +184,42 @@ export default function SenderForm({ onClose, onCreated }) {
     }
   };
 
-   return (
-      <form onSubmit={handleSubmit} className="space-y-8">
-      {/* Keep ONE Toaster on this page. This renders success/error after loading. */}
+  /* ---------------- UI ---------------- */
+  return (
+    <form onSubmit={handleSubmit} className="space-y-8">
       <Toaster position="top-right" />
 
       {/* ========== Section 1: Branch ========== */}
       <section className="rounded-xl border border-slate-200 bg-white">
         <div>
-          <div>
-            <input
-              type="text"
-              className={[
-                fieldBase,
-                "bg-slate-100 text-black cursor-default",
-                "focus:ring-0 focus:border-slate-300",
-                "read-only:bg-slate-100 read-only:text-slate-700 read-only:cursor-default",
-                "text-[20px] font-semibold",
-              ].join(" ")}
-              value={branchName || (branchId ? `Branch #${branchId}` : "")}
-              readOnly
-              title="Auto-filled from your profile"
-            />
-            <input type="hidden" name="branch_id" value={branchId || ""} />
-          </div>
+          <input
+            type="text"
+            className={[
+              fieldBase,
+              "bg-slate-100 text-black cursor-default",
+              "focus:ring-0 focus:border-slate-300",
+              "text-[20px] font-semibold",
+            ].join(" ")}
+            value={branchName || (branchId ? `Branch #${branchId}` : "")}
+            readOnly
+          />
+          <input type="hidden" name="branch_id" value={branchId || ""} />
         </div>
       </section>
 
       {/* ========== Section 2: Sender Identity ========== */}
       <section className="rounded-xl border border-slate-200 bg-white">
         <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
-          <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-[11px] font-semibold text-white">1</div>
-          <h3 className="text-sm font-semibold text-slate-900">Sender Identity</h3>
+          <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-[11px] font-semibold text-white">
+            1
+          </div>
+          <h3 className="text-sm font-semibold text-slate-900">
+            Sender Identity
+          </h3>
         </header>
 
-        {/* Row 1: Name + Phone */}
+        {/* Name + Phone + City */}
         <div className="grid grid-cols-1 gap-5 px-4 py-4 md:grid-cols-4">
-          {/* Name */}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Name <span className="text-rose-600">*</span>
@@ -233,9 +233,10 @@ export default function SenderForm({ onClose, onCreated }) {
             />
           </div>
 
-          {/* Phone (code SELECT + number input) */}
           <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Phone
+            </label>
             <div className="grid grid-cols-[120px,1fr] gap-2">
               {phoneCodesLoading ? (
                 <div className="h-[40px] animate-pulse rounded-lg bg-slate-200/80" />
@@ -246,11 +247,11 @@ export default function SenderForm({ onClose, onCreated }) {
                   onKeyDown={codeTypeahead.onKeyDown}
                   className={`${fieldBase} ${fieldDisabled}`}
                   disabled={phoneCodesLoading}
-                  aria-label="Phone country code"
-                  title="Type digits like 91 to jump"
                 >
                   {allDialCodes.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
                   ))}
                 </select>
               )}
@@ -261,21 +262,14 @@ export default function SenderForm({ onClose, onCreated }) {
                 className={fieldBase}
                 inputMode="numeric"
                 placeholder="501234567"
-                aria-describedby="phone_help"
-                autoComplete="tel-national"
               />
             </div>
-            {phoneCodesError ? (
-              <p className="mt-1 text-xs text-rose-700">{phoneCodesError}</p>
-            ) : (
-              <p id="phone_help" className="mt-1 text-xs text-slate-500">
-                Digits only. Country code will be prepended on submit.
-              </p>
-            )}
           </div>
 
-            <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">City</label>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              City
+            </label>
             <input
               name="city"
               value={form.city}
@@ -286,53 +280,50 @@ export default function SenderForm({ onClose, onCreated }) {
           </div>
         </div>
 
-        {/* Row 2: City */}
-        <div className="grid grid-cols-1 gap-5 px-4 pt-0 pb-4 md:grid-cols-3">
-        
-        </div>
-
-        {/* Row 3: ID Type / ID Number / Uploads */}
+        {/* ID Type + Document ID + Uploads (optional now) */}
         <div className="grid grid-cols-1 gap-5 px-4 py-4 md:grid-cols-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              ID Type <span className="text-rose-600">*</span>
+              ID Type
             </label>
-            {docsLoading ? (
-              <div className="h-[40px] animate-pulse rounded-lg bg-slate-200/80" />
-            ) : (
-              <select
-                name="senderIdType"
-                value={String(form.senderIdType || "")}
-                onChange={onChange}
-                className={`${fieldBase} ${fieldDisabled}`}
-                disabled={docsLoading}
-              >
-                <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
-                {docTypes.map((d) => (
-                  <option key={getDocId(d)} value={getDocId(d)}>
-                    {getDocLabel(d)}
-                  </option>
-                ))}
-              </select>
+            <select
+              name="senderIdType"
+              value={String(form.senderIdType || "")}
+              onChange={onChange}
+              className={`${fieldBase} ${fieldDisabled}`}
+              disabled={docsLoading}
+            >
+              <option value="">
+                {docsLoading ? "Loading..." : "Select ID Type"}
+              </option>
+              {docTypes.map((d) => (
+                <option key={getDocId(d)} value={getDocId(d)}>
+                  {getDocLabel(d)}
+                </option>
+              ))}
+            </select>
+            {docsError && (
+              <p className="mt-1 text-sm text-rose-700">{docsError}</p>
             )}
-            {docsError && <p className="mt-1 text-sm text-rose-700">{docsError}</p>}
           </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Document ID <span className="text-rose-600">*</span>
+              Document ID
             </label>
             <input
               name="senderId"
               value={form.senderId}
               onChange={onChange}
               className={fieldBase}
-              placeholder="Document number"
+              placeholder="Optional"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Upload Documents</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Upload Documents
+            </label>
             <input
               key={fileKey}
               type="file"
@@ -346,9 +337,11 @@ export default function SenderForm({ onClose, onCreated }) {
         </div>
       </section>
 
-      {/* ========== Actions ========== */}
+      {/* Actions */}
       <div className="flex items-center justify-end gap-3">
-        {submitError && <p className="mr-auto text-sm text-rose-700">{submitError}</p>}
+        {submitError && (
+          <p className="mr-auto text-sm text-rose-700">{submitError}</p>
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -360,7 +353,9 @@ export default function SenderForm({ onClose, onCreated }) {
           type="submit"
           disabled={submitLoading}
           className={`rounded-lg px-5 py-2 text-white transition ${
-            submitLoading ? "cursor-not-allowed bg-rose-400" : "bg-rose-600 hover:bg-rose-700"
+            submitLoading
+              ? "cursor-not-allowed bg-rose-400"
+              : "bg-rose-600 hover:bg-rose-700"
           }`}
         >
           {submitLoading ? "Submitting…" : "Submit"}

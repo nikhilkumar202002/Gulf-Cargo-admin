@@ -383,9 +383,9 @@ export default function ReceiverForm({ onClose, onCreated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.receiverIdType || !form.receiverId || !form.address) {
-      return setSubmitError("Receiver: Name, ID Type, Document ID and Address are required.");
-    }
+        if (!form.name) {
+        return setSubmitError("Receiver name is required.");
+      }
     try {
       setSubmitLoading(true);
       const payload = buildPayload();
@@ -451,168 +451,7 @@ export default function ReceiverForm({ onClose, onCreated }) {
         </div>
       </div>
 
-      {/* Receiver identity */}
-      <div className="rounded-xl border border-slate-200 bg-white">
-        <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
-          <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-[11px] font-semibold text-white">1</div>
-          <h3 className="text-sm font-semibold text-slate-900">Receiver Identity</h3>
-        </header>
-
-        <div className="grid grid-cols-1 gap-5 px-4 py-4 md:grid-cols-3">
-          {/* Name */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Name <span className="text-rose-600">*</span>
-            </label>
-            <input
-              name="name"
-              value={form.name}
-              onChange={onChange}
-              className={fieldBase}
-              placeholder="Full name"
-              aria-describedby="name_help"
-            />
-            <p id="name_help" className="mt-1 text-xs text-slate-500">As per ID / official records.</p>
-          </div>
-
-          {/* WhatsApp */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">WhatsApp Number</label>
-            <div className="grid grid-cols-[120px,1fr] gap-2">
-              {phoneCodesLoading ? (
-                <div className="h-[40px] animate-pulse rounded-lg bg-slate-200/80" />
-              ) : (
-                <select
-                  value={whatsappCode}
-                  onChange={(e) => setWhatsappCode(e.target.value)}
-                  onKeyDown={waTypeahead.onKeyDown}
-                  className={`${fieldBase} ${fieldDisabled}`}
-                  disabled={phoneCodesLoading}
-                  title="Tip: focus here and type digits like 91 to jump to 91"
-                >
-                  {phoneCodeOptions.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              )}
-              <input
-                type="tel"
-                name="whatsappNumber"
-                value={form.whatsappNumber}
-                onChange={handleWaChange}
-                onPaste={handleWaPaste}
-                className={fieldBase}
-                inputMode="numeric"
-                placeholder="501234567"
-                autoComplete="tel"
-              />
-            </div>
-            {phoneCodesError && <p className="mt-1 text-xs text-rose-700">{phoneCodesError}</p>}
-            <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                name="useSameForContact"
-                checked={form.useSameForContact}
-                onChange={onChange}
-              />
-              Use same for Contact Number
-            </label>
-          </div>
-
-          {/* Contact */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Contact Number</label>
-            <div className="grid grid-cols-[120px,1fr] gap-2">
-              {phoneCodesLoading ? (
-                <div className="h-[40px] animate-pulse rounded-lg bg-slate-200/80" />
-              ) : (
-                <select
-                  value={contactCode}
-                  onChange={(e) => setContactCode(e.target.value)}
-                  onKeyDown={contactTypeahead.onKeyDown}
-                  className={`${fieldBase} ${fieldDisabled}`}
-                  disabled={phoneCodesLoading || form.useSameForContact}
-                  title="Tip: focus here and type digits like 91 to jump to 91"
-                >
-                  {phoneCodeOptions.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              )}
-              <input
-                type="tel"
-                name="contactNumber"
-                value={form.contactNumber}
-                onChange={handleContactChange}
-                onPaste={handleContactPaste}
-                className={fieldBase}
-                inputMode="numeric"
-                placeholder="501234567"
-                readOnly={form.useSameForContact}
-                autoComplete="tel"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-5 px-4 py-4 md:grid-cols-3">
-          {/* ID Type */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              ID Type <span className="text-rose-600">*</span>
-            </label>
-            {docsLoading ? (
-              <div className="h-[40px] animate-pulse rounded-lg bg-slate-200/80" />
-            ) : (
-              <select
-                name="receiverIdType"
-                value={String(form.receiverIdType || "")}
-                onChange={onChange}
-                className={`${fieldBase} ${fieldDisabled}`}
-                disabled={docsLoading}
-              >
-                <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
-                {docTypes.map((d) => (
-                  <option key={getDocId(d)} value={getDocId(d)}>
-                    {getDocLabel(d)}
-                  </option>
-                ))}
-              </select>
-            )}
-            {docsError && <p className="mt-1 text-sm text-rose-700">{docsError}</p>}
-          </div>
-
-          {/* ID Number */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Document ID <span className="text-rose-600">*</span>
-            </label>
-            <input
-              name="receiverId"
-              value={form.receiverId}
-              onChange={onChange}
-              className={fieldBase}
-              placeholder="Document number"
-            />
-          </div>
-
-          {/* Uploads */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Upload Documents</label>
-            <input
-              key={fileKey}
-              type="file"
-              name="documents"
-              accept="image/*,.pdf"
-              multiple
-              onChange={onChange}
-              className={fieldBase}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Address & Geo */}
+               {/* Address & Geo */}
       <div className="rounded-xl border border-slate-200 bg-white">
         <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
           <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-[11px] font-semibold text-white">1</div>
@@ -748,7 +587,7 @@ export default function ReceiverForm({ onClose, onCreated }) {
         <div className="grid grid-cols-1 gap-5 px-4 pb-5 md:grid-cols-3">
           <div className="md:col-span-3">
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Address <span className="text-rose-600">*</span>
+              Address 
             </label>
             <textarea
               name="address"
@@ -757,6 +596,167 @@ export default function ReceiverForm({ onClose, onCreated }) {
               className={fieldBase}
               rows={3}
               placeholder="House / Building, Street"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Receiver identity */}
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
+          <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-[11px] font-semibold text-white">2</div>
+          <h3 className="text-sm font-semibold text-slate-900">Receiver Identity</h3>
+        </header>
+
+        <div className="grid grid-cols-1 gap-5 px-4 py-4 md:grid-cols-3">
+          {/* Name */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Name <span className="text-rose-600">*</span>
+            </label>
+            <input
+              name="name"
+              value={form.name}
+              onChange={onChange}
+              className={fieldBase}
+              placeholder="Full name"
+              aria-describedby="name_help"
+            />
+            <p id="name_help" className="mt-1 text-xs text-slate-500">As per ID / official records.</p>
+          </div>
+
+          {/* WhatsApp */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">WhatsApp Number</label>
+            <div className="grid grid-cols-[120px,1fr] gap-2">
+              {phoneCodesLoading ? (
+                <div className="h-[40px] animate-pulse rounded-lg bg-slate-200/80" />
+              ) : (
+                <select
+                  value={whatsappCode}
+                  onChange={(e) => setWhatsappCode(e.target.value)}
+                  onKeyDown={waTypeahead.onKeyDown}
+                  className={`${fieldBase} ${fieldDisabled}`}
+                  disabled={phoneCodesLoading}
+                  title="Tip: focus here and type digits like 91 to jump to 91"
+                >
+                  {phoneCodeOptions.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="tel"
+                name="whatsappNumber"
+                value={form.whatsappNumber}
+                onChange={handleWaChange}
+                onPaste={handleWaPaste}
+                className={fieldBase}
+                inputMode="numeric"
+                placeholder="501234567"
+                autoComplete="tel"
+              />
+            </div>
+            {phoneCodesError && <p className="mt-1 text-xs text-rose-700">{phoneCodesError}</p>}
+            <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                name="useSameForContact"
+                checked={form.useSameForContact}
+                onChange={onChange}
+              />
+              Use same for Contact Number
+            </label>
+          </div>
+
+          {/* Contact */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Contact Number</label>
+            <div className="grid grid-cols-[120px,1fr] gap-2">
+              {phoneCodesLoading ? (
+                <div className="h-[40px] animate-pulse rounded-lg bg-slate-200/80" />
+              ) : (
+                <select
+                  value={contactCode}
+                  onChange={(e) => setContactCode(e.target.value)}
+                  onKeyDown={contactTypeahead.onKeyDown}
+                  className={`${fieldBase} ${fieldDisabled}`}
+                  disabled={phoneCodesLoading || form.useSameForContact}
+                  title="Tip: focus here and type digits like 91 to jump to 91"
+                >
+                  {phoneCodeOptions.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="tel"
+                name="contactNumber"
+                value={form.contactNumber}
+                onChange={handleContactChange}
+                onPaste={handleContactPaste}
+                className={fieldBase}
+                inputMode="numeric"
+                placeholder="501234567"
+                readOnly={form.useSameForContact}
+                autoComplete="tel"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 px-4 py-4 md:grid-cols-3">
+          
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              ID Type 
+            </label>
+            {docsLoading ? (
+              <div className="h-[40px] animate-pulse rounded-lg bg-slate-200/80" />
+            ) : (
+              <select
+                name="receiverIdType"
+                value={String(form.receiverIdType || "")}
+                onChange={onChange}
+                className={`${fieldBase} ${fieldDisabled}`}
+                disabled={docsLoading}
+              >
+                <option value="">{docsLoading ? "Loading..." : "Select ID Type"}</option>
+                {docTypes.map((d) => (
+                  <option key={getDocId(d)} value={getDocId(d)}>
+                    {getDocLabel(d)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {docsError && <p className="mt-1 text-sm text-rose-700">{docsError}</p>}
+          </div>
+
+          {/* ID Number */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Document ID
+            </label>
+            <input
+              name="receiverId"
+              value={form.receiverId}
+              onChange={onChange}
+              className={fieldBase}
+              placeholder="Document number"
+            />
+          </div>
+
+          {/* Uploads */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Upload Documents</label>
+            <input
+              key={fileKey}
+              type="file"
+              name="documents"
+              accept="image/*,.pdf"
+              multiple
+              onChange={onChange}
+              className={fieldBase}
             />
           </div>
         </div>

@@ -72,26 +72,7 @@ function flattenBoxesToItems(boxesObj = {}) {
 }
 
 /* ---------- build request body ---------- */
-function buildRequestBody(payload = {}) {
-  const body = { ...payload };
-
-  if (payload.boxes && Object.keys(payload.boxes).length > 0) {
-    body.items = flattenBoxesToItems(payload.boxes);
-  }
-
-  if (typeof body.total_cost !== "undefined") body.total_cost = safeNumStr(body.total_cost, 2);
-  if (typeof body.bill_charges !== "undefined") body.bill_charges = safeNumStr(body.bill_charges, 2);
-  if (typeof body.vat_percentage !== "undefined") body.vat_percentage = safeNumStr(body.vat_percentage, 2);
-  if (typeof body.vat_cost !== "undefined") body.vat_cost = safeNumStr(body.vat_cost, 2);
-  if (typeof body.net_total !== "undefined") body.net_total = safeNumStr(body.net_total, 2);
-  if (typeof body.total_weight !== "undefined") body.total_weight = safeWeightStr(body.total_weight);
-
-  Object.keys(body).forEach((k) => body[k] === undefined && delete body[k]);
-  return body;
-}
-
-async function createCargo(payload = {}) {
-  const body = buildRequestBody(payload);
+async function createCargo(body = {}) {
   const endpoints = ["/cargo", "/cargos", "/public/api/cargo", "/public/api/cargos"];
   let lastErr = null;
   for (const ep of endpoints) {
@@ -111,6 +92,108 @@ async function createCargo(payload = {}) {
   }
   if (lastErr) throw buildErrorFromAxios(lastErr);
   throw new Error("createCargo failed (no response)");
+}
+
+/* ---------- build request body (used by Create and Edit) ---------- */
+function buildCargoPayload(currentForm, currentBoxes, derivedValues, totalWeight) {
+  const { subtotal, billCharges, rows: R } = derivedValues;
+  const totalWeightVal = Number(totalWeight.toFixed(3));
+  const vatPercentageVal = Number(currentForm.vatPercentage || 0);
+  const vatCostVal = Number(((subtotal * vatPercentageVal) / 100).toFixed(2));
+  const totalAmount = derivedValues.totalAmount + vatCostVal;
+
+  // ---- build payload ----
+  const grouped = {};
+  currentBoxes.forEach((box, bIdx) => {
+    const bn = String(box.box_number ?? bIdx + 1);
+    const numericWeight = Number(box.box_weight ?? box.weight ?? 0);
+    const boxWeightNum = Number.isFinite(numericWeight) ? Math.max(0, numericWeight) : 0;
+    if (!grouped[bn]) grouped[bn] = { items: [] };
+    let putWeightOnFirstItem = true;
+    (box.items || []).forEach((it) => {
+      const pieces = Number(it.pieces || 0);
+      const itemWeight = putWeightOnFirstItem ? boxWeightNum : 0;
+      putWeightOnFirstItem = false;
+      grouped[bn].items.push({
+        slno: String(grouped[bn].items.length + 1),
+        box_number: bn,
+        name: it.name || "",
+        piece_no: String(pieces),
+        unit_price: "0.00",
+        total_price: "0.00",
+        weight: itemWeight.toFixed(3),
+      });
+    });
+  });
+  const ordered = {};
+  Object.keys(grouped).sort((a, b) => Number(a) - Number(b)).forEach((k) => (ordered[k] = grouped[k]));
+
+  const flatItems = [];
+  currentBoxes.forEach((box, bIdx) => {
+    const bn = String(box.box_number ?? bIdx + 1);
+    const boxW = Number(box.box_weight ?? box.weight ?? 0) || 0;
+    const list = Array.isArray(box.items) && box.items.length ? box.items : [{ name: "", pieces: 0 }];
+    let putWeightOnFirst = true;
+    list.forEach((it, i) => {
+      const name = (it.name && String(it.name).trim()) || `Box ${bn} contents`;
+      const pcs = Number.isFinite(Number(it.pieces)) ? Number(it.pieces) : 0;
+      flatItems.push({
+        slno: String(i + 1),
+        box_number: bn,
+        name,
+        piece_no: String(pcs),
+        unit_price: "0.00",
+        total_price: "0.00",
+        weight: (putWeightOnFirst ? boxW : 0).toFixed(3),
+      });
+      putWeightOnFirst = false;
+    });
+  });
+
+  const boxWeights = [...currentBoxes]
+    .sort((a, b) => Number(a.box_number ?? 0) - Number(b.box_number ?? 0))
+    .map((box) => {
+      const w = Number(box.box_weight ?? box.weight ?? 0);
+      const wn = Number.isFinite(w) ? Math.max(0, w) : 0;
+      return wn.toFixed(3);
+    });
+
+  const payload = {
+    branch_id: Number(currentForm.branchId),
+    booking_no: currentForm.invoiceNo,
+    sender_id: Number(currentForm.senderId),
+    receiver_id: Number(currentForm.receiverId),
+    shipping_method_id: Number(currentForm.shippingMethodId),
+    payment_method_id: Number(currentForm.paymentMethodId),
+    status_id: Number(currentForm.statusId),
+    date: currentForm.date,
+    time: currentForm.time,
+    collected_by: currentForm.collectedByRoleName || "",
+    collected_by_id: Number(currentForm.collectedByRoleId),
+    name_id: Number(currentForm.collectedByPersonId),
+    lrl_tracking_code: currentForm.lrlTrackingCode || null,
+    delivery_type_id: Number(currentForm.deliveryTypeId),
+    special_remarks: currentForm.specialRemarks || null,
+    items: flatItems,
+    total_cost: +subtotal.toFixed(2),
+    vat_percentage: +vatPercentageVal.toFixed(2),
+    vat_cost: +vatCostVal.toFixed(2),
+    net_total: +totalAmount.toFixed(2),
+    total_weight: totalWeightVal,
+    box_weight: boxWeights,
+    boxes: ordered,
+    bill_charges: +billCharges.toFixed(2),
+    total_amount: totalAmount,
+    no_of_pieces: Number(currentForm.charges.no_of_pieces || 0),
+  };
+
+  CHARGE_KEYS.forEach(key => {
+    payload[`quantity_${key}`] = R[key].qty;
+    payload[`unit_rate_${key}`] = R[key].rate;
+    payload[`amount_${key}`] = R[key].amount;
+  });
+
+  return payload;
 }
 
 /**
@@ -140,22 +223,6 @@ async function getCargoById(id) {
 async function listCargos(params = {}) {
   try {
     const { data } = await axiosInstance.get("/cargos", { params, timeout: 20000 });
-    return data?.data ?? data ?? {};
-  } catch (err) {
-    throw buildErrorFromAxios(err);
-  }
-}
-
-/**
- * updateCargo(id, body) - PATCH /cargos/:id
- */
-async function updateCargo(id, body = {}) {
-  if (!id) throw new Error("updateCargo requires id");
-  try {
-    const { data } = await axiosInstance.patch(`/cargos/${id}`, body, {
-      headers: { "Content-Type": "application/json" },
-      timeout: 20000,
-    });
     return data?.data ?? data ?? {};
   } catch (err) {
     throw buildErrorFromAxios(err);
@@ -363,6 +430,22 @@ async function getNextInvoiceNo(branchId) {
   return incrementInvoiceString(lastNo);
 }
 
+export async function updateCargo(id, payload) {
+  if (!id) throw new Error("Cargo ID is required for update.");
+
+  const url = `/cargo/${id}`; // ✅ confirmed endpoint
+
+  try {
+    const { data } = await axiosInstance.patch(url, payload, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 20000,
+    });
+    return data?.data ?? data ?? {};
+  } catch (err) {
+    console.error("❌ Update Cargo failed:", err.response?.data || err.message);
+    throw err;
+  }
+}
 // bulk status update
 
 const bulkUpdateCargoStatus = updateCargoStatus;
@@ -376,7 +459,8 @@ const defaultExport = {
   deleteCargo,
   updateCargoStatus,
   normalizeCargoToInvoice,
-  bulkUpdateCargoStatus
+  bulkUpdateCargoStatus,
+  buildCargoPayload,
 };
 
 export default defaultExport;
@@ -385,10 +469,10 @@ export {
   createCargo,
   getCargoById,
   listCargos,
-  updateCargo,
   deleteCargo,
   updateCargoStatus,
   normalizeCargoToInvoice,
   bulkUpdateCargoStatus,
-  getNextInvoiceNo,  
+  getNextInvoiceNo,
+  buildCargoPayload,
 };

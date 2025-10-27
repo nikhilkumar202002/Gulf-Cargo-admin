@@ -328,3 +328,20 @@
     page-break-inside: avoid !important;
   }
 }
+
+    @media print {
+          @page { size: A4; margin: 12mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body * { visibility: hidden !important; }
+          #invoice-sheet, #invoice-sheet * { visibility: visible !important; }
+          #invoice-sheet {
+            width: 100%;
+            margin: 0 !important;
+            position: static !important;
+            box-shadow: none !important;
+            border: 0 !important;
+          }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          tr, td, th { break-inside: avoid; page-break-inside: avoid; }
+        }

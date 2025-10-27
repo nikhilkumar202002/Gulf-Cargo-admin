@@ -141,6 +141,12 @@ export const listStaffs = async (params = {}) => {
   return { items, meta };
 };
 
+// Get user by ID (for collected_by_person)
+export const getUserById = async (id) => {
+  const res = await axiosInstance.get(`/staffs/${requiredId(id)}`);
+  return unwrap(res);
+};
+
 // Delete staff (robust with Laravel fallback)
 export const deleteStaff = async (id, axiosOpts = {}) => {
   const url = patternUrl(DELETE_PATTERN, id);

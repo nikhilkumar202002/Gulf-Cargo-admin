@@ -61,9 +61,42 @@ export async function importCustomShipments(file, extra = {}) {
   return resp; // shape may include data.added_ids or similar
 }
 
+/**
+ * DELETE /physical-bill/:id
+ * Delete a physical bill by ID
+ * @param {string|number} id - Bill ID to delete
+ * @returns {Promise<AxiosResponse>}
+ */
+export const deletePhysicalBill = async (id) => {
+  if (!id) throw new Error("deletePhysicalBill: 'id' is required");
+  try {
+    const { data } = await api.delete(`/physical-bill/${id}`); // ✅ singular route
+    return data;
+  } catch (error) {
+    console.error("Delete API failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * PUT /physical-bill/:id
+ * Update an existing physical bill
+ * @param {string|number} id - Bill ID
+ * @param {Object} payload - Updated fields (bill_no, pcs, weight, etc.)
+ * @returns {Promise<AxiosResponse>}
+ */
+export const updatePhysicalBill = async (id, payload) => {
+  if (!id) throw new Error("updatePhysicalBill: 'id' is required");
+  const { data } = await api.put(`/physical-bill/${id}`, payload);
+  return data;
+};
+
+
 export default {
   createCustomShipment,
   getPhysicalBills,
   getCustomShipmentById,
   importCustomShipments,
+  deletePhysicalBill,
+  updatePhysicalBill,
 };

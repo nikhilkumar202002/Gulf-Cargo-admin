@@ -1,58 +1,51 @@
-
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// src/pages/Cargos/AllCargoList.jsx
+import React, { useEffect, useState, useMemo } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { GiCargoCrate } from "react-icons/gi";
 import { IoIosSearch } from "react-icons/io";
+import { SlEye } from "react-icons/sl";
+import { FaFileInvoiceDollar } from "react-icons/fa6";
+import { FiEdit2 } from "react-icons/fi";
 import { listCargos } from "../../api/createCargoApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
-import { SlEye } from "react-icons/sl";
-import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
-import { Link } from "react-router-dom";
+import BillModal from "./components/BillModal";
+import EditCargoModal from "./components/EditCargoModal";
 
 /* ---------------- helpers ---------------- */
 const unwrapArray = (o) =>
-  Array.isArray(o) ? o :
-    Array.isArray(o?.data?.data) ? o.data.data :
-      Array.isArray(o?.data) ? o.data :
-        Array.isArray(o?.items) ? o.items :
-          Array.isArray(o?.results) ? o.results : [];
+  Array.isArray(o)
+    ? o
+    : Array.isArray(o?.data?.data)
+    ? o.data.data
+    : Array.isArray(o?.data)
+    ? o.data
+    : Array.isArray(o?.items)
+    ? o.items
+    : Array.isArray(o?.results)
+    ? o.results
+    : [];
 
-const initialFilter = { sender: "", receiver: "", fromDate: "", tillDate: "", status: "" };
-
-const COLOR = {
-  slate: "bg-slate-100 text-slate-800 ring-1 ring-slate-200",
-  indigo: "bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200",
-  violet: "bg-violet-100 text-violet-800 ring-1 ring-violet-200",
-  sky: "bg-sky-100 text-sky-800 ring-1 ring-sky-200",
-  cyan: "bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200",
-  teal: "bg-teal-100 text-teal-800 ring-1 ring-teal-200",
-  emerald: "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200",
-  lime: "bg-lime-100 text-lime-800 ring-1 ring-lime-200",
-  amber: "bg-amber-100 text-amber-800 ring-1 ring-amber-200",
-  orange: "bg-orange-100 text-orange-800 ring-1 ring-orange-200",
-  yellow: "bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200",
-  rose: "bg-rose-100 text-rose-800 ring-1 ring-rose-200",
-  red: "bg-red-100 text-red-800 ring-1 ring-red-200",
+const initialFilter = {
+  sender: "",
+  receiver: "",
+  fromDate: "",
+  tillDate: "",
+  status: "",
 };
 
-/* ---------------- skeleton components ---------------- */
-const Skel = ({ w = "100%", h = 12, className = "" }) => (
+const COLOR = {
+  violet: "bg-violet-100 text-violet-800 ring-1 ring-violet-200",
+};
+
+/* ---------------- skeleton ---------------- */
+const Skel = ({ w = "100%", h = 12 }) => (
   <div
-    className={`animate-pulse rounded bg-slate-200/80 ${className}`}
+    className="animate-pulse rounded bg-slate-200/80"
     style={{ width: w, height: h }}
   />
 );
-const SkelBar = ({ labelW = "30%", inputW = "100%" }) => (
-  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-6">
-    {[...Array(6)].map((_, i) => (
-      <div key={i} className="flex items-center gap-3">
-        <Skel w={labelW} h={12} />
-        <Skel w={inputW} h={36} />
-      </div>
-    ))}
-  </div>
-);
+
 const TableSkeleton = ({ rows = 8, cols = 13 }) => (
   <div className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
     <div className="overflow-x-auto">
@@ -68,10 +61,13 @@ const TableSkeleton = ({ rows = 8, cols = 13 }) => (
         </thead>
         <tbody className="divide-y divide-slate-100">
           {Array.from({ length: rows }).map((_, r) => (
-            <tr key={`sk-${r}`} className="animate-pulse">
+            <tr key={r}>
               {Array.from({ length: cols }).map((__, c) => (
                 <td key={c} className="px-3 py-3">
-                  <Skel w={c === 0 ? "18px" : (c % 3 === 0 ? "50%" : "70%")} h={12} />
+                  <Skel
+                    w={c === 0 ? "18px" : c % 3 === 0 ? "50%" : "70%"}
+                    h={12}
+                  />
                 </td>
               ))}
             </tr>
@@ -84,19 +80,22 @@ const TableSkeleton = ({ rows = 8, cols = 13 }) => (
 
 /* ---------------- main ---------------- */
 export default function AllCargoList() {
-  // data
   const [allCargos, setAllCargos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState(initialFilter);
   const [statuses, setStatuses] = useState([]);
-  // pagination (client-side)
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [selectedShipment, setSelectedShipment] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingCargoId, setEditingCargoId] = useState(null);
+
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+  const perPage = 10;
 
   const navigate = useNavigate();
 
-  // statuses
+  /* ---------------- Status Fetch ---------------- */
   useEffect(() => {
     (async () => {
       try {
@@ -108,97 +107,93 @@ export default function AllCargoList() {
     })();
   }, []);
 
-  // fetch cargos
-  const fetchCargos = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const rows = await listCargos({
+  /* ---------------- Fetch Cargos ---------------- */
+ const fetchCargos = async () => {
+  setLoading(true);
+  setError("");
+  try {
+    let page = 1;
+    let all = [];
+    let hasNext = true;
+
+    while (hasNext) {
+      const response = await listCargos({
+        page,
+        per_page: 100, // adjust if backend limits this
+        sender_name: filter.sender || undefined,
+        receiver_name: filter.receiver || undefined,
         from_date: filter.fromDate || undefined,
         to_date: filter.tillDate || undefined,
         status_id: filter.status || undefined,
       });
-      const arr =
-        Array.isArray(rows?.data) ? rows.data :
-          Array.isArray(rows?.items) ? rows.items :
-            Array.isArray(rows) ? rows : [];
-      setAllCargos(arr);
-      setPage(1);
-    } catch (e) {
-      setError(e?.message || "Failed to load cargos.");
-      setAllCargos([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const getBoxCount = (c = {}) => {
-    if (Number.isFinite(c.box_count)) return Number(c.box_count);
-    if (c.boxes && !Array.isArray(c.boxes) && typeof c.boxes === "object") return Object.keys(c.boxes).length;
-    if (Array.isArray(c.boxes)) return c.boxes.length;
-    if (Array.isArray(c.items)) {
-      const uniq = new Set(
-        c.items
-          .map((it) => it?.box_number ?? it?.boxNumber ?? it?.boxNo ?? it?.box)
-          .filter(Boolean)
-      );
-      return uniq.size || 0;
+      const data =
+        Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.items)
+          ? response.items
+          : Array.isArray(response)
+          ? response
+          : [];
+
+      if (data.length === 0) break;
+
+      all = [...all, ...data];
+      // console.log(`✅ Page ${page} fetched: ${data.length} cargos`);
+      page++;
+
+      // stop when less than per_page is returned
+      hasNext = data.length >= 100;
     }
-    return 0;
-  };
+
+    setAllCargos(all);
+  } catch (e) {
+    
+    setError(e?.message || "Failed to load cargos.");
+    setAllCargos([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchCargos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // fetch on mount
 
-  // local filter for sender/receiver text
-  const locallyFiltered = useMemo(() => {
-    const { sender, receiver } = filter;
-    if (!sender && !receiver) return allCargos;
-    return allCargos.filter((c) => {
-      const senderMatch = sender
-        ? String(c.sender_name || c.sender || "").toLowerCase().includes(sender.toLowerCase())
-        : true;
-      const receiverMatch = receiver
-        ? String(c.receiver_name || c.receiver || "").toLowerCase().includes(receiver.toLowerCase())
-        : true;
-      return senderMatch && receiverMatch;
-    });
-  }, [allCargos, filter.sender, filter.receiver]);
-
-  // pagination
-  const total = locallyFiltered.length;
-  const totalPages = Math.max(1, Math.ceil(total / perPage));
-  const paged = useMemo(() => {
-    const start = (page - 1) * perPage;
-    return locallyFiltered.slice(start, start + perPage);
-  }, [locallyFiltered, page, perPage]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [totalPages, page]);
-
-  
-
-  // handlers
+  /* ---------------- Filters ---------------- */
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilter((f) => ({ ...f, [name]: value }));
   };
-  const applyServerFilters = () => fetchCargos();
+
+  const applyFilters = () => fetchCargos();
   const resetFilters = () => {
     setFilter(initialFilter);
-    setBulkStatusId("");
     fetchCargos();
   };
 
-  // selection
-  const currentPageIds = useMemo(() => paged.map((c) => c.id), [paged]);
+  /* ---------------- Pagination (Client Side) ---------------- */
+  const totalItems = allCargos.length;
+  const totalPages = Math.ceil(totalItems / perPage);
 
-  // Excel export
+  const pagedCargos = useMemo(() => {
+    const start = (page - 1) * perPage;
+    return allCargos.slice(start, start + perPage);
+  }, [allCargos, page, perPage]);
+
+  const handleNextPage = () => {
+    if (page < totalPages) setPage((p) => p + 1);
+  };
+
+  const handlePrevPage = () => {
+    if (page > 1) setPage((p) => p - 1);
+  };
+
+  /* ---------------- Excel Export ---------------- */
   const handleExcelExport = () => {
-    const toRows = locallyFiltered.map((c) => ({
+    if (!allCargos.length) return alert("No cargos to export.");
+
+    const toRows = allCargos.map((c) => ({
       ID: c.id,
       "Booking No": c.booking_no,
       Branch: c.branch_name,
@@ -208,29 +203,33 @@ export default function AllCargoList() {
       Time: c.time,
       "Shipping Method": c.shipping_method,
       "Payment Method": c.payment_method,
-      "Box Count": getBoxCount(c),
       Status: c.status?.name || c.status || "",
-      "Delivery Type": c.delivery_type,
-      "Total Weight (kg)": c.total_weight,
+      "Total Weight": c.total_weight,
       "Total Cost": c.total_cost,
-      "Bill Charges": c.bill_charges,
-      "VAT %": c.vat_percentage,
-      "VAT Cost": c.vat_cost,
-      "Net Total": c.net_total,
-      "Track Code": c.lrl_tracking_code,
-      Remarks: c.special_remarks,
     }));
+
     const ws = XLSX.utils.json_to_sheet(toRows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Cargos");
-    XLSX.writeFile(wb, `cargos_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.xlsx`);
+    XLSX.writeFile(
+      wb,
+      `cargos_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.xlsx`
+    );
   };
 
-  // NOTE: assumes you have a handler; keep as-is if defined elsewhere
-  const handleInvoice = (cargo) => {
-    if (!cargo?.id) return;
-
-    navigate(`/invoice/${cargo.id}`, { state: { cargo } });
+  /* ---------------- Helpers ---------------- */
+  const getBoxCount = (c = {}) => {
+    if (Number.isFinite(c.box_count)) return Number(c.box_count);
+    if (Array.isArray(c.boxes)) return c.boxes.length;
+    if (Array.isArray(c.items)) {
+      const uniq = new Set(
+        c.items
+          .map((it) => it?.box_number ?? it?.boxNumber ?? it?.box)
+          .filter(Boolean)
+      );
+      return uniq.size || 0;
+    }
+    return 0;
   };
 
   /* ---------------- UI ---------------- */
@@ -240,11 +239,13 @@ export default function AllCargoList() {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="rounded-xl text-[#ED2624]">
-              <GiCargoCrate className="h-6 w-6" />
-            </div>
+            <GiCargoCrate className="h-6 w-6 text-[#ED2624]" />
             <h1 className="text-xl font-semibold text-slate-900">All Cargo</h1>
+            <span className="ml-3 rounded-lg bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-800 ring-1 ring-indigo-300">
+              Total Cargos: {totalItems}
+            </span>
           </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={fetchCargos}
@@ -253,7 +254,7 @@ export default function AllCargoList() {
               Refresh
             </button>
             <button
-              onClick={() => window.history.back()}
+              onClick={() => navigate(-1)}
               className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
             >
               Back
@@ -273,100 +274,81 @@ export default function AllCargoList() {
           </div>
         </div>
 
-        {/* Filters & bulk update toolbar */}
+        {/* Filters */}
         <div className="mb-5 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          {loading ? (
-            <SkelBar />
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                <div className="flex items-center rounded-lg bg-slate-50 ring-1 ring-slate-200 focus-within:ring-indigo-300">
-                  <input
-                    type="text"
-                    name="sender"
-                    value={filter.sender}
-                    onChange={handleFilterChange}
-                    placeholder="Sender (client-side)"
-                    className="w-full bg-transparent px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center rounded-lg bg-slate-50 ring-1 ring-slate-200 focus-within:ring-indigo-300">
-                  <input
-                    type="text"
-                    name="receiver"
-                    value={filter.receiver}
-                    onChange={handleFilterChange}
-                    placeholder="Receiver (client-side)"
-                    className="w-full bg-transparent px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
-                  />
-                </div>
-
-                <select
-                  name="status"
-                  value={filter.status}
-                  onChange={handleFilterChange}
-                  className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                >
-                  <option value="">All Statuses</option>
-                  {statuses.map((s) => (
-                    <option key={s.id} value={String(s.id)}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  type="date"
-                  name="fromDate"
-                  value={filter.fromDate}
-                  onChange={handleFilterChange}
-                  className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                />
-
-                <input
-                  type="date"
-                  name="tillDate"
-                  value={filter.tillDate}
-                  onChange={handleFilterChange}
-                  className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                />
-
-                <button
-                  onClick={applyServerFilters}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#262262] px-3 py-2 text-sm font-medium text-white hover:bg-[#161436]"
-                  title="Apply filters"
-                >
-                  <IoIosSearch className="h-4 w-4" />
-                  Search
-                </button>
-              </div>
-
-            </>
-          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <input
+              type="text"
+              name="sender"
+              value={filter.sender}
+              onChange={handleFilterChange}
+              placeholder="Search by Sender"
+              className="rounded-lg bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200 focus:ring-indigo-300"
+            />
+            <input
+              type="text"
+              name="receiver"
+              value={filter.receiver}
+              onChange={handleFilterChange}
+              placeholder="Search by Receiver"
+              className="rounded-lg bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200 focus:ring-indigo-300"
+            />
+            <select
+              name="status"
+              value={filter.status}
+              onChange={handleFilterChange}
+              className="rounded-lg bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200 focus:ring-indigo-300"
+            >
+              <option value="">All Statuses</option>
+              {statuses.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="date"
+              name="fromDate"
+              value={filter.fromDate}
+              onChange={handleFilterChange}
+              className="rounded-lg bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200 focus:ring-indigo-300"
+            />
+            <input
+              type="date"
+              name="tillDate"
+              value={filter.tillDate}
+              onChange={handleFilterChange}
+              className="rounded-lg bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200 focus:ring-indigo-300"
+            />
+            <button
+              onClick={applyFilters}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#262262] px-3 py-2 text-sm font-medium text-white hover:bg-[#161436]"
+            >
+              <IoIosSearch className="h-4 w-4" />
+              Search
+            </button>
+          </div>
         </div>
 
-        {/* States */}
-        {!loading && error && (
-          <div className="rounded-xl bg-rose-50 p-4 text-rose-800 ring-1 ring-rose-200">{error}</div>
-        )}
-
-        {/* Table / Skeleton */}
+        {/* Table */}
         {loading ? (
-          <TableSkeleton rows={8} cols={13} />
-        ) : !error ? (
+          <TableSkeleton />
+        ) : error ? (
+          <div className="rounded-xl bg-rose-50 p-4 text-rose-800 ring-1 ring-rose-200">
+            {error}
+          </div>
+        ) : (
           <div className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
             <div className="overflow-x-auto">
               <table className="min-w-[1200px] whitespace-nowrap">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-xs font-semibold tracking-wide text-slate-600">
-
                     <th className="px-3 py-3">Actions</th>
                     <th className="px-3 py-3">Booking No.</th>
                     <th className="px-3 py-3">Branch</th>
                     <th className="px-3 py-3">Sender</th>
                     <th className="px-3 py-3">Receiver</th>
-                    <th className="px-3 py-3">Booked Date</th>
+                    <th className="px-3 py-3">Date</th>
                     <th className="px-3 py-3">Time</th>
                     <th className="px-3 py-3">Method</th>
                     <th className="px-3 py-3">Payment</th>
@@ -375,128 +357,138 @@ export default function AllCargoList() {
                     <th className="px-3 py-3">Status</th>
                   </tr>
                 </thead>
-
-                <tbody className="cargo-all-lists divide-y divide-slate-100 text-sm text-slate-700">
-                  {paged.length === 0 && (
+                <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+                  {pagedCargos.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-slate-500" colSpan={13}>
+                      <td colSpan={12} className="px-3 py-8 text-center text-slate-500">
                         No cargos found.
                       </td>
                     </tr>
+                  ) : (
+                    pagedCargos.map((c) => (
+                      <tr key={c.id} className="hover:bg-slate-50/60">
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              to={`/cargo/view/${c.id}`}
+                              title="View"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-sky-100 text-sky-700 ring-1 ring-sky-200 hover:bg-sky-200"
+                            >
+                              <SlEye className="h-3 w-3" />
+                            </Link>
+                         <button
+                              onClick={() => {
+                                setEditingCargoId(c.id);
+                                setEditModalOpen(true);
+                              }}
+                              title="Edit Cargo"
+                              className="inline-flex items-center rounded-md bg-amber-100 p-2 text-amber-800 hover:bg-amber-200 transition"
+                            >
+                              ✏️
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setSelectedShipment(c);
+                                setInvoiceModalOpen(true);
+                              }}
+                              title="Invoice"
+                              className="inline-flex items-center rounded-md bg-sky-50 p-2 text-sky-700 hover:bg-sky-100"
+                            >
+                              <FaFileInvoiceDollar className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">{c.booking_no}</td>
+                        <td className="px-3 py-2">{c.branch_name || "—"}</td>
+                        <td className="px-3 py-2">{c.sender_name || "—"}</td>
+                        <td className="px-3 py-2">{c.receiver_name || "—"}</td>
+                        <td className="px-3 py-2">{c.date || "—"}</td>
+                        <td className="px-3 py-2">{c.time || "—"}</td>
+                        <td className="px-3 py-2">{c.shipping_method || "—"}</td>
+                        <td className="px-3 py-2">{c.payment_method || "—"}</td>
+                        <td className="px-3 py-2">{getBoxCount(c)}</td>
+                        <td className="px-3 py-2">{c.total_weight ?? "—"}</td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${COLOR.violet}`}
+                          >
+                            {c.status?.name || c.status || "—"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
                   )}
-
-                  {paged.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50/60">
-
-
-                      <td className="px-3 py-2 align-top" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-2">
-                          <Link
-                            to={`/cargo/view/${c.id}`}
-                            aria-label="View"
-                            title="View"
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-md
-                               bg-sky-100 text-sky-700 ring-1 ring-sky-200
-                               hover:bg-sky-200 hover:text-sky-800
-                               focus:outline-none focus:ring-2 focus:ring-sky-400
-                               transition"
-                          >
-                            <SlEye className="h-3 w-3" />
-                          </Link>
-
-                          <button
-                            type="button"
-                            onClick={() => handleInvoice(c)}
-                            aria-label="Invoice"
-                            title="Invoice"
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-md
-                               bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200
-                               hover:bg-emerald-200
-                               focus:outline-none focus:ring-2 focus:ring-emerald-400
-                               transition disabled:opacity-40 disabled:pointer-events-none"
-                          >
-                            <LiaFileInvoiceDollarSolid className="h-3 w-3" />
-                          </button>
-
-                        </div>
-                      </td>
-
-                      <td className="px-3 py-2 align-top">{c.booking_no}</td>
-                      <td className="px-3 py-2 align-top">{c.branch_name || "—"}</td>
-                      <td className="px-3 py-2 align-top">{c.sender_name || "—"}</td>
-                      <td className="px-3 py-2 align-top">{c.receiver_name || "—"}</td>
-                      <td className="px-3 py-2 align-top">{c.date || "—"}</td>
-                      <td className="px-3 py-2 align-top tabular-nums">{c.time || "—"}</td>
-                      <td className="px-3 py-2 align-top">{c.shipping_method || "—"}</td>
-                      <td className="px-3 py-2 align-top">{c.payment_method || "—"}</td>
-                      <td className="px-3 py-2 align-top tabular-nums">{getBoxCount(c)}</td>
-                      <td className="px-3 py-2 align-top">{c.total_weight ?? "—"}</td>
-                      <td className="px-3 py-2 align-top">
-                        <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap bg-violet-100 text-violet-800 ring-1 ring-violet-200">
-                          {c.status?.name || c.status || "—"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
                 </tbody>
               </table>
             </div>
           </div>
-        ) : null}
+        )}
 
-        {/* Footer: pagination */}
-        {!loading && !error && (
+        {/* Pagination */}
+        {!loading && !error && totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
             <div className="text-sm text-slate-600">
-              Showing{" "}
-              <b>{total === 0 ? 0 : (page - 1) * perPage + 1}–{Math.min(page * perPage, total)}</b> of{" "}
-              <b>{total}</b>
+              Page <b>{page}</b> of <b>{totalPages}</b> — Showing{" "}
+              <b>{perPage}</b> per page (Total: <b>{totalItems}</b>)
             </div>
-
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-slate-600">Rows:</span>
-                <select
-                  value={perPage}
-                  onChange={(e) => {
-                    setPerPage(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-800 hover:bg-slate-50"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1">
+              <button
+                onClick={handlePrevPage}
+                disabled={page === 1}
+                className={`rounded-md border px-3 py-1 text-sm ${
+                  page === 1
+                    ? "cursor-not-allowed border-slate-200 text-slate-400"
+                    : "border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => (
                 <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className={`rounded-md border px-3 py-1 text-sm ${page === 1 ? "cursor-not-allowed border-slate-200 text-slate-400" : "border-slate-200 hover:bg-slate-50"
-                    }`}
+                  key={i}
+                  onClick={() => setPage(i + 1)}
+                  className={`rounded-md border px-3 py-1 text-sm ${
+                    page === i + 1
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                  }`}
                 >
-                  Prev
+                  {i + 1}
                 </button>
-                <span className="px-2 text-sm text-slate-700">
-                  Page <b>{page}</b> / {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className={`rounded-md border px-3 py-1 text-sm ${page === totalPages
-                      ? "cursor-not-allowed border-slate-200 text-slate-400"
-                      : "border-slate-200 hover:bg-slate-50"
-                    }`}
-                >
-                  Next
-                </button>
-              </div>
+              ))}
+              <button
+                onClick={handleNextPage}
+                disabled={page === totalPages}
+                className={`rounded-md border px-3 py-1 text-sm ${
+                  page === totalPages
+                    ? "cursor-not-allowed border-slate-200 text-slate-400"
+                    : "border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                Next
+              </button>
             </div>
           </div>
         )}
       </div>
+
+      <BillModal
+        open={invoiceModalOpen}
+        onClose={() => setInvoiceModalOpen(false)}
+        shipment={selectedShipment}
+      />
+
+              <EditCargoModal
+                  open={editModalOpen}
+                  cargoId={editingCargoId}
+                  onClose={() => setEditModalOpen(false)}
+                  onSaved={() => {
+                    setEditModalOpen(false);
+                    fetchCargos(); // refresh after edit
+                  }}
+                />
+
     </section>
   );
 }
