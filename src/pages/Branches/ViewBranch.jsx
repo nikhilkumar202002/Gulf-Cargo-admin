@@ -77,18 +77,7 @@ const findStartNumberDeep = (obj, depth = 0) => {
 };
 
 const pickStartNumber = (b) => {
-  if (!b) return "";
-  // quick top-level wins
-  const quick =
-    digitStr(b.start_number) ||
-    digitStr(b.startNumber) ||
-    digitStr(b.invoice_start_number) ||
-    digitStr(b.invoice_start) ||
-    digitStr(b.startNo) ||
-    digitStr(b.start_no);
-  if (quick) return quick.slice(0, 6);
-  // deep fallback
-  return findStartNumberDeep(b);
+  return findStartNumberDeep(b) || "";
 };
 
 export default function ViewBranch() {

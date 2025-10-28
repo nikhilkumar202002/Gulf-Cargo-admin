@@ -40,10 +40,10 @@ const AddDriver = () => {
   const [fieldErrors, setFieldErrors] = useState(null);
 
   // helpers for various API shapes
-  const idFrom = (it) => it?.id ?? it?.phone_code_id ?? null;
-  const dialFrom = (it) => it?.dial_code ?? it?.phone_code ?? it?.code ?? "";
-  const countryFrom = (it) => it?.country ?? it?.name ?? it?.country_name ?? it?.iso2 ?? it?.iso ?? "";
-  const codeLabel = (it) => [countryFrom(it), dialFrom(it)].filter(Boolean).join(" ");
+  const idFrom = (it) => String(it?.id ?? it?.phone_code_id ?? "");
+  const dialFrom = (it) => String(it?.dial_code ?? it?.phone_code ?? it?.code ?? "").replace(/\D/g, "");
+  const countryFrom = (it) => String(it?.country ?? it?.name ?? it?.country_name ?? it?.iso2 ?? it?.iso ?? "");
+  const codeLabel = (it) => dialFrom(it);
 
   const branchLabel = (b) => b?.name ?? b?.branch_name ?? b?.title ?? `Branch #${b?.id ?? ""}`;
   const licenseLabel = (t) => t?.name ?? t?.type_name ?? t?.title ?? `Type #${t?.id ?? ""}`;
@@ -53,7 +53,13 @@ const AddDriver = () => {
       try {
         setLoading((p) => ({ ...p, codes: true }));
         const list = await getPhoneCodes();
-        setCodes(Array.isArray(list) ? list : []);
+        const codesList = Array.isArray(list) ? list : [];
+        setCodes(codesList);
+        const saudiCode = codesList.find(c => dialFrom(c) === '966');
+        if (saudiCode) {
+          const saudiId = idFrom(saudiCode);
+          if (saudiId) setForm(f => ({ ...f, phone_code_id: saudiId }));
+        }
       } catch {
         setMsg({ type: "error", text: "Failed to load phone codes." });
       } finally {
