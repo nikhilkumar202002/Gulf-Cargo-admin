@@ -307,6 +307,20 @@ export default function ReceiverForm({ onClose, onCreated }) {
     }
   }, [form.useSameForContact, form.whatsappNumber, whatsappCode]);
 
+  /* when country changes, update phone codes */
+  React.useEffect(() => {
+    if (!form.country || !phoneCodes.length) return;
+    const countryId = toApiId(form.country);
+    const phoneCode = phoneCodes.find(
+      (p) => String(p.country_id) === String(countryId)
+    );
+    if (phoneCode) {
+      const digits = onlyDigits(getDialCode(phoneCode));
+      setWhatsappCode(digits);
+      setContactCode(digits);
+    }
+  }, [form.country, phoneCodes]);
+
   /* --- Phone number handlers (LOCAL, robust) --- */
   const handleWaChange = (e) => {
     const val = e.target.value;

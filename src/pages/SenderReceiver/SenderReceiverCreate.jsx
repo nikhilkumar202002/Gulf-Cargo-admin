@@ -365,6 +365,21 @@ const [role, setRole] = React.useState(() =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, receiver.state, token]);
 
+  /* when country changes, update phone codes */
+  React.useEffect(() => {
+    if (role !== "receiver" || !receiver.country || !phoneCodes.length) return;
+
+    const phoneCode = phoneCodes.find(
+      (p) => String(p.country_id) === String(receiver.country)
+    );
+
+    if (phoneCode) {
+      const dialCode = getDialCode(phoneCode);
+      setWhatsappCode(dialCode);
+      setContactCode(dialCode);
+    }
+  }, [role, receiver.country, phoneCodes]);
+
   /* handlers */
   const onSenderChange = async (e) => {
     const { name, value, files } = e.target;
@@ -700,6 +715,93 @@ try {
             {/* receiver */}
             {role === "receiver" && (
               <>
+                {/* address */}
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                  <div>
+                    <Label>Country</Label>
+                    {countryLoading ? <Skel /> : (
+                      <select
+                        name="country"
+                        value={String(receiver.country || "")}
+                        onChange={onReceiverChange}
+                        className={`${fieldBase} ${fieldDisabled}`}
+                        disabled={countryLoading}
+                      >
+                        <option value="">{countryLoading ? "Loading..." : "Select Country"}</option>
+                        {!countryLoading &&
+                          countries.map((c) => (
+                            <option key={getId(c)} value={getId(c)}>
+                              {labelOf(c)}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    {countryError && <ErrorMsg>{countryError}</ErrorMsg>}
+                  </div>
+                  <div>
+                    <Label>State</Label>
+                    {stateLoading ? <Skel /> : (
+                      <select
+                        name="state"
+                        value={String(receiver.state || "")}
+                        onChange={onReceiverChange}
+                        className={`${fieldBase} ${fieldDisabled}`}
+                        disabled={!receiver.country || stateLoading}
+                      >
+                        <option value="">
+                          {!receiver.country ? "Select Country first" : stateLoading ? "Loading..." : "Select State"}
+                        </option>
+                        {!stateLoading && receiver.country &&
+                          states.map((s) => (
+                            <option key={getId(s)} value={getId(s)}>
+                              {labelOf(s)}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    {stateError && <ErrorMsg>{stateError}</ErrorMsg>}
+                  </div>
+                  <div>
+                    <Label>District</Label>
+                    {districtLoading ? <Skel /> : (
+                      <select
+                        name="district"
+                        value={String(receiver.district || "")}
+                        onChange={onReceiverChange}
+                        className={`${fieldBase} ${fieldDisabled}`}
+                        disabled={!receiver.state || districtLoading}
+                      >
+                        <option value="">
+                          {!receiver.state ? "Select State first" : districtLoading ? "Loading..." : "Select District"}
+                        </option>
+                        {!districtLoading && receiver.state &&
+                          districts.map((d) => (
+                            <option key={getId(d)} value={getId(d)}>
+                              {labelOf(d)}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    {districtError && <ErrorMsg>{districtError}</ErrorMsg>}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div>
+                    <Label>City</Label>
+                    <input name="city" value={receiver.city} onChange={onReceiverChange} className={fieldBase} placeholder="City" />
+                  </div>
+                  <div>
+                    <Label>Zip / Postal Code</Label>
+                    <input name="zipCode" value={receiver.zipCode} onChange={onReceiverChange} className={`${fieldBase} font-mono`} placeholder="e.g., 682001" />
+                  </div>
+                </div>
+
+                <div>
+                  <Label required>Address</Label>
+                  <textarea name="address" value={receiver.address} onChange={onReceiverChange} className={`${fieldBase} min-h-[96px]`} placeholder="Street, Building, Landmark" />
+                </div>
+
                 {/* Receiver – Identity (3 columns, code selects + plain inputs) */}
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
                   {/* 1) Name */}
@@ -816,92 +918,6 @@ try {
                   </div>
                 </div>
 
-                {/* address */}
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-                  <div>
-                    <Label>Country</Label>
-                    {countryLoading ? <Skel /> : (
-                      <select
-                        name="country"
-                        value={String(receiver.country || "")}
-                        onChange={onReceiverChange}
-                        className={`${fieldBase} ${fieldDisabled}`}
-                        disabled={countryLoading}
-                      >
-                        <option value="">{countryLoading ? "Loading..." : "Select Country"}</option>
-                        {!countryLoading &&
-                          countries.map((c) => (
-                            <option key={getId(c)} value={getId(c)}>
-                              {labelOf(c)}
-                            </option>
-                          ))}
-                      </select>
-                    )}
-                    {countryError && <ErrorMsg>{countryError}</ErrorMsg>}
-                  </div>
-                  <div>
-                    <Label>State</Label>
-                    {stateLoading ? <Skel /> : (
-                      <select
-                        name="state"
-                        value={String(receiver.state || "")}
-                        onChange={onReceiverChange}
-                        className={`${fieldBase} ${fieldDisabled}`}
-                        disabled={!receiver.country || stateLoading}
-                      >
-                        <option value="">
-                          {!receiver.country ? "Select Country first" : stateLoading ? "Loading..." : "Select State"}
-                        </option>
-                        {!stateLoading && receiver.country &&
-                          states.map((s) => (
-                            <option key={getId(s)} value={getId(s)}>
-                              {labelOf(s)}
-                            </option>
-                          ))}
-                      </select>
-                    )}
-                    {stateError && <ErrorMsg>{stateError}</ErrorMsg>}
-                  </div>
-                  <div>
-                    <Label>District</Label>
-                    {districtLoading ? <Skel /> : (
-                      <select
-                        name="district"
-                        value={String(receiver.district || "")}
-                        onChange={onReceiverChange}
-                        className={`${fieldBase} ${fieldDisabled}`}
-                        disabled={!receiver.state || districtLoading}
-                      >
-                        <option value="">
-                          {!receiver.state ? "Select State first" : districtLoading ? "Loading..." : "Select District"}
-                        </option>
-                        {!districtLoading && receiver.state &&
-                          districts.map((d) => (
-                            <option key={getId(d)} value={getId(d)}>
-                              {labelOf(d)}
-                            </option>
-                          ))}
-                      </select>
-                    )}
-                    {districtError && <ErrorMsg>{districtError}</ErrorMsg>}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div>
-                    <Label>City</Label>
-                    <input name="city" value={receiver.city} onChange={onReceiverChange} className={fieldBase} placeholder="City" />
-                  </div>
-                  <div>
-                    <Label>Zip / Postal Code</Label>
-                    <input name="zipCode" value={receiver.zipCode} onChange={onReceiverChange} className={`${fieldBase} font-mono`} placeholder="e.g., 682001" />
-                  </div>
-                </div>
-
-                <div>
-                  <Label required>Address</Label>
-                  <textarea name="address" value={receiver.address} onChange={onReceiverChange} className={`${fieldBase} min-h-[96px]`} placeholder="Street, Building, Landmark" />
-                </div>
               </>
             )}
 

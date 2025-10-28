@@ -33,3 +33,16 @@ export const getPhoneCode = async (params, token, axiosOpts = {}) => {
   const res = await axiosInstance.get(ONE_ENDPOINT, cfg);
   return res?.data ?? res;
 };
+
+/**
+ * Get phone codes for a specific country.
+ * @param {string|number} countryId - The ID of the country.
+ * @param {Object} params - Additional query parameters.
+ * @param {string} [token] - Optional auth token.
+ * @param {Object} [axiosOpts] - Optional axios config.
+ * @returns {Promise<Array>}
+ */
+export const getPhoneCodesByCountry = async (countryId, params = {}, token, axiosOpts = {}) => {
+  const finalParams = { ...params, country_id: countryId };
+  return getPhoneCodes(finalParams, token, axiosOpts);
+};

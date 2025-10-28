@@ -46,7 +46,7 @@ export const ChargesAndSummary = React.memo(({ form, updateForm, onChargeChange,
               step="0.01"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
               placeholder="0.00"
-              value={form.vatPercentage}
+              value={form.vatPercentage || ''}
               onChange={(e) => updateForm(draft => { draft.vatPercentage = Number.parseFloat(e.target.value || 0) || 0; })}
             />
           </div>
@@ -77,7 +77,7 @@ export const ChargesAndSummary = React.memo(({ form, updateForm, onChargeChange,
                         min="0"
                         step="0.01"
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-                        value={qtyValue}
+                        value={qtyValue || ''}
                         onChange={(e) => onChargeChange(key, 'qty', e.target.value)}
                         readOnly={key === "total_weight"}
                       />
@@ -88,7 +88,7 @@ export const ChargesAndSummary = React.memo(({ form, updateForm, onChargeChange,
                         min="0"
                         step="0.01"
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-                        value={row.rate}
+                        value={row.rate || ''}
                         onChange={(e) => onChargeChange(key, 'rate', e.target.value)}
                       />
                     </td>

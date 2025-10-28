@@ -339,6 +339,10 @@ export default function CreateCargo() {
         const roles = Array.isArray(rolesRes?.data) ? rolesRes.data : [];
         const staffList = unwrapArray(staffRes);
 
+        const methods = unwrapArray(methodsRes);
+        const paymentMethods = unwrapArray(paymentMethodsRes);
+        const deliveryTypes = unwrapArray(deliveryTypesRes);
+
         setOptions({
           methods: unwrapArray(methodsRes),
           statuses: unwrapArray(statusesRes),
@@ -360,6 +364,11 @@ export default function CreateCargo() {
           draft.branchId = String(preferredBranchId);
           draft.branchName = branchName;
           draft.invoiceNo = invoiceNo;
+
+          // Set default for hidden fields
+          if (methods.length > 0) draft.shippingMethodId = String(idOf(methods[0]));
+          if (paymentMethods.length > 0) draft.paymentMethodId = String(idOf(paymentMethods[0]));
+          if (deliveryTypes.length > 0) draft.deliveryTypeId = String(idOf(deliveryTypes[0]));
 
           // Default to 'Office' role and the current user
           const officeRole = roles.find(r => r.name === 'Office');
@@ -935,7 +944,14 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues) => {
 
       <div className="min-h-screen bg-gray-50 flex items-start justify-center p-6">
         <div className="w-full max-w-6xl bg-white rounded-2xl p-8">
-          <PageHeader title="Create Cargo" />
+          <div>
+             <div className=" flex gap-6 text-right text-sm text-slate-500">
+              <div>{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+              <div>{new Date().toLocaleTimeString()}</div>
+            </div>
+            <PageHeader title="Create Cargo" />
+           
+          </div>
 
           {loading ? (
             <SkeletonCreateCargo />
@@ -967,7 +983,7 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues) => {
                 loading={loading}
               />
 
-              <ScheduleDetails form={form} updateForm={updateForm} />
+              {/* <ScheduleDetails form={form} updateForm={updateForm} /> */}
 
               <BoxesSection
                 boxes={boxes}
