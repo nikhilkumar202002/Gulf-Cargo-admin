@@ -679,7 +679,9 @@ const docId = isSender
             <div className="mt-3 grid grid-cols-1 items-center gap-2 rounded bg-rose-600 px-2 py-1 text-white sm:grid-cols-3">
               <div className="text-xs">
                 <div className="invoice-top-header">VAT NO. : {COMPANY.vatNo}</div>
-                <div className="invoice-top-header">SHIPMENT TYPE: {shipment?.method || COMPANY.defaultShipmentType}</div>
+                <div className="invoice-top-header">
+                 SHIPMENT TYPE: {pick(shipment, ["shipping_method", "method"], COMPANY.defaultShipmentType)}
+                </div>
               </div>
               <div className="text-center">
                 <div className="invoice-top-header">فاتورة ضريبة مبسطة</div>

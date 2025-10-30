@@ -294,6 +294,14 @@ export default function CreateCargo() {
     });
   }, [boxes.length, updateForm]);
 
+  // Sync totalWeight from boxes into the form's charges
+  useEffect(() => {
+    updateForm(draft => {
+      if (draft.charges.total_weight) {
+        draft.charges.total_weight.qty = totalWeight;
+      }
+    });
+  }, [totalWeight, updateForm]);
   // Initial data load
   useEffect(() => {
     let alive = true;
@@ -355,8 +363,21 @@ export default function CreateCargo() {
 
         setCollectedByOptions(staffList);
 
-        const nextInvoice = nextInvoiceRes && nextInvoiceRes !== 'INV-000001' ? nextInvoiceRes : null;
+        // Log the raw response from the API to check what's being fetched.
+        console.log("Next Invoice No from API:", nextInvoiceRes);
+
+        // If the API returns a valid (truthy) invoice number, use it.
+        // Otherwise, fall back to constructing one from the current branch details.
         const branch = branchRes?.branch ?? branchRes?.data?.branch ?? branchRes;
+        const currentBranchCode = branch?.branch_code;
+
+        // Only accept the API response if it's a string and starts with the current branch's code.
+        const isValidNextInvoice = typeof nextInvoiceRes === 'string' && currentBranchCode && nextInvoiceRes.startsWith(currentBranchCode);
+        const nextInvoice = isValidNextInvoice ? nextInvoiceRes : null;
+
+        // Log branch details from the logged-in user's profile
+        console.log("Branch details from profile:", { branch, branch_code: branch?.branch_code, start_number: branch?.start_number });
+
         const constructedInvoiceNo = branch ? `${branch.branch_code || 'BR'}:${branch.start_number || '000001'}` : '';
         const invoiceNo = nextInvoice || constructedInvoiceNo;
 
@@ -650,7 +671,12 @@ const softResetForNext = useCallback((branchId, nextInvoiceNo) => {
     });
   }, [updateForm]);
 
-const buildCargoPayload = (currentForm, currentBoxes, derivedValues) => {
+const getShipmentMethodName = (methodId, methods) => {
+  const method = methods.find(m => String(m.id) === String(methodId));
+  return method?.name || '';
+};
+
+const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMethods = []) => {
   const { subtotal, billCharges, totalAmount, rows: R } = derivedValues;
   const totalWeightVal = Number(totalWeight.toFixed(3));
   const vatPercentageVal = Number(currentForm.vatPercentage || 0);
@@ -712,6 +738,7 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues) => {
       return wn.toFixed(3);
     });
 
+  const methodName = getShipmentMethodName(currentForm.shippingMethodId, shipmentMethods);
   return {
     branch_id: Number(currentForm.branchId),
     booking_no: currentForm.invoiceNo,
@@ -729,6 +756,7 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues) => {
     delivery_type_id: Number(currentForm.deliveryTypeId),
     special_remarks: currentForm.specialRemarks || null,
     items: flatItems,
+    method: methodName, // <-- ADDED: Pass the method name
     total_cost: +subtotal.toFixed(2),
     vat_percentage: +vatPercentageVal.toFixed(2),
     vat_cost: +vatCostVal.toFixed(2),
@@ -792,7 +820,7 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues) => {
         return;
       }
 
-      const payload = buildCargoPayload(form, boxes, derived);
+      const payload = buildCargoPayload(form, boxes, derived, options.methods);
       if (payload.items.length === 0) {
         setMsg({ text: "Add at least one box or item.", variant: "error" });
         return;
@@ -859,6 +887,7 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues) => {
       softResetForNext,
       derived,
       boxes,
+      options.methods,
     ]
   );
 

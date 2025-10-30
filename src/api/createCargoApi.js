@@ -286,6 +286,7 @@ function normalizeCargoToInvoice(raw) {
     // payment / delivery / branch
     payment_method: cargo.payment_method ?? cargo.payment_method_id ?? cargo.paymentMethod ?? "",
     delivery_type: cargo.delivery_type ?? cargo.delivery_type_id ?? cargo.deliveryType ?? "",
+    shipping_method: cargo.method ?? cargo.shipping_method ?? cargo.shippingMethod?.name ?? "",
     branch: cargo.branch ?? cargo.branch_name ?? cargo.branchLabel ?? "",
 
     // Sender (many common aliases)
