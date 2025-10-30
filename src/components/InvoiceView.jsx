@@ -317,10 +317,10 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
   }, [shipment, loggedInUser]);
 
   // fetch Sender/Receiver party once we have shipment basics
-  useEffect(() => {
+useEffect(() => {
     if (!shipment) return;
 
-    const fetchParty = async (role) => {
+    const fetchParty = async (role, allParties) => {
       const isSender = role === "sender";
 
       const idCandidates = isSender
@@ -341,24 +341,21 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
       }
 
       if (name) {
-        try {
-          const res = await getParties({ search: name });
-          const list = parsePartyList(res);
-          const roleFiltered = list.filter((p) => {
-            const typeId = Number(p.customer_type_id);
-            const typeName = String(p.customer_type || "").toLowerCase();
-            return isSender ? typeId === 1 || typeName.includes("sender") : typeId === 2 || typeName.includes("receiver");
-          });
+        const list = allParties || parsePartyList(await getParties({ search: name }).catch(() => []));
+        const roleFiltered = list.filter((p) => {
+          const typeId = Number(p.customer_type_id);
+          const typeName = String(p.customer_type || "").toLowerCase();
+          return isSender ? typeId === 1 || typeName.includes("sender") : typeId === 2 || typeName.includes("receiver");
+        });
 
-          const chosen =
-            matchByName(name, roleFiltered) ||
-            matchByName(name, list) ||
-            roleFiltered[0] ||
-            list[0] ||
-            null;
+        const chosen =
+          matchByName(name, roleFiltered) ||
+          matchByName(name, list) ||
+          roleFiltered[0] ||
+          list[0] ||
+          null;
 
-          if (chosen) return extractParty(chosen);
-        } catch {}
+        if (chosen) return extractParty(chosen);
       }
 
      const address = isSender
@@ -393,12 +390,18 @@ const docId = isSender
 });
     };
 
+    let alive = true;
     (async () => {
-      const [sp, rp] = await Promise.all([fetchParty("sender"), fetchParty("receiver")]);
+      // Fetch all parties once to avoid multiple lookups by name
+      const allParties = parsePartyList(await getParties().catch(() => []));
+      const [sp, rp] = await Promise.all([fetchParty("sender", allParties), fetchParty("receiver", allParties)]);
+      if (!alive) return;
       setSenderParty(sp);
       setReceiverParty(rp);
     })();
-  }, [shipment]);
+
+    return () => { alive = false; };
+}, [shipment]);
 
   /* --------------- normalized basics --------------- */
   const currency = DEFAULT_CURRENCY;

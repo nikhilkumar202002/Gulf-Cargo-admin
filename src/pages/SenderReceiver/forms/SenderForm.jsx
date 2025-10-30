@@ -7,7 +7,7 @@ import { getProfile } from "../../../api/accountApi";
 import { getDocumentTypes } from "../../../api/documentTypeApi";
 import { getPhoneCodes } from "../../../api/phoneCodeApi";
 import { createParty } from "../../../api/partiesApi";
-
+import { getBranchByIdSmart } from "../../../api/branchApi";
 /* Helpers */
 import {
   normalizeList,
@@ -44,61 +44,74 @@ export default function SenderForm({ onClose, onCreated }) {
     senderIdType: "",
     senderId: "",
     documents: [],
-    city: "Riyadh",
+    city: "",
   });
   const [fileKey, setFileKey] = React.useState(0);
   const [submitLoading, setSubmitLoading] = React.useState(false);
   const [submitError, setSubmitError] = React.useState("");
 
-  /* ---------------- Profile ---------------- */
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const me = await getProfile();
-        const u = me?.data?.user ?? me?.user ?? null;
-        const bid = u?.branch_id ?? u?.branchId ?? u?.branch?.id ?? "";
-        const bname = u?.branch?.name ?? u?.branch_name ?? "";
-        setBranchId(bid ? String(bid) : "");
-        setBranchName(bname || (bid ? `Branch #${bid}` : ""));
-      } catch {
-        setBranchId("");
-        setBranchName("");
+/* ---------------- Profile ---------------- */
+React.useEffect(() => {
+  (async () => {
+    try {
+      // Fetch profile and other initial data in parallel
+      const [profileRes, docsRes, codesRes] = await Promise.all([
+        getProfile(),
+        getDocumentTypes({ per_page: 1000 }),
+        getPhoneCodes({ per_page: 1000 }),
+      ]);
+
+      // Process profile and branch
+      const profileData = profileRes?.data?.user || profileRes?.user || profileRes?.data || profileRes || {};
+      const branchDetails = profileData?.branch || profileData?.branch_details || {};
+      const profileBranchId = branchDetails?.id || profileData?.branch_id || profileData?.branchId || "";
+      const profileBranchName = branchDetails?.branch_name || branchDetails?.name || "Branch";
+
+      setBranchId(String(profileBranchId));
+      setBranchName(profileBranchName || (profileBranchId ? `Branch #${profileBranchId}` : ""));
+
+      // Set city from profile if available, then fetch full branch details to refine it
+      const initialCity = branchDetails?.branch_location || branchDetails?.location || branchDetails?.city || "Riyadh";
+      setForm((f) => ({ ...f, city: initialCity }));
+
+      if (profileBranchId) {
+        getBranchByIdSmart(profileBranchId)
+          .then(branchRes => {
+            const branchData = branchRes?.data || branchRes || {};
+            const branchLocation = branchData?.branch_location || branchData?.location || branchData?.city || initialCity;
+            setForm((f) => ({ ...f, city: branchLocation }));
+          })
+          .catch(err => console.error("❌ Failed to fetch branch details:", err));
       }
-    })();
-  }, []);
+
+      // Process document types
+      setDocTypes(normalizeList(docsRes));
+      setDocsLoading(false);
+
+      // Process phone codes
+      setPhoneCodes(Array.isArray(codesRes) ? codesRes : []);
+      setPhoneCodesLoading(false);
+
+    } catch (err) {
+      console.error("❌ Failed to fetch profile/branch:", err);
+      setBranchId("");
+      setBranchName("");
+      setForm((f) => ({ ...f, city: "Riyadh" }));
+      setDocsError("Failed to load document types.");
+      setPhoneCodesError("Failed to load phone codes.");
+      setDocsLoading(false);
+      setPhoneCodesLoading(false);
+    }
+  })();
+}, []);
+
 
   /* ---------------- Document Types ---------------- */
   React.useEffect(() => {
-    (async () => {
-      try {
-        setDocsLoading(true);
-        setDocsError("");
-        const docsRes = await getDocumentTypes({ per_page: 1000 });
-        setDocTypes(normalizeList(docsRes));
-      } catch {
-        setDocTypes([]);
-        setDocsError("Failed to load document types.");
-      } finally {
-        setDocsLoading(false);
-      }
-    })();
   }, []);
 
   /* ---------------- Phone Codes ---------------- */
   React.useEffect(() => {
-    (async () => {
-      try {
-        setPhoneCodesLoading(true);
-        setPhoneCodesError("");
-        const list = await getPhoneCodes({ per_page: 1000 });
-        setPhoneCodes(Array.isArray(list) ? list : []);
-      } catch {
-        setPhoneCodes([]);
-        setPhoneCodesError("Failed to load phone codes.");
-      } finally {
-        setPhoneCodesLoading(false);
-      }
-    })();
   }, []);
 
   /* ---------------- Helpers ---------------- */
@@ -171,7 +184,7 @@ export default function SenderForm({ onClose, onCreated }) {
         senderIdType: "",
         senderId: "",
         documents: [],
-        city: "Riyadh",
+        city: form.city, // Preserve the original city from the profile
       });
       setFileKey((k) => k + 1);
       if (typeof onClose === "function") onClose();
