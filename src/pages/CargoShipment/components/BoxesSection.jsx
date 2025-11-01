@@ -9,7 +9,8 @@ export const BoxesSection = React.memo(({
   addItemToBox,
   removeItemFromBox,
   setBoxItem,
-  itemOptions
+  itemOptions,
+  onItemKeyDown, // ✅ Added: receives the handler
 }) => {
   return (
     <div className="space-y-4">
@@ -18,14 +19,16 @@ export const BoxesSection = React.memo(({
           key={boxIndex}
           className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
         >
+          {/* --- Header Row --- */}
           <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-4">
               <div className="text-sm font-semibold text-slate-800">
-                Box No:{" "}
+                Box No:{' '}
                 <span className="ml-2 inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 px-2 py-0.5">
                   {box.box_number}
                 </span>
               </div>
+
               <label className="flex items-center gap-2 text-sm">
                 <span className="text-slate-600">Box Weight (kg)</span>
                 <input
@@ -33,29 +36,33 @@ export const BoxesSection = React.memo(({
                   min="0"
                   step="0.001"
                   title="Enter after packing"
-                  className={`w-32 rounded-lg border px-2 py-1 text-right ${Number(box.box_weight || 0) <= 0
-                    ? "border-rose-300"
-                    : "border-slate-300"
-                    }`}                  
+                  className={`w-32 rounded-lg border px-2 py-1 text-right ${
+                    Number(box.box_weight || 0) <= 0
+                      ? 'border-rose-300'
+                      : 'border-slate-300'
+                  }`}
                   value={box.box_weight || ''}
                   onChange={(e) => setBoxWeight(boxIndex, e.target.value)}
                   placeholder="0.000"
+                  onKeyDown={(e) => onItemKeyDown && onItemKeyDown(e, boxIndex)} // ✅ triggers add on Enter
                 />
               </label>
             </div>
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => removeBox(boxIndex)}
                 disabled={boxes.length <= 1}
-                className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-white ${boxes.length <= 1
-                  ? "bg-slate-300 cursor-not-allowed"
-                  : "bg-rose-600 hover:bg-rose-700"
-                  }`}
+                className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-white ${
+                  boxes.length <= 1
+                    ? 'bg-slate-300 cursor-not-allowed'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
                 title={
                   boxes.length <= 1
-                    ? "At least one box is required"
-                    : "Remove this box"
+                    ? 'At least one box is required'
+                    : 'Remove this box'
                 }
               >
                 Remove Box
@@ -63,6 +70,7 @@ export const BoxesSection = React.memo(({
             </div>
           </div>
 
+          {/* --- Table Section --- */}
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-slate-600">
@@ -76,15 +84,29 @@ export const BoxesSection = React.memo(({
               </thead>
               <tbody>
                 {box.items.map((it, itemIndex) => (
-                  <tr key={itemIndex} className={itemIndex % 2 ? "bg-white" : "bg-slate-50/50"}>
-                    <td className="px-3 py-2 text-center text-slate-500">{itemIndex + 1}</td>
+                  <tr
+                    key={itemIndex}
+                    className={
+                      itemIndex % 2 ? 'bg-white' : 'bg-slate-50/50'
+                    }
+                  >
+                    <td className="px-3 py-2 text-center text-slate-500">
+                      {itemIndex + 1}
+                    </td>
+
                     <td className="px-3 py-2">
                       <ItemAutosuggest
                         value={it.name}
-                        onChange={(v) => setBoxItem(boxIndex, itemIndex, "name", v)}
+                        onChange={(v) =>
+                          setBoxItem(boxIndex, itemIndex, 'name', v)
+                        }
                         options={itemOptions}
+                        onKeyDown={(e) =>
+                          onItemKeyDown && onItemKeyDown(e, boxIndex)
+                        } // ✅ works for Enter
                       />
                     </td>
+
                     <td className="px-3 py-2">
                       <input
                         type="number"
@@ -92,9 +114,20 @@ export const BoxesSection = React.memo(({
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
                         placeholder="0"
                         value={it.pieces}
-                        onChange={(e) => setBoxItem(boxIndex, itemIndex, "pieces", Number.parseInt(e.target.value || 0, 10) || 0)}
+                        onChange={(e) =>
+                          setBoxItem(
+                            boxIndex,
+                            itemIndex,
+                            'pieces',
+                            Number.parseInt(e.target.value || 0, 10) || 0
+                          )
+                        }
+                        onKeyDown={(e) =>
+                          onItemKeyDown && onItemKeyDown(e, boxIndex)
+                        } // ✅ Enter adds new item
                       />
                     </td>
+
                     <td className="px-3 py-2">
                       <input
                         type="number"
@@ -103,12 +136,31 @@ export const BoxesSection = React.memo(({
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
                         placeholder="0.000"
                         value={it.item_weight || ''}
-                        onChange={(e) => setBoxItem(boxIndex, itemIndex, "item_weight", e.target.value)}
+                        onChange={(e) =>
+                          setBoxItem(
+                            boxIndex,
+                            itemIndex,
+                            'item_weight',
+                            e.target.value
+                          )
+                        }
                         title="Optional item weight"
+                        onKeyDown={(e) =>
+                          onItemKeyDown && onItemKeyDown(e, boxIndex)
+                        } // ✅ Enter also works here
                       />
                     </td>
+
                     <td className="px-3 py-2 text-right">
-                      <button type="button" onClick={() => removeItemFromBox(boxIndex, itemIndex)} className="inline-flex rounded-lg bg-rose-500 px-2 py-1 text-white hover:bg-rose-600">Delete</button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeItemFromBox(boxIndex, itemIndex)
+                        }
+                        className="inline-flex rounded-lg bg-rose-500 px-2 py-1 text-white hover:bg-rose-600"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -116,8 +168,15 @@ export const BoxesSection = React.memo(({
             </table>
           </div>
 
+          {/* --- Add Item Button --- */}
           <div className="mt-4 flex justify-end">
-            <button type="button" onClick={() => addItemToBox(boxIndex)} className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">Add Item</button>
+            <button
+              type="button"
+              onClick={() => addItemToBox(boxIndex)}
+              className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
+            >
+              Add Item
+            </button>
           </div>
         </div>
       ))}

@@ -11,21 +11,28 @@ const MONEY_LOCALE = "en-SA";
 const DEFAULT_CURRENCY = "SAR";
 
 /* ---------------- utils ---------------- */
-const toNum = (v) => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
+const toNum = (v) =>
+  v === null || v === undefined || v === "" ? 0 : Number(v) || 0;
 
 const fmtMoney = (n, currency = DEFAULT_CURRENCY) => {
   if (n === null || n === undefined || n === "") return "—";
   try {
-    return new Intl.NumberFormat(MONEY_LOCALE, { style: "currency", currency }).format(Number(n) || 0);
+    return new Intl.NumberFormat(MONEY_LOCALE, {
+      style: "currency",
+      currency,
+    }).format(Number(n) || 0);
   } catch {
     return String(n);
   }
 };
 
-const s = (v, d = "—") => (v === null || v === undefined || String(v).trim() === "" ? d : v);
+const s = (v, d = "—") =>
+  v === null || v === undefined || String(v).trim() === "" ? d : v;
 const pickPhoneFromBranch = (b) => {
   if (!b) return "—";
-  return [b.branch_contact_number, b.branch_alternative_number].filter(Boolean).join(" / ");
+  return [b.branch_contact_number, b.branch_alternative_number]
+    .filter(Boolean)
+    .join(" / ");
 };
 
 // Safe numeric picker from multiple paths (no "—" fallback)
@@ -35,7 +42,10 @@ const pickNum = (obj, paths) => {
     let cur = obj;
     let ok = true;
     for (const s of segs) {
-      if (cur == null || cur[s] == null || cur[s] === "") { ok = false; break; }
+      if (cur == null || cur[s] == null || cur[s] === "") {
+        ok = false;
+        break;
+      }
       cur = cur[s];
     }
     if (ok) {
@@ -47,7 +57,11 @@ const pickNum = (obj, paths) => {
 };
 
 const getTrackCode = (s) =>
-  s?.track_code ?? s?.tracking_code ?? s?.tracking_no ?? s?.trackingNumber ?? "";
+  s?.track_code ??
+  s?.tracking_code ??
+  s?.tracking_no ??
+  s?.trackingNumber ??
+  "";
 
 const pick = (obj, keys, fallback = "—") => {
   for (const k of keys) {
@@ -61,7 +75,8 @@ const pick = (obj, keys, fallback = "—") => {
       }
       cur = cur[p];
     }
-    if (ok && cur !== undefined && cur !== null && String(cur).trim() !== "") return cur;
+    if (ok && cur !== undefined && cur !== null && String(cur).trim() !== "")
+      return cur;
   }
   return fallback;
 };
@@ -73,12 +88,17 @@ const toFixed3 = (v) => {
 
 /** Parse many possible shapes of `box_weight` into a numeric array in **index order** (1-based keys allowed) */
 const parseBoxWeights = (raw) => {
-  if (raw == null || raw === "" || raw === "null" || raw === "undefined") return [];
+  if (raw == null || raw === "" || raw === "null" || raw === "undefined")
+    return [];
   try {
     // JSON string?
     if (typeof raw === "string") {
       // CSV like "10, 20, 30"
-      if (raw.includes(",") && !raw.trim().startsWith("{") && !raw.trim().startsWith("[")) {
+      if (
+        raw.includes(",") &&
+        !raw.trim().startsWith("{") &&
+        !raw.trim().startsWith("[")
+      ) {
         return raw
           .split(",")
           .map((s) => Number(String(s).trim()))
@@ -97,7 +117,9 @@ const parseBoxWeights = (raw) => {
   // Object with numeric-ish keys: { "1": 10, "2": 20 }
   if (raw && typeof raw === "object") {
     const keys = Object.keys(raw).sort((a, b) => Number(a) - Number(b));
-    return keys.map((k) => (Number.isFinite(Number(raw[k])) ? Number(raw[k]) : 0));
+    return keys.map((k) =>
+      Number.isFinite(Number(raw[k])) ? Number(raw[k]) : 0
+    );
   }
   // Fallback single number
   const n = Number(raw);
@@ -108,14 +130,21 @@ const parseBoxWeights = (raw) => {
 const coerceBoxes = (raw) => {
   if (!raw) return {};
   if (typeof raw === "string") {
-    try { return coerceBoxes(JSON.parse(raw)); } catch { return {}; }
+    try {
+      return coerceBoxes(JSON.parse(raw));
+    } catch {
+      return {};
+    }
   }
   if (Array.isArray(raw)) {
     const out = {};
-    raw.forEach((b, i) => { out[String(i + 1)] = b || {}; });
+    raw.forEach((b, i) => {
+      out[String(i + 1)] = b || {};
+    });
     return out;
   }
-  if (raw && typeof raw === "object" && raw.boxes) return coerceBoxes(raw.boxes);
+  if (raw && typeof raw === "object" && raw.boxes)
+    return coerceBoxes(raw.boxes);
   return raw && typeof raw === "object" ? raw : {};
 };
 
@@ -123,7 +152,8 @@ const coerceBoxes = (raw) => {
 const groupItemsIntoBoxes = (items = []) => {
   const map = {};
   items.forEach((it) => {
-    const rawBox = it?.box_number ?? it?.box_no ?? it?.box ?? it?.package_no ?? "";
+    const rawBox =
+      it?.box_number ?? it?.box_no ?? it?.box ?? it?.package_no ?? "";
     const key = rawBox ? String(rawBox) : "1";
     if (!map[key]) map[key] = { items: [] };
     map[key].items.push(it);
@@ -157,7 +187,13 @@ const parsePartyList = (res) => {
 const joinAddress = (p) => p?.address || "";
 
 const formatPhones = (p) => {
-  const vals = [p?.contact_number, p?.phone, p?.mobile, p?.mobile_number, p?.contact].filter(Boolean);
+  const vals = [
+    p?.contact_number,
+    p?.phone,
+    p?.mobile,
+    p?.mobile_number,
+    p?.contact,
+  ].filter(Boolean);
   const whats = p?.whatsapp_number ?? p?.whatsapp ?? null;
   const a = [];
   if (vals.length) a.push(vals.join(" / "));
@@ -173,7 +209,7 @@ const extractParty = (p) => ({
   document_id: p?.document_id || "",
   tel: p?.contact_number || p?.whatsapp_number || "",
   address_line: p?.address || "",
-  post: p?.city || "",            
+  post: p?.city || "",
   pin: p?.postal_code || "",
   dist: p?.district || "",
   state: p?.state || "",
@@ -186,13 +222,18 @@ const matchByName = (name, list) => {
   if (!name) return null;
   const low = name.toLowerCase();
   const getName = (x) => (x?.name || "").toLowerCase();
-  return list.find((x) => getName(x) === low) || list.find((x) => getName(x).includes(low)) || null;
+  return (
+    list.find((x) => getName(x) === low) ||
+    list.find((x) => getName(x).includes(low)) ||
+    null
+  );
 };
 
 const buildTrackUrl = (shipment) => {
   const base = "https://gulfcargoksa.com/trackorder/";
   const track = getTrackCode(shipment);
-  const box = shipment?.box_no || shipment?.booking_no || shipment?.invoice_no || "";
+  const box =
+    shipment?.box_no || shipment?.booking_no || shipment?.invoice_no || "";
   const params = new URLSearchParams();
   if (track) params.set("code", track);
   if (box) params.set("box", String(box));
@@ -201,7 +242,9 @@ const buildTrackUrl = (shipment) => {
 };
 
 const buildQrUrl = (url, size = 160) =>
-  `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}`;
+  `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(
+    url
+  )}`;
 
 /* ---------- Read logged-in user from localStorage (for branch.id fallback) ---------- */
 const getLoggedInUser = () => {
@@ -228,8 +271,12 @@ const computePieces = (sh) => {
 /** Pick a reasonable shipment date (booking/shipment/created) */
 const pickShipmentDate = (sh) => {
   const candidates = [
-    sh?.booking_date, sh?.shipment_date, sh?.invoice_date,
-    sh?.created_at, sh?.createdAt, sh?.date,
+    sh?.booking_date,
+    sh?.shipment_date,
+    sh?.invoice_date,
+    sh?.created_at,
+    sh?.createdAt,
+    sh?.date,
   ].filter(Boolean);
   const raw = candidates[0];
   const d = raw ? new Date(raw) : new Date(); // Default to today's date
@@ -238,14 +285,20 @@ const pickShipmentDate = (sh) => {
 };
 
 /* ---------------- Component ---------------- */
-export default function InvoiceView({ shipment: injected = null, modal = false }) {
+export default function InvoiceView({
+  shipment: injected = null,
+  modal = false,
+}) {
   const { id } = useParams();
   const location = useLocation();
 
-  const hydratedFromState = location.state?.cargo || location.state?.shipment || null;
+  const hydratedFromState =
+    location.state?.cargo || location.state?.shipment || null;
 
   const [shipment, setShipment] = useState(null);
-  const [loading, setLoading] = useState(!!id && !injected && !hydratedFromState);
+  const [loading, setLoading] = useState(
+    !!id && !injected && !hydratedFromState
+  );
   const [err, setErr] = useState("");
 
   const [senderParty, setSenderParty] = useState(null);
@@ -313,23 +366,37 @@ export default function InvoiceView({ shipment: injected = null, modal = false }
       if (alive) setBranch(null);
     })();
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [shipment, loggedInUser]);
 
   // fetch Sender/Receiver party once we have shipment basics
-useEffect(() => {
+  useEffect(() => {
     if (!shipment) return;
 
     const fetchParty = async (role, allParties) => {
       const isSender = role === "sender";
 
       const idCandidates = isSender
-        ? [shipment.sender_id, shipment.shipper_id, shipment.sender_party_id, shipment.shipper_party_id]
-        : [shipment.receiver_id, shipment.consignee_id, shipment.receiver_party_id, shipment.consignee_party_id];
+        ? [
+            shipment.sender_id,
+            shipment.shipper_id,
+            shipment.sender_party_id,
+            shipment.shipper_party_id,
+          ]
+        : [
+            shipment.receiver_id,
+            shipment.consignee_id,
+            shipment.receiver_party_id,
+            shipment.consignee_party_id,
+          ];
 
       const name = isSender
         ? shipment.sender?.name || shipment.sender || shipment.shipper_name
-        : shipment.receiver?.name || shipment.receiver || shipment.consignee_name;
+        : shipment.receiver?.name ||
+          shipment.receiver ||
+          shipment.consignee_name;
 
       for (const pid of idCandidates) {
         if (!pid) continue;
@@ -341,11 +408,15 @@ useEffect(() => {
       }
 
       if (name) {
-        const list = allParties || parsePartyList(await getParties({ search: name }).catch(() => []));
+        const list =
+          allParties ||
+          parsePartyList(await getParties({ search: name }).catch(() => []));
         const roleFiltered = list.filter((p) => {
           const typeId = Number(p.customer_type_id);
           const typeName = String(p.customer_type || "").toLowerCase();
-          return isSender ? typeId === 1 || typeName.includes("sender") : typeId === 2 || typeName.includes("receiver");
+          return isSender
+            ? typeId === 1 || typeName.includes("sender")
+            : typeId === 2 || typeName.includes("receiver");
         });
 
         const chosen =
@@ -358,50 +429,75 @@ useEffect(() => {
         if (chosen) return extractParty(chosen);
       }
 
-     const address = isSender
-  ? pick(shipment, ["sender_address", "shipper_address", "sender_addr"], "")
-  : pick(shipment, ["receiver_address", "consignee_address", "receiver_addr"], "");
+      const address = isSender
+        ? pick(
+            shipment,
+            ["sender_address", "shipper_address", "sender_addr"],
+            ""
+          )
+        : pick(
+            shipment,
+            ["receiver_address", "consignee_address", "receiver_addr"],
+            ""
+          );
 
-const phone = isSender
-  ? pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")
-  : pick(shipment, ["receiver_phone", "consignee_phone", "receiver_mobile"], "");
+      const phone = isSender
+        ? pick(shipment, ["sender_phone", "shipper_phone", "sender_mobile"], "")
+        : pick(
+            shipment,
+            ["receiver_phone", "consignee_phone", "receiver_mobile"],
+            ""
+          );
 
-const email = isSender
-  ? pick(shipment, ["sender_email", "shipper_email"], "")
-  : pick(shipment, ["receiver_email", "consignee_email"], "");
+      const email = isSender
+        ? pick(shipment, ["sender_email", "shipper_email"], "")
+        : pick(shipment, ["receiver_email", "consignee_email"], "");
 
-// pull possible doc ids from the shipment for the fallback
-const docId = isSender
-  ? pick(shipment, ["sender_document_id", "shipper_document_id", "document_id"], "")
-  : pick(shipment, ["receiver_document_id", "consignee_document_id", "document_id"], "");
+      // pull possible doc ids from the shipment for the fallback
+      const docId = isSender
+        ? pick(
+            shipment,
+            ["sender_document_id", "shipper_document_id", "document_id"],
+            ""
+          )
+        : pick(
+            shipment,
+            ["receiver_document_id", "consignee_document_id", "document_id"],
+            ""
+          );
 
       return extractParty({
-  id: null,
-  name: name || "—",
-  email,
-  contact_number: phone,    // -> becomes .tel via extractParty
-  address,                  // -> address_line + address
-  // keep city/pin/dist/state empty so Consignee address remains only 'address'
-  city: "",
-  postal_code: "",
-  district: "",
-  state: "",
-  document_id: docId,
-});
+        id: null,
+        name: name || "—",
+        email,
+        contact_number: phone, // -> becomes .tel via extractParty
+        address, // -> address_line + address
+        // keep city/pin/dist/state empty so Consignee address remains only 'address'
+        city: "",
+        postal_code: "",
+        district: "",
+        state: "",
+        document_id: docId,
+      });
     };
 
     let alive = true;
     (async () => {
       // Fetch all parties once to avoid multiple lookups by name
       const allParties = parsePartyList(await getParties().catch(() => []));
-      const [sp, rp] = await Promise.all([fetchParty("sender", allParties), fetchParty("receiver", allParties)]);
+      const [sp, rp] = await Promise.all([
+        fetchParty("sender", allParties),
+        fetchParty("receiver", allParties),
+      ]);
       if (!alive) return;
       setSenderParty(sp);
       setReceiverParty(rp);
     })();
 
-    return () => { alive = false; };
-}, [shipment]);
+    return () => {
+      alive = false;
+    };
+  }, [shipment]);
 
   /* --------------- normalized basics --------------- */
   const currency = DEFAULT_CURRENCY;
@@ -438,13 +534,12 @@ const docId = isSender
 
     const rows = [];
     for (let i = 0; i < rowCount; i++) {
-      const k = keys[i];                // "1", "2", ...
-      const box = k ? (boxes[k] || {}) : {};
+      const k = keys[i]; // "1", "2", ...
+      const box = k ? boxes[k] || {} : {};
       const items = Array.isArray(box?.items) ? box.items : [];
 
       // Fallback derivations
-      const boxLevelWeight =
-        Number(box?.box_weight ?? box?.weight ?? 0) || 0;
+      const boxLevelWeight = Number(box?.box_weight ?? box?.weight ?? 0) || 0;
 
       // Sum inside items if needed
       const inferredWeightFromItems = sumItemWeights(items);
@@ -457,8 +552,8 @@ const docId = isSender
         0;
 
       rows.push({
-        sl: i + 1,                                 // Sl No = 1,2,3...
-        boxNo: labelByKey[k] ?? `B${i + 1}`,       // Proper B1/B2...
+        sl: i + 1, // Sl No = 1,2,3...
+        boxNo: labelByKey[k] ?? `B${i + 1}`, // Proper B1/B2...
         weight: toFixed3(weightCandidate),
       });
     }
@@ -468,23 +563,29 @@ const docId = isSender
   /** Items grid (kept same as your build) */
   const items = useMemo(() => {
     // If API gave nested boxes, flatten to items for the two-column table
-    const hasBoxes = shipment?.boxes && Object.keys(coerceBoxes(shipment.boxes)).length > 0;
+    const hasBoxes =
+      shipment?.boxes && Object.keys(coerceBoxes(shipment.boxes)).length > 0;
     if (hasBoxes) {
       const bx = coerceBoxes(shipment.boxes);
       const keys = Object.keys(bx).sort((a, b) => Number(a) - Number(b));
-      const labelByKey = Object.fromEntries(keys.map((k, i) => [k, `B${i + 1}`]));
+      const labelByKey = Object.fromEntries(
+        keys.map((k, i) => [k, `B${i + 1}`])
+      );
       const out = [];
       let runningIndex = 1;
       for (const k of keys) {
         const box = bx[k] || {};
         const list = Array.isArray(box?.items) ? box.items : [];
         for (const it of list) {
-          const qty = it?.piece_no ?? it?.qty ?? it?.quantity ?? it?.pieces ?? "";
+          const qty =
+            it?.piece_no ?? it?.qty ?? it?.quantity ?? it?.pieces ?? "";
           out.push({
             idx: runningIndex++,
             name: it?.name ?? it?.description ?? "Item",
             qty,
-            boxLabel: labelByKey[String(it?.box_number ?? it?.box_no ?? k)] ?? `B${Number(k) || String(k)}`,
+            boxLabel:
+              labelByKey[String(it?.box_number ?? it?.box_no ?? k)] ??
+              `B${Number(k) || String(k)}`,
           });
         }
       }
@@ -494,12 +595,24 @@ const docId = isSender
     // Legacy flat items
     const raw = Array.isArray(shipment?.items) ? shipment.items : [];
     return raw.map((it, i) => {
-      const qty = it?.qty ?? it?.no_of_pieces ?? it?.quantity ?? it?.pieces ?? it?.count ?? it?.piece_no ?? "";
-      const rawBox = it?.box_number ?? it?.box_no ?? it?.box ?? it?.package_no ?? "";
+      const qty =
+        it?.qty ??
+        it?.no_of_pieces ??
+        it?.quantity ??
+        it?.pieces ??
+        it?.count ??
+        it?.piece_no ??
+        "";
+      const rawBox =
+        it?.box_number ?? it?.box_no ?? it?.box ?? it?.package_no ?? "";
       const boxLabel = rawBox ? `B${Number(rawBox) || String(rawBox)}` : "";
       return {
         idx: i + 1,
-        name: pick(it, ["description", "name", "item_name", "cargo_name", "title", "item"], "Item"),
+        name: pick(
+          it,
+          ["description", "name", "item_name", "cargo_name", "title", "item"],
+          "Item"
+        ),
         qty,
         boxLabel,
       };
@@ -535,39 +648,60 @@ const docId = isSender
           : ["receiver_phone", "consignee_phone", "receiver_mobile"],
         ""
       ),
-      pickFn?.(sh, side === "sender" ? ["sender_whatsapp_number"] : ["receiver_whatsapp_number"], ""),
+      pickFn?.(
+        sh,
+        side === "sender"
+          ? ["sender_whatsapp_number"]
+          : ["receiver_whatsapp_number"],
+        ""
+      ),
     ]
-      .filter(Boolean).join(" / ");
+      .filter(Boolean)
+      .join(" / ");
 
   const getPincode = (p, side, sh, pickFn) =>
     p?.pincode ||
-    pickFn?.(sh?.[side], ["pincode", "pin", "zip", "zipcode", "postal_code"], "") ||
-    pickFn?.(sh, side === "sender" ? ["sender_pincode"] : ["receiver_pincode"], "");
+    pickFn?.(
+      sh?.[side],
+      ["pincode", "pin", "zip", "zipcode", "postal_code"],
+      ""
+    ) ||
+    pickFn?.(
+      sh,
+      side === "sender" ? ["sender_pincode"] : ["receiver_pincode"],
+      ""
+    );
 
   const ROWS_PER_COL = 15;
 
   // --- DIRECT from API fields (robust, no math here) ---
   const num = (v) =>
-    v === null || v === undefined || v === "" ? 0 : Number(String(v).replace(/,/g, "")) || 0;
+    v === null || v === undefined || v === ""
+      ? 0
+      : Number(String(v).replace(/,/g, "")) || 0;
 
   const subtotal = num(
     pickNum(shipment, [
       "amount_total_weight",
       "charges.amount_total_weight",
-      "total_cost",                 // sent from CreateCargo
-      "subtotal",                   // any backend alias
-      "summary.subtotal",           // nested alias (defensive)
+      "total_cost", // sent from CreateCargo
+      "subtotal", // any backend alias
+      "summary.subtotal", // nested alias (defensive)
     ])
   );
 
   // Bill charges, VAT, and final total — read directly, but with aliases
-  const bill  = num(pickNum(shipment, ["bill_charges", "summary.bill_charges", "charges.bill"]));
-  const tax   = num(pickNum(shipment, ["vat_cost", "vat_amount", "summary.vat_cost"]));
+  const bill = num(
+    pickNum(shipment, ["bill_charges", "summary.bill_charges", "charges.bill"])
+  );
+  const tax = num(
+    pickNum(shipment, ["vat_cost", "vat_amount", "summary.vat_cost"])
+  );
   const total = num(
     pickNum(shipment, [
-      "total_amount",               // preferred final
-      "net_total",                  // alt
-      "grand_total",                // alias
+      "total_amount", // preferred final
+      "net_total", // alt
+      "grand_total", // alias
       "summary.total",
     ])
   );
@@ -578,9 +712,11 @@ const docId = isSender
   while (colB.length < ROWS_PER_COL) colB.push(null);
   const overflowCount = Math.max(0, items.length - ROWS_PER_COL * 2);
 
-  if (loading) return <div className="p-6 text-slate-600">Loading invoice…</div>;
+  if (loading)
+    return <div className="p-6 text-slate-600">Loading invoice…</div>;
   if (err) return <div className="p-6 text-rose-700">{err}</div>;
-  if (!shipment) return <div className="p-6 text-rose-700">No cargo found.</div>;
+  if (!shipment)
+    return <div className="p-6 text-rose-700">No cargo found.</div>;
 
   const totalWeightDisplay = toFixed3(
     pick(shipment, ["total_weight", "weight", "gross_weight"], 0)
@@ -629,7 +765,10 @@ const docId = isSender
       )}
 
       <main className="flex justify-center items-center mx-auto max-w-5xl p-4 invoice-main-section">
-        <div id="invoice-sheet" className="rounded-2xl border border-slate-200 bg-white shadow-sm uppercase">
+        <div
+          id="invoice-sheet"
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm uppercase"
+        >
           {/* Header */}
           <div className="px-1 pt-1">
             <div className="grid grid-cols-3 items-start">
@@ -662,10 +801,21 @@ const docId = isSender
               {/* RIGHT: Arabic name + Phone + Email */}
               <div className="text-center sm:text-right">
                 <div className="text-[11px] font-semibold leading-tight text-indigo-900">
-                   <div className="header-invoice-branch-name mt-1 text-slate-700">
-                  {branch?.branch_name ||
-                    pick(shipment, ["branch", "branch_name", "branch_label", "branch.name", "origin_branch_name", "origin_branch"], "—")}
-                </div>
+                  <div className="header-invoice-branch-name mt-1 text-slate-700">
+                    {branch?.branch_name ||
+                      pick(
+                        shipment,
+                        [
+                          "branch",
+                          "branch_name",
+                          "branch_label",
+                          "branch.name",
+                          "origin_branch_name",
+                          "origin_branch",
+                        ],
+                        "—"
+                      )}
+                  </div>
                 </div>
                 <div className="header-invoice-branch-arname">
                   {s(branch?.branch_name_ar, "شركة سواحل الخليج للنقل البحري")}
@@ -681,9 +831,16 @@ const docId = isSender
 
             <div className="mt-3 grid grid-cols-1 items-center gap-2 rounded bg-rose-600 px-2 py-1 text-white sm:grid-cols-3">
               <div className="text-xs">
-                <div className="invoice-top-header">VAT NO. : {COMPANY.vatNo}</div>
                 <div className="invoice-top-header">
-                 SHIPMENT TYPE: {pick(shipment, ["shipping_method", "method"], COMPANY.defaultShipmentType)}
+                  VAT NO. : {COMPANY.vatNo}
+                </div>
+                <div className="invoice-top-header">
+                  SHIPMENT TYPE:{" "}
+                  {pick(
+                    shipment,
+                    ["shipping_method", "method"],
+                    COMPANY.defaultShipmentType
+                  )}
                 </div>
               </div>
               <div className="text-center">
@@ -692,7 +849,9 @@ const docId = isSender
               </div>
               <div className="text-right text-xs">
                 <div className="invoice-top-header">
-                  <div className="tracking-invoice-content-track-no">{getTrackCode(shipment) || "—"}</div>
+                  <div className="tracking-invoice-content-track-no">
+                    {getTrackCode(shipment) || "—"}
+                  </div>
                   <span className="inline-flex items-center gap-1 rounded-md bg-black px-2 py-1 text-white font-semibold tracking-wide">
                     <span className="invoice-number-text">{billNo}</span>
                   </span>
@@ -728,298 +887,420 @@ const docId = isSender
             </div>
           </div> */}
 
-        <div
-  className="
+          <div
+            className="
     section-three-bg
     grid gap-4 border-slate-200 px-2 py-2
     [grid-template-columns:1fr]
     md:[grid-template-columns:1fr_2fr_1fr]
   "
->
-  {/* SHIPPER (2fr) */}
-  <div className="relative rounded-lg border border-slate-200 p-3 pt-6">
-    <div className="absolute -top-3 left-3 rounded-tr-2xl rounded-bl-2xl bg-rose-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
-      Shipper
-    </div>
+          >
+            {/* SHIPPER (2fr) */}
+            <div className="relative rounded-lg border border-slate-200 p-3 pt-6">
+              <div className="absolute -top-3 left-3 rounded-tr-2xl rounded-bl-2xl bg-rose-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
+                Shipper
+              </div>
 
-    <div className=" text-[11px]">
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Name</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text font-semibold text-slate-900">
-          {getName(senderParty, "sender", shipment) || "—"}
-        </div>
-      </div>
+              <div className=" text-[11px]">
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-20 shrink-0 text-slate-700">
+                    Name
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text font-semibold text-slate-900">
+                    {getName(senderParty, "sender", shipment) || "—"}
+                  </div>
+                </div>
 
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">ID No</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text">
-         {senderParty?.document_id || pick(shipment, ["sender_document_id","shipper_document_id"], "—")}
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-20 shrink-0 text-slate-700">
+                    ID No
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text">
+                    {senderParty?.document_id ||
+                      pick(
+                        shipment,
+                        ["sender_document_id", "shipper_document_id"],
+                        "—"
+                      )}
+                  </div>
+                </div>
 
-        </div>
-      </div>
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-20 shrink-0 text-slate-700">
+                    Tel
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text">
+                    {getPhone(senderParty, "sender", shipment, pick) || "—"}
+                  </div>
+                </div>
 
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Tel</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text">{getPhone(senderParty, "sender", shipment, pick) || "—"}</div>
-      </div>
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-20 shrink-0 text-slate-700">
+                    No. of Pcs
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text">
+                    {computePieces(shipment)}
+                  </div>
+                </div>
 
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">No. of Pcs</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text">{computePieces(shipment)}</div>
-      </div>
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-20 shrink-0 text-slate-700">
+                    Weight
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text">
+                    {totalWeightDisplay} kg
+                  </div>
+                </div>
 
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Weight</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text">{totalWeightDisplay} kg</div>
-      </div>
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-20 shrink-0 text-slate-700">
+                    Date
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text">
+                    {pickShipmentDate(shipment) || "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-20 shrink-0 text-slate-700">Date</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text">{pickShipmentDate(shipment) || "—"}</div>
-      </div>
-    </div>
-  </div>
+            {/* CONSIGNEE (2fr) */}
+            <div className="relative rounded-lg border border-slate-200 p-3 pt-6">
+              <div className="absolute -top-3 left-3 rounded-tr-2xl rounded-bl-2xl bg-rose-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
+                Consignee
+              </div>
 
-  {/* CONSIGNEE (2fr) */}
-  <div className="relative rounded-lg border border-slate-200 p-3 pt-6">
-    <div className="absolute -top-3 left-3 rounded-tr-2xl rounded-bl-2xl bg-rose-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white">
-      Consignee
-    </div>
+              <div className="text-[11px]">
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-15 shrink-0 text-slate-700">
+                    Name
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text font-semibold text-slate-900">
+                    {getName(receiverParty, "receiver", shipment) || "—"}
+                  </div>
+                </div>
 
-    <div className="text-[11px]">
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Name</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text font-semibold text-slate-900">
-          {getName(receiverParty, "receiver", shipment) || "—"}
-        </div>
-      </div>
+                <div className="flex">
+                  <div className="invoice-parties-label w-15 shrink-0 text-slate-700">
+                    Adress
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text whitespace-pre-wrap">
+                    {receiverParty?.address_line ||
+                      getAddress(receiverParty, "receiver", shipment, pick) ||
+                      "—"}
+                  </div>
+                </div>
 
-      <div className="flex">
-        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Adress</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text whitespace-pre-wrap">
-          {receiverParty?.address_line || getAddress(receiverParty, "receiver", shipment, pick) || "—"}
-        </div>
-      </div>
-
-      {/* <div className="flex items-start">
+                {/* <div className="flex items-start">
         <div className="w-15 shrink-0 text-slate-700">Village</div>
         <div className="mx-1">:</div>
         <div>{receiverParty?.raw?.village || ""}</div>
       </div> */}
 
-      {/* Post + PIN on one line */}
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Post</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text flex flex-wrap items-baseline gap-4">
-          <span>{receiverParty?.post || pick(receiverParty?.raw || {}, ["city"], "—")}</span>
-          <span className="text-slate-700">PIN:</span>
-          <span>{receiverParty?.pin || pick(receiverParty?.raw || {}, ["postal_code", "pincode", "zip"], "—")}</span>
-        </div>
-      </div>
+                {/* Post + PIN on one line */}
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-15 shrink-0 text-slate-700">
+                    Post
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text flex flex-wrap items-baseline gap-4">
+                    <span>
+                      {receiverParty?.post ||
+                        pick(receiverParty?.raw || {}, ["city"], "—")}
+                    </span>
+                    <span className="text-slate-700">PIN:</span>
+                    <span>
+                      {receiverParty?.pin ||
+                        pick(
+                          receiverParty?.raw || {},
+                          ["postal_code", "pincode", "zip"],
+                          "—"
+                        )}
+                    </span>
+                  </div>
+                </div>
 
-      {/* Dist + State on one line */}
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Dist</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text flex flex-wrap items-baseline gap-4">
-          <span>{receiverParty?.dist || pick(receiverParty?.raw || {}, ["district"], "—")}</span>
-          <span className="text-slate-700">State :</span>
-          <span>{receiverParty?.state || pick(receiverParty?.raw || {}, ["state"], "—")}</span>
-        </div>
-      </div>
+                {/* Dist + State on one line */}
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-15 shrink-0 text-slate-700">
+                    Dist
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text flex flex-wrap items-baseline gap-4">
+                    <span>
+                      {receiverParty?.dist ||
+                        pick(receiverParty?.raw || {}, ["district"], "—")}
+                    </span>
+                    <span className="text-slate-700">State :</span>
+                    <span>
+                      {receiverParty?.state ||
+                        pick(receiverParty?.raw || {}, ["state"], "—")}
+                    </span>
+                  </div>
+                </div>
 
-      <div className="flex items-start">
-        <div className="invoice-parties-label w-15 shrink-0 text-slate-700">Tel</div>
-        <div className="mx-1">:</div>
-        <div className="invoice-parties-text">{getPhone(receiverParty, "receiver", shipment, pick) || "—"}</div>
-      </div>
-    </div>
-  </div>
-
-  {/* BOX SUMMARY (1fr) */}
-  <div className="self-start">
-    <div className="mt-2 ml-auto w-[150px] overflow-hidden ">
-      <table className="text-[11px] ">
-        <thead className="box-weight-table-header">
-          <tr className="text-center">
-            <th className="border border-slate-800 px-2 py-1 w-[30px]">S.No</th>
-            <th className="border border-slate-800 px-2 py-1">Box No.</th>
-            <th className="border border-slate-800 px-2 py-1 w-[65px]">Weight</th>
-          </tr>
-        </thead>
-        <tbody className="box-weight-table-body">
-          {boxRows.length > 0 ? (
-            boxRows.map((row, idx) => (
-              <tr key={idx} className="text-center">
-                <td className="border border-slate-800 px-2 py-1">{row.sl}</td>
-                <td className="border border-slate-800 px-2 py-1">{billNo}</td>
-                <td className="border border-slate-800 px-2 py-1">{row.weight}</td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td className="border border-slate-800 px-2 py-2 text-center text-slate-500" colSpan={3}>
-                No box weights
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<section className="px-1 py-1">
-  <div className="flex justify-between items-center my-1">
-    <div className="invoice-cargo-heading">Cargo Items</div>
-    <div className="invoice-weight-text">Total Weight: {totalWeightDisplay} kg</div>
-  </div>
-
-  <div className="grid grid-cols-2 gap-3">
-    {/* LEFT TABLE */}
-    <div className="print-avoid">
-      <table className="items-table h-full w-full table-fixed border-collapse text-[11px]">
-        <colgroup>
-          <col style={{ width: "44px" }} />
-          <col />
-          <col style={{ width: "70px" }} />
-          <col style={{ width: "50px" }} />
-        </colgroup>
-        <thead>
-          <tr className="text-center">
-            <th className="border border-slate-800">SL NO.</th>
-            <th className="border border-slate-800 text-left">ITEMS</th>
-            <th className="border border-slate-800">BOX NO.</th>
-            <th className="border border-slate-800">QTY</th>
-          </tr>
-        </thead>
-        <tbody>
-          {colA.map((it, idx) => (
-            <tr key={`A-${idx}`} className="align-top">
-              <td className="border border-slate-800 text-center">{it ? it.idx : ""}</td>
-              <td className="border border-slate-800 uppercase">{it ? (it.name || "—") : ""}</td>
-              <td className="border border-slate-800 text-center">{it ? (it.boxLabel || "—") : ""}</td>
-              <td className="border border-slate-800 text-center">{it ? (it.qty || "—") : ""}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-
-    {/* RIGHT TABLE */}
-  {/* RIGHT TABLE — continuous, totals in tfoot, fillers keep totals at bottom */}
-<div className="print-avoid">
-  {(() => {
-    const MAX_ROWS = ROWS_PER_COL; // you already use 15; keep it consistent
-    const rightRows = colB.slice(0, MAX_ROWS);
-    const fillerCount = Math.max(0, MAX_ROWS - rightRows.length);
-    const fillers = Array.from({ length: fillerCount });
-
-    return (
-      <table className="items-table w-full table-fixed border-collapse text-[11px]">
-        <colgroup>
-          <col style={{ width: "44px" }} />
-          <col />
-          <col style={{ width: "70px" }} />
-          <col style={{ width: "50px" }} />
-        </colgroup>
-
-        <thead>
-          <tr className="text-center">
-            <th className="border border-slate-800">S. NO</th>
-            <th className="border border-slate-800 text-left">ITEMS</th>
-            <th className="border border-slate-800">BOX NO.</th>
-            <th className="border border-slate-800">QTY</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {/* actual rows */}
-          {rightRows.map((it, idx) => (
-            <tr key={`B-${idx}`} className="align-top">
-              <td className="border border-slate-800 text-center">{it ? it.idx : ""}</td>
-              <td className="border border-slate-800 uppercase">{it ? (it.name || "—") : ""}</td>
-              <td className="border border-slate-800 text-center">{it ? (it.boxLabel || "—") : ""}</td>
-              <td className="border border-slate-800 text-center">{it ? (it.qty || "—") : ""}</td>
-            </tr>
-          ))}
-
-          {/* filler rows to push totals to bottom */}
-          {fillers.map((_, i) => (
-            <tr key={`B-fill-${i}`}>
-              <td className="border border-slate-800 text-center">&nbsp;</td>
-              <td className="border border-slate-800">&nbsp;</td>
-              <td className="border border-slate-800 text-center">&nbsp;</td>
-              <td className="border border-slate-800 text-center">&nbsp;</td>
-            </tr>
-          ))}
-        </tbody>
-
-        <tfoot>
-          <tr>
-            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
-              <div className="flex justify-between">
-                <span className="uppercase">Total</span>
-                <span className="ml-2 text-right">المجموع</span>
+                <div className="flex items-start">
+                  <div className="invoice-parties-label w-15 shrink-0 text-slate-700">
+                    Tel
+                  </div>
+                  <div className="mx-1">:</div>
+                  <div className="invoice-parties-text">
+                    {getPhone(receiverParty, "receiver", shipment, pick) || "—"}
+                  </div>
+                </div>
               </div>
-            </td>
-            <td className="border border-slate-800 text-right">
-              {fmtMoney(subtotal, currency).replace(/[A-Z]{3}\s?/, "").trim()}
-            </td>
-          </tr>
+            </div>
 
-          <tr>
-            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
-              <div className="flex justify-between">
-                <span className="uppercase">Bill Charges</span>
-                <span className="ml-2 text-right">رسوم الفاتورة</span>
+            {/* BOX SUMMARY (1fr) */}
+            <div className="self-start">
+              <div className="mt-2 ml-auto w-[150px] overflow-hidden ">
+                <table className="text-[11px] ">
+                  <thead className="box-weight-table-header">
+                    <tr className="text-center">
+                      <th className="border border-slate-800 px-2 py-1 w-[30px]">
+                        S.No
+                      </th>
+                      <th className="border border-slate-800 px-2 py-1">
+                        Box No.
+                      </th>
+                      <th className="border border-slate-800 px-2 py-1 w-[65px]">
+                        Weight
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="box-weight-table-body">
+                    {boxRows.length > 0 ? (
+                      boxRows.map((row, idx) => (
+                        <tr key={idx} className="text-center">
+                          <td className="border border-slate-800 px-2 py-1">
+                            {row.sl}
+                          </td>
+                          <td className="border border-slate-800 px-2 py-1">
+                            {billNo}
+                          </td>
+                          <td className="border border-slate-800 px-2 py-1">
+                            {row.weight}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          className="border border-slate-800 px-2 py-2 text-center text-slate-500"
+                          colSpan={3}
+                        >
+                          No box weights
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </td>
-            <td className="border border-slate-800 text-right">
-              {fmtMoney(bill, currency).replace(/[A-Z]{3}\s?/, "").trim()}
-            </td>
-          </tr>
+            </div>
+          </div>
 
-          <tr>
-            <td className="border border-slate-800 text-right font-medium" colSpan={3}>
-              <div className="flex justify-between">
-                <span className="uppercase">VAT %</span>
-                <span className="ml-2 text-right">ضريبة القيمة المضافة %</span>
+          <section className="px-1 py-1">
+            <div className="flex justify-between items-center my-1">
+              <div className="invoice-cargo-heading">Cargo Items</div>
+              <div className="invoice-weight-text">
+                Total Weight: {totalWeightDisplay} kg
               </div>
-            </td>
-            <td className="border border-slate-800 text-right">
-              {fmtMoney(tax, currency).replace(/[A-Z]{3}\s?/, "").trim()}
-            </td>
-          </tr>
+            </div>
 
-          <tr className="font-semibold">
-            <td className="border border-slate-800 text-right uppercase" colSpan={3}>
-              <div className="flex justify-between">
-                <span>Net Total</span>
-                <span className="ml-2 text-right">المجموع الصافي</span>
+            <div className="grid grid-cols-2 gap-3">
+              {/* LEFT TABLE */}
+              <div className="print-avoid">
+                <table className="items-table h-full w-full table-fixed border-collapse text-[11px]">
+                  <colgroup>
+                    <col style={{ width: "44px" }} />
+                    <col />
+                    <col style={{ width: "70px" }} />
+                    <col style={{ width: "50px" }} />
+                  </colgroup>
+                  <thead>
+                    <tr className="text-center">
+                      <th className="border border-slate-800">SL NO.</th>
+                      <th className="border border-slate-800 text-left">
+                        ITEMS
+                      </th>
+                      <th className="border border-slate-800">BOX NO.</th>
+                      <th className="border border-slate-800">QTY</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {colA.map((it, idx) => (
+                      <tr key={`A-${idx}`} className="align-top">
+                        <td className="border border-slate-800 text-center">
+                          {it ? it.idx : ""}
+                        </td>
+                        <td className="border border-slate-800 uppercase">
+                          {it ? it.name || "—" : ""}
+                        </td>
+                        <td className="border border-slate-800 text-center">
+                          {it ? it.boxLabel || "—" : ""}
+                        </td>
+                        <td className="border border-slate-800 text-center">
+                          {it ? it.qty || "—" : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </td>
-            <td className="border border-slate-800 text-right">
-              {fmtMoney(total, currency).replace(/[A-Z]{3}\s?/, "").trim()}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    );
-  })()}
-</div>
 
-  </div>
-</section>
+              {/* RIGHT TABLE */}
+              {/* RIGHT TABLE — continuous, totals in tfoot, fillers keep totals at bottom */}
+              <div className="print-avoid">
+                {(() => {
+                  const MAX_ROWS = ROWS_PER_COL; // you already use 15; keep it consistent
+                  const rightRows = colB.slice(0, MAX_ROWS);
+                  const fillerCount = Math.max(0, MAX_ROWS - rightRows.length);
+                  const fillers = Array.from({ length: fillerCount });
+
+                  return (
+                    <table className="items-table w-full table-fixed border-collapse text-[11px]">
+                      <colgroup>
+                        <col style={{ width: "44px" }} />
+                        <col />
+                        <col style={{ width: "70px" }} />
+                        <col style={{ width: "50px" }} />
+                      </colgroup>
+
+                      <thead>
+                        <tr className="text-center">
+                          <th className="border border-slate-800">S. NO</th>
+                          <th className="border border-slate-800 text-left">
+                            ITEMS
+                          </th>
+                          <th className="border border-slate-800">BOX NO.</th>
+                          <th className="border border-slate-800">QTY</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {/* actual rows */}
+                        {rightRows.map((it, idx) => (
+                          <tr key={`B-${idx}`} className="align-top">
+                            <td className="border border-slate-800 text-center">
+                              {it ? it.idx : ""}
+                            </td>
+                            <td className="border border-slate-800 uppercase">
+                              {it ? it.name || "—" : ""}
+                            </td>
+                            <td className="border border-slate-800 text-center">
+                              {it ? it.boxLabel || "—" : ""}
+                            </td>
+                            <td className="border border-slate-800 text-center">
+                              {it ? it.qty || "—" : ""}
+                            </td>
+                          </tr>
+                        ))}
+
+                        {/* filler rows to push totals to bottom */}
+                        {fillers.map((_, i) => (
+                          <tr key={`B-fill-${i}`}>
+                            <td className="border border-slate-800 text-center">
+                              &nbsp;
+                            </td>
+                            <td className="border border-slate-800">&nbsp;</td>
+                            <td className="border border-slate-800 text-center">
+                              &nbsp;
+                            </td>
+                            <td className="border border-slate-800 text-center">
+                              &nbsp;
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+
+                      <tfoot>
+                        <tr>
+                          <td
+                            className="border border-slate-800 text-right font-medium"
+                            colSpan={3}
+                          >
+                            <div className="flex justify-between">
+                              <span className="uppercase">Total</span>
+                              <span className="ml-2 text-right">المجموع</span>
+                            </div>
+                          </td>
+                          <td className="border border-slate-800 text-right">
+                            {fmtMoney(subtotal, currency)
+                              .replace(/[A-Z]{3}\s?/, "")
+                              .trim()}
+                          </td>
+                        </tr>
+
+                        <tr>
+                          <td
+                            className="border border-slate-800 text-right font-medium"
+                            colSpan={3}
+                          >
+                            <div className="flex justify-between">
+                              <span className="uppercase">Bill Charges</span>
+                              <span className="ml-2 text-right">
+                                رسوم الفاتورة
+                              </span>
+                            </div>
+                          </td>
+                          <td className="border border-slate-800 text-right">
+                            {fmtMoney(bill, currency)
+                              .replace(/[A-Z]{3}\s?/, "")
+                              .trim()}
+                          </td>
+                        </tr>
+
+                        <tr>
+                          <td
+                            className="border border-slate-800 text-right font-medium"
+                            colSpan={3}
+                          >
+                            <div className="flex justify-between">
+                              <span className="uppercase">VAT %</span>
+                              <span className="ml-2 text-right">
+                                ضريبة القيمة المضافة %
+                              </span>
+                            </div>
+                          </td>
+                          <td className="border border-slate-800 text-right">
+                            {fmtMoney(tax, currency)
+                              .replace(/[A-Z]{3}\s?/, "")
+                              .trim()}
+                          </td>
+                        </tr>
+
+                        <tr className="font-semibold">
+                          <td
+                            className="border border-slate-800 text-right uppercase"
+                            colSpan={3}
+                          >
+                            <div className="flex justify-between">
+                              <span>Net Total</span>
+                              <span className="ml-2 text-right">
+                                المجموع الصافي
+                              </span>
+                            </div>
+                          </td>
+                          <td className="border border-slate-800 text-right">
+                            {fmtMoney(total, currency)
+                              .replace(/[A-Z]{3}\s?/, "")
+                              .trim()}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  );
+                })()}
+              </div>
+            </div>
+          </section>
 
           {/* Footer */}
           <div className="border-t border-slate-200 px-1 py-2">
@@ -1029,21 +1310,34 @@ const docId = isSender
             </div>
 
             <div className="invoice-terms-conditions-content">
-              <h2>Accept the goods only after checking and confirming them on delivery.</h2>
+              <h2>
+                Accept the goods only after checking and confirming them on
+                delivery.
+              </h2>
               <p className="mt-1">
-                NO GUARANTEE FOR GLASS/BREAKABLE ITEMS. COMPANY NOT RESPONSIBLE FOR ITEMS RECEIVED IN DAMAGED CONDITION.
-                COMPLAINTS WILL NOT BE ACCEPTED AFTER 2 DAYS FROM THE DATE OF DELIVERY. COMPANY NOT RESPONSIBLE FOR OCTROI
-                CHARGES OR ANY OTHER CHARGES LEVIED LOCALLY. IN CASE OF CLAIM (LOSS), PROOF OF DOCUMENTS SHOULD BE PRODUCED.
-                SETTLEMENT WILL BE MADE (20 SAR/KGS) PER COMPANY RULES. COMPANY WILL NOT TAKE RESPONSIBILITY FOR NATURAL
-                CALAMITY AND DELAY IN CUSTOMS CLEARANCE.
+                NO GUARANTEE FOR GLASS/BREAKABLE ITEMS. COMPANY NOT RESPONSIBLE
+                FOR ITEMS RECEIVED IN DAMAGED CONDITION. COMPLAINTS WILL NOT BE
+                ACCEPTED AFTER 2 DAYS FROM THE DATE OF DELIVERY. COMPANY NOT
+                RESPONSIBLE FOR OCTROI CHARGES OR ANY OTHER CHARGES LEVIED
+                LOCALLY. IN CASE OF CLAIM (LOSS), PROOF OF DOCUMENTS SHOULD BE
+                PRODUCED. SETTLEMENT WILL BE MADE (20 SAR/KGS) PER COMPANY
+                RULES. COMPANY WILL NOT TAKE RESPONSIBILITY FOR NATURAL CALAMITY
+                AND DELAY IN CUSTOMS CLEARANCE.
               </p>
               <p className="mt-1">
-                الشروط: 1. لا توجد مطالب ضد الشركة الناشئة للخسائر الناتجة عن الحوادث الطبيعية أو تأخير التخليص الجمركي. 2. لا
-                تتحمل الشركة مسؤولية أي خسارة ناتجة عن سوء الاستخدام أو الأضرار غير المسؤولة أو المسؤوليات المترتبة على أي رسوم ومعاملات
-                تفرض من قبل السلطات الجمركية. 3. الشركة غير مسؤولة عن أي مسؤوليات قانونية ناشئة عن المستندات المفقودة أو التالفة. 4.
-                يتحمل المستلم أو المشتري جميع الرسوم الإضافية، بما في ذلك رسوم التخزين والغرامات المفروضة من قبل الجمارك.
+                الشروط: 1. لا توجد مطالب ضد الشركة الناشئة للخسائر الناتجة عن
+                الحوادث الطبيعية أو تأخير التخليص الجمركي. 2. لا تتحمل الشركة
+                مسؤولية أي خسارة ناتجة عن سوء الاستخدام أو الأضرار غير المسؤولة
+                أو المسؤوليات المترتبة على أي رسوم ومعاملات تفرض من قبل السلطات
+                الجمركية. 3. الشركة غير مسؤولة عن أي مسؤوليات قانونية ناشئة عن
+                المستندات المفقودة أو التالفة. 4. يتحمل المستلم أو المشتري جميع
+                الرسوم الإضافية، بما في ذلك رسوم التخزين والغرامات المفروضة من
+                قبل الجمارك.
               </p>
-              <p className="mt-1">ഡെലിവറി ചെയ്യുമ്പോൾ സാധനങ്ങൾ പരിശോധിച്ച് ഉറപ്പ് വരുത്തിയതിന് ശേഷം മാത്രം സ്വീകരിക്കുക.</p>
+              <p className="mt-1">
+                ഡെലിവറി ചെയ്യുമ്പോൾ സാധനങ്ങൾ പരിശോധിച്ച് ഉറപ്പ് വരുത്തിയതിന്
+                ശേഷം മാത്രം സ്വീകരിക്കുക.
+              </p>
             </div>
 
             <div className="flex justify-around py-2 invoice-terms-conditions-footer">

@@ -572,6 +572,16 @@ export default function CreateCargo() {
     });
   }, [updateBoxes]);
 
+  const handleItemKeyDown = useCallback(
+    (e, boxIndex) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addItemToBox(boxIndex);
+      }
+    },
+    [addItemToBox]
+  );
+
   /* selected parties + sync to form */
   const selectedSender = useMemo(
     () => options.senders.find((s) => String(idOf(s)) === String(form.senderId)) || null,
@@ -985,7 +995,14 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
           {loading ? (
             <SkeletonCreateCargo />
           ) : (
-            <form onSubmit={submit} className="space-y-6">
+            <form
+              onSubmit={submit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.target.tagName.toLowerCase() !== 'textarea') {
+                  e.preventDefault();
+                }
+              }}
+              className="space-y-6">
               <CollectionDetails
                 form={form}
                 onRoleChange={onRoleChange}
@@ -1022,6 +1039,7 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
                 addItemToBox={addItemToBox}
                 removeItemFromBox={removeItemFromBox}
                 setBoxItem={setBoxItem}
+                onItemKeyDown={handleItemKeyDown}
                 itemOptions={itemOptions}
               />
 
