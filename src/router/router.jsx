@@ -128,6 +128,9 @@ const EditStaff = lazy(() => import("../pages/Staffs/EditStaff"));
 const SingleBill = lazy(() => import("../pages/Bills/SingleBill"));
 const BillEdit = lazy(() => import("../pages/Bills/BillEdit"));
 
+const BillshipmentSingle = lazy(() => import("../pages/Bills/BillshipmentSingle"));
+const EditShipment = lazy(() => import("../pages/Bills/EditShipment"));
+
 /* ---------------- helpers ---------------- */
 const AuthRedirect = () => {
   const { token } = useSelector((s) => s.auth || {});
@@ -239,6 +242,9 @@ const router = createBrowserRouter([
       { path: "invoice/:id", element: <InvoiceOnly /> },
       { path: "bill/view/:id", element: <SingleBill /> },
       { path: "bill/edit/:id", element: <BillEdit  /> },
+
+      { path: "billshipment/:id", element: <BillshipmentSingle /> },
+      { path: "billshipment/:id/edit", element: <EditShipment /> },
 
       {
         path: "roles/allroles",

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getShipmentStatuses } from "../../api/shipmentStatusApi"; // Keep the data fetching function
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import StatusCreate from "./StatusCreate";
 
 function classNames(...cls) {
   return cls.filter(Boolean).join(" ");
@@ -65,6 +66,8 @@ export default function ShipmentStatusView() {
   const [toast, setToast] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
+
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     fetchRows(setLoading, setRows, setMsg); // Pass state setters to the fetch function
@@ -158,15 +161,16 @@ export default function ShipmentStatusView() {
             </button>
 
             {/* Add New */}
-            <Link
-              to="/shipmentstatus/create"
+           <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-600/20"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden="true">
                 <path d="M12 4.5a.75.75 0 01.75.75v6h6a.75.75 0 010 1.5h-6v6a.75.75 0 01-1.5 0v-6h-6a.75.75 0 010-1.5h6v-6A.75.75 0 0112 4.5z" />
               </svg>
-              Add New
-            </Link>
+              Add Status
+            </button>
           </div>
         </div>
 
@@ -236,6 +240,19 @@ export default function ShipmentStatusView() {
           </table>
         </div>
       </div>
+      <StatusCreate
+  open={createOpen}
+  onClose={() => setCreateOpen(false)}
+  onCreated={() => {
+    setCreateOpen(false);
+    fetchRows(setLoading, setRows, setMsg);
+    setToast({
+      title: "Status Created",
+      message: "New shipment status added successfully.",
+    });
+  }}
+/>
+
     </section>
   );
 }

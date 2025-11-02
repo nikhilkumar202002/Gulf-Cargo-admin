@@ -67,6 +67,42 @@ export const updateBillShipmentStatuses = async (shipmentIds, shipmentStatusId) 
   }
 };
 
+export const getBillShipmentById = async (shipmentId) => {
+  const url = `/physical-shipment/${shipmentId}`;
+  info("GET " + url);
+  try {
+    const res = await api.get(url);
+    ok(`GET ${url} [OK]`, { status: res.status });
+    return res.data ?? res;
+  } catch (e) {
+    bad(`GET ${url} [ERR]`, {
+      status: e?.response?.status,
+      data: e?.response?.data,
+      message: e?.message,
+    });
+    throw e;
+  }
+};
+// ---- UPDATE (PUT /physical-shipment/:id)
+export const updateBillShipment = async (shipmentId, payload) => {
+  const url = `/physical-shipment/${shipmentId}`;
+  console.log("%cPUT " + url + " =>", "color:#2563eb;font-weight:700", payload);
+
+  try {
+    const res = await api.put(url, payload);
+    console.log("%cPUT /physical-shipment [OK]", "color:#16a34a;font-weight:700", { status: res.status });
+    return res.data ?? res;
+  } catch (e) {
+    console.error("%cPUT /physical-shipment [ERR]", "color:#dc2626;font-weight:700", {
+      status: e?.response?.status,
+      data: e?.response?.data,
+      message: e?.message,
+    });
+    throw e;
+  }
+};
+
+
 // Convenience single-update wrapper
 export const updateSingleBillShipmentStatus = (shipmentId, shipmentStatusId) =>
   updateBillShipmentStatuses([shipmentId], shipmentStatusId);
