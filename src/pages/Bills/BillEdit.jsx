@@ -31,7 +31,6 @@ function BillEdit() {
           destination: data?.destination || "",
         });
       } catch (err) {
-        console.error(err);
         toast.error("Failed to load bill details");
       } finally {
         setLoading(false);
@@ -52,7 +51,6 @@ function BillEdit() {
       toast.success("Bill updated successfully");
       navigate("/bills"); // redirect back to list
     } catch (err) {
-      console.error(err);
       const msg =
         err?.response?.data?.message ||
         err?.response?.data?.error ||

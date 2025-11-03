@@ -39,7 +39,6 @@ function CreateBills() {
           : [];
         setMethodOptions([{ id: "", name: "Select shipment method" }, ...opts]);
       } catch (err) {
-        console.error(err);
         setMethodOptions([{ id: "", name: "Failed to load methods" }]);
         toast.error("Failed to load shipment methods.");
       } finally {
@@ -127,7 +126,6 @@ function CreateBills() {
         toast.error(data?.message || "Failed to create shipment.");
       }
     } catch (err) {
-      console.error(err);
       // Try to surface backend validation errors if present
       const msg =
         err?.response?.data?.message ||

@@ -91,7 +91,6 @@ export default function SingleBill() {
           setRow(data);
         }
       } catch (e) {
-        console.error(e);
         setError(
           e?.response?.data?.message || e?.message || "Failed to load the bill. Try again."
         );
@@ -109,7 +108,6 @@ export default function SingleBill() {
         const list = await getActiveShipmentStatuses(); // returns array; handles {data:{data:[]}} shapes
         setStatusList(Array.isArray(list) ? list : []);
       } catch (e) {
-        console.error(e);
         // Silent fail; we still render raw status id
       } finally {
         setStatusLoading(false);

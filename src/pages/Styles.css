@@ -223,3 +223,27 @@
     }
 }
 
+/* Skeleton Loader Shimmer Animation */
+.skel {
+  background: #e5e7eb; /* gray-200 */
+  position: relative;
+  overflow: hidden;
+}
+
+.skel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(229,231,235,0) 0%,
+    rgba(255,255,255,0.75) 50%,
+    rgba(229,231,235,0) 100%
+  );
+  animation: skel-shimmer 1.2s infinite;
+}
+
+@keyframes skel-shimmer {
+  100% { transform: translateX(100%); }
+}

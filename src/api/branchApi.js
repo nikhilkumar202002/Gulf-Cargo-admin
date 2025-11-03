@@ -182,7 +182,6 @@ export async function getActiveBranches(params = {}, token) {
 
     return all.filter(isActive);
   } catch (err) {
-    console.error("getActiveBranches error:", err);
     return [];
   }
 }

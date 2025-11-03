@@ -443,7 +443,6 @@ export async function updateCargo(id, payload) {
     });
     return data?.data ?? data ?? {};
   } catch (err) {
-    console.error("❌ Update Cargo failed:", err.response?.data || err.message);
     throw err;
   }
 }

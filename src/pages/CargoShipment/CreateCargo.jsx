@@ -15,9 +15,7 @@ import {
 import {
   unwrapArray,
   idOf,
-  labelOf,
   unwrapDrivers,
-  prettyDriver,
   today,
   nowHi,
   pickBranchId,
@@ -50,7 +48,6 @@ import { SkeletonCreateCargo } from "./components/CreateCargoSkeleton";
 import { CollectionDetails } from './components/CollectionDetails';
 import { PartyInfo } from './components/PartyInfo';
 import { ShipmentDetails } from './components/ShipmentDetails';
-import { ScheduleDetails } from './components/ScheduleDetails';
 import { BoxesSection } from './components/BoxesSection';
 import { ChargesAndSummary } from './components/ChargesAndSummary';
 
@@ -92,20 +89,6 @@ const buildInitialForm = (branchId = "") => ({
     no_of_pieces: 0,
   },
 });
-
-// rows
-const CHARGE_ROWS = [
-  ["total_weight", "Total Weight"],
-  ["duty", "Duty"],
-  ["packing_charge", "Packing charge"],
-  ["additional_packing_charge", "Additional Packing charge"],
-  ["insurance", "Insurance"],
-  ["awb_fee", "AWB Fee"],
-  ["vat_amount", "VAT Amount"],
-  ["volume_weight", "Volume weight"],
-  ["other_charges", "Other charges"],
-  ["discount", "Discount"],
-];
 
 /* ---------- Items Autosuggest options ---------- */
 const itemOptions = [
@@ -152,6 +135,12 @@ const incrementInvoiceString = (last = "") => {
   const [, prefix, digits] = m;
   const next = String(Number(digits) + 1).padStart(digits.length, "0");
   return `${prefix}${next}`;
+};
+
+const getNumericPart = (invoiceNo) => {
+  if (!invoiceNo) return 0;
+  const match = String(invoiceNo).match(/\d+$/);
+  return match ? parseInt(match[0], 10) : 0;
 };
 
 /* ---------------------- Component ---------------------- */
@@ -217,8 +206,11 @@ export default function CreateCargo() {
     v === null || v === undefined || v === "" ? 0 : Number(String(v).replace(/,/g, "")) || 0;
 
   const toMoney = useCallback((v) => num(v).toFixed(2), []);
+  
+  /* ---------- token & profile ---------- */
+  const tokenClaims = useMemo(() => safeDecodeJwt(token), [token]);
+  const tokenBranchId = tokenClaims?.branch_id ?? tokenClaims?.branchId ?? null;
 
-  /* ---------- Pure derived calculator for charges ---------- */
   const CHARGE_KEYS = [
     "total_weight",
     "duty",
@@ -279,10 +271,6 @@ export default function CreateCargo() {
   const vatCost = Number(((subtotal * vatPercentage) / 100).toFixed(2));
   const netTotal = derived.totalAmount;
 
-  /* ---------- token & profile ---------- */
-  const tokenClaims = useMemo(() => safeDecodeJwt(token), [token]);
-  const tokenBranchId = tokenClaims?.branch_id ?? tokenClaims?.branchId ?? null;
-
   // --- Effects ---
   useEffect(() => {
     if (msg.text) showToast(msg.text, msg.variant || "success");
@@ -303,169 +291,127 @@ export default function CreateCargo() {
     });
   }, [totalWeight, updateForm]);
   // Initial data load
+  const loadInitialData = useCallback(async () => {
+    // Step 1: Fetch profile to get the branch ID
+    const profileRes = await getProfile();
+    const profile = profileRes?.data ?? profileRes ?? null;
+    setUserProfile(profile);
+    const preferredBranchId = tokenBranchId ?? pickBranchId(profile) ?? '';
+    const branchName = getBranchName(profile);
+
+    // Step 2: Fetch all other data in parallel
+    const [
+      methodsRes,
+      statusesRes,
+      paymentMethodsRes,
+      deliveryTypesRes,
+      rolesRes,
+      sendersRes,
+      receiversRes,
+      nextInvoiceRes,
+      branchRes,
+      staffRes,
+    ] = await Promise.all([
+      getActiveShipmentMethods(), // 0
+      getActiveShipmentStatuses(), // 1
+      getAllPaymentMethods(), // 2
+      getActiveDeliveryTypes(), // 3
+      getActiveCollected(), // 4
+      getPartiesByCustomerType(1), // 5
+      getPartiesByCustomerType(2), // 6
+      preferredBranchId ? getNextInvoiceNo(preferredBranchId) : Promise.resolve(null), // 7
+      preferredBranchId ? viewBranch(preferredBranchId) : Promise.resolve(null), // 8
+      preferredBranchId ? getBranchUsers(preferredBranchId) : Promise.resolve(null), // 9
+    ]);
+
+    const roles = Array.isArray(rolesRes?.data) ? rolesRes.data : [];
+    const staffList = unwrapArray(staffRes);
+
+    const methods = unwrapArray(methodsRes);
+    const paymentMethods = unwrapArray(paymentMethodsRes);
+    const deliveryTypes = unwrapArray(deliveryTypesRes);
+
+    setOptions({
+      methods: unwrapArray(methodsRes),
+      statuses: unwrapArray(statusesRes),
+      paymentMethods: unwrapArray(paymentMethodsRes),
+      deliveryTypes: unwrapArray(deliveryTypesRes),
+      collectRoles: Array.isArray(rolesRes?.data) ? rolesRes.data : [],
+      senders: unwrapArray(sendersRes),
+      receivers: unwrapArray(receiversRes),
+    });
+
+    setCollectedByOptions(staffList);
+
+    const branch = branchRes?.branch ?? branchRes?.data?.branch ?? branchRes;
+    const currentBranchCode = branch?.branch_code;
+    console.log("Fetched branch details:", {
+      branch_code: branch?.branch_code,
+      start_number: branch?.start_number,
+    });
+
+    const startNumberFromBranch = branch?.start_number ? `${branch.branch_code || ''}${branch.start_number}` : null;
+
+    const nextInvoiceFromApi = (typeof nextInvoiceRes === 'string' && currentBranchCode && nextInvoiceRes.startsWith(currentBranchCode)) // prettier-ignore
+      ? nextInvoiceRes
+      : null;
+
+    let invoiceNo = startNumberFromBranch || nextInvoiceFromApi || `${currentBranchCode || 'BR'}:000001`;
+
+    if (nextInvoiceFromApi && startNumberFromBranch) {
+      const apiNum = getNumericPart(nextInvoiceFromApi);
+      const branchNum = getNumericPart(startNumberFromBranch);
+      invoiceNo =
+        branchNum > apiNum
+          ? startNumberFromBranch
+          : nextInvoiceFromApi;
+    }
+
+    updateForm(draft => {
+      draft.branchId = String(preferredBranchId);
+      draft.branchName = branchName;
+      draft.invoiceNo = invoiceNo;
+
+      // Set default for hidden fields
+      if (methods.length > 0) draft.shippingMethodId = String(idOf(methods[0]));
+      if (paymentMethods.length > 0) draft.paymentMethodId = String(idOf(paymentMethods[0]));
+      if (deliveryTypes.length > 0) draft.deliveryTypeId = String(idOf(deliveryTypes[0]));
+
+      // Default to 'Office' role and the current user
+      const officeRole = roles.find(r => r.name === 'Office');
+      const loggedInUserId = profile?.user?.id ?? profile?.id ?? null;
+      if (officeRole && loggedInUserId) {
+        draft.collectedByRoleId = String(officeRole.id);
+        draft.collectedByRoleName = officeRole.name;
+        draft.collectedByPersonId = String(loggedInUserId);
+      }
+    });
+  }, [token, tokenBranchId, updateForm]);
+
   useEffect(() => {
-    let alive = true;
-    (async () => {
+    const fetchData = async () => {
       setLoading(true);
       setMsg({ text: '', variant: '' });
       try {
-        // Step 1: Fetch profile to get the branch ID
-        const profileRes = await getProfile();
-        if (!alive) return;
-        const profile = profileRes?.data ?? profileRes ?? null;
-        setUserProfile(profile);
-        const preferredBranchId = pickBranchId(profile) ?? tokenBranchId ?? '';
-        const branchName = getBranchName(profile);
-
-        // Step 2: Fetch all other data in parallel
-        const [
-          methodsRes,
-          statusesRes,
-          paymentMethodsRes,
-          deliveryTypesRes,
-          rolesRes,
-          sendersRes,
-          receiversRes,
-          nextInvoiceRes,
-          branchRes,
-          staffRes,
-        ] = await Promise.all([
-          getActiveShipmentMethods(), // 0
-          getActiveShipmentStatuses(), // 1
-          getAllPaymentMethods(), // 2
-          getActiveDeliveryTypes(), // 3
-          getActiveCollected(), // 4
-          getPartiesByCustomerType(1), // 5
-          getPartiesByCustomerType(2), // 6
-          preferredBranchId ? getNextInvoiceNo(preferredBranchId) : Promise.resolve(null), // 7
-          preferredBranchId ? viewBranch(preferredBranchId) : Promise.resolve(null), // 8
-          preferredBranchId ? getBranchUsers(preferredBranchId) : Promise.resolve(null), // 9
-        ]);
-
-        if (!alive) return;
-
-        const roles = Array.isArray(rolesRes?.data) ? rolesRes.data : [];
-        const staffList = unwrapArray(staffRes);
-
-        const methods = unwrapArray(methodsRes);
-        const paymentMethods = unwrapArray(paymentMethodsRes);
-        const deliveryTypes = unwrapArray(deliveryTypesRes);
-
-        setOptions({
-          methods: unwrapArray(methodsRes),
-          statuses: unwrapArray(statusesRes),
-          paymentMethods: unwrapArray(paymentMethodsRes),
-          deliveryTypes: unwrapArray(deliveryTypesRes),
-          collectRoles: Array.isArray(rolesRes?.data) ? rolesRes.data : [],
-          senders: unwrapArray(sendersRes),
-          receivers: unwrapArray(receiversRes),
-        });
-
-        setCollectedByOptions(staffList);
-
-        // Log the raw response from the API to check what's being fetched.
-        console.log("Next Invoice No from API:", nextInvoiceRes);
-
-        // If the API returns a valid (truthy) invoice number, use it.
-        // Otherwise, fall back to constructing one from the current branch details.
-        const branch = branchRes?.branch ?? branchRes?.data?.branch ?? branchRes;
-        const currentBranchCode = branch?.branch_code;
-
-        // Only accept the API response if it's a string and starts with the current branch's code.
-        const isValidNextInvoice = typeof nextInvoiceRes === 'string' && currentBranchCode && nextInvoiceRes.startsWith(currentBranchCode);
-        const nextInvoice = isValidNextInvoice ? nextInvoiceRes : null;
-
-        // Log branch details from the logged-in user's profile
-        console.log("Branch details from profile:", { branch, branch_code: branch?.branch_code, start_number: branch?.start_number });
-
-        const constructedInvoiceNo = branch ? `${branch.branch_code || 'BR'}:${branch.start_number || '000001'}` : '';
-        const invoiceNo = nextInvoice || constructedInvoiceNo;
-
-        updateForm(draft => {
-          draft.branchId = String(preferredBranchId);
-          draft.branchName = branchName;
-          draft.invoiceNo = invoiceNo;
-
-          // Set default for hidden fields
-          if (methods.length > 0) draft.shippingMethodId = String(idOf(methods[0]));
-          if (paymentMethods.length > 0) draft.paymentMethodId = String(idOf(paymentMethods[0]));
-          if (deliveryTypes.length > 0) draft.deliveryTypeId = String(idOf(deliveryTypes[0]));
-
-          // Default to 'Office' role and the current user
-          const officeRole = roles.find(r => r.name === 'Office');
-          const loggedInUserId = profile?.user?.id ?? profile?.id ?? null;
-          if (officeRole && loggedInUserId) {
-            draft.collectedByRoleId = String(officeRole.id);
-            draft.collectedByRoleName = officeRole.name;
-            draft.collectedByPersonId = String(loggedInUserId);
-          }
-        });
-
-        console.log('✅ Initial data loaded.', { invoiceNo });
+        await loadInitialData();
       } catch (e) {
-        if (!alive) return;
         setMsg({ text: e?.message || "Failed to load initial data.", variant: "error" });
       } finally {
-        if (alive) setLoading(false);
+        setLoading(false);
       }
-    })();
-    return () => { alive = false; };
-  }, [token, tokenBranchId]);
-
-  /* collected by */
-  useEffect(() => {
-    if (form.collectedByRoleName !== "Driver") return;
-    let alive = true;
-    (async () => {
-      try {
-        const res = await getActiveDrivers();
-        const list = unwrapDrivers(res);
-        if (alive) setCollectedByOptions(list);
-      } catch {
-        if (alive) {
-          setCollectedByOptions([]);
-          setMsg({ text: "Failed to load drivers.", variant: "error" });
-        }
-      }
-    })();
-    return () => {
-      alive = false;
     };
-  }, [form.collectedByRoleName]);
 
-  const loadOfficeStaff = useCallback(async () => {
-    const branchId = form.branchId || tokenBranchId;
-    if (!branchId) return;
-    const res = await getBranchUsers(branchId);
-    setCollectedByOptions(unwrapArray(res));
-  }, [form.branchId, tokenBranchId]);
+    fetchData(); // Initial fetch
 
-  useEffect(() => {
     let alive = true;
-    (async () => {
-      if (form.collectedByRoleName === "Office") {
-        try {
-          await loadOfficeStaff();
-        } catch { }
-        return;
+    const handleVisibilityChange = () => {
+      if (alive && document.visibilityState === 'visible') {
+        fetchData();
       }
-      if (form.collectedByRoleName === "Driver") {
-        try {
-          const res = await getActiveDrivers();
-          if (!alive) return;
-          setCollectedByOptions(unwrapArray(res));
-        } catch {
-          if (!alive) return;
-          setCollectedByOptions([]);
-          setMsg({ text: "Failed to load drivers.", variant: "error" });
-        }
-        return;
-      }
-    })();
-    return () => {
-      alive = false;
     };
-  }, [form.branchId, form.collectedByRoleName, loadOfficeStaff]);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => { alive = false; document.removeEventListener('visibilitychange', handleVisibilityChange); };
+  }, [loadInitialData]);
 
   const onRoleChange = useCallback(
     async (e) => {
@@ -605,14 +551,6 @@ export default function CreateCargo() {
       draft.receiverPhone = phoneFromParty(selectedReceiver) || '';
     });
   }, [selectedReceiver, updateForm]);
-
-  // // Unified handleChange – no extra recompute here (derived handles it)
-  // const handleChange = useCallback((e) => {
-  //   const { name, value } = e.target;
-  //   updateForm(draft => {
-  //     draft[name] = value;
-  //   });
-  // }, [updateForm]);
 
   /* validation */
   const validateBeforeSubmit = useCallback(() => {

@@ -73,7 +73,6 @@ export const deletePhysicalBill = async (id) => {
     const { data } = await api.delete(`/physical-bill/${id}`); // ✅ singular route
     return data;
   } catch (error) {
-    console.error("Delete API failed:", error);
     throw error;
   }
 };

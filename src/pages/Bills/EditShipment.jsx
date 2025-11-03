@@ -140,8 +140,6 @@ export default function EditShipment() {
             ? selectedBillIds
             : undefined,
       };
-
-      console.log("🚀 PUT payload:", payload);
       await updateBillShipment(id, payload);
 
       toast.success("Shipment updated successfully!");

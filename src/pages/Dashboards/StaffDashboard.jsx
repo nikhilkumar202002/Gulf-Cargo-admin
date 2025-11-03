@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import {
   FaUsers,
+  FaTasks,
   FaClock,
   FaInbox,
   FaTruck,
@@ -14,6 +15,10 @@ import {
   FaChevronLeft,
 } from "react-icons/fa";
 import "../Styles.css"; // Reuse the same styles
+
+// Constants for better maintainability
+const LOADING_TIMEOUT = 800;
+const TOTAL_PAGES = 1; // Assuming a single page for now
 
 /* ---------------- Skeleton helpers ---------------- */
 const Skel = ({ w = 100, h = 14, rounded = 8, className = "" }) => (
@@ -64,7 +69,7 @@ const StaffDashboard = () => {
 
   // Simulate loading; replace with your real fetch
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 800);
+    const t = setTimeout(() => setLoading(false), LOADING_TIMEOUT);
     return () => clearTimeout(t);
   }, []);
 
@@ -72,7 +77,7 @@ const StaffDashboard = () => {
   const staffCards = [
     { title: "Today's Tasks", value: 15, icon: <FaInbox /> },
     { title: "Pending Approvals", value: 5, icon: <FaClock /> },
-    { title: "Cargo Assigned", value: 10, icon: <FaTruck /> },
+    { title: "Assigned Shipments", value: 10, icon: <FaTruck /> },
     { title: "Total Team Members", value: 8, icon: <FaUsers /> },
   ];
 
@@ -117,7 +122,7 @@ const StaffDashboard = () => {
       <div className="dashboard-container max-w-7xl mx-auto py-8">
         {/* Staff-specific cards */}
         <div className="dashboard-row grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          {(loading ? Array.from({ length: 4 }) : staffCards).map((card, index) => (
+          {(loading ? Array.from({ length: staffCards.length }) : staffCards).map((card, index) => (
             <Card key={index} data={card || {}} loading={loading} />
           ))}
         </div>
@@ -143,7 +148,7 @@ const StaffDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(loading ? Array.from({ length: 4 }) : staffData).map((row, i) => (
+                  {(loading ? Array.from({ length: staffData.length }) : staffData).map((row, i) => (
                     <tr key={row?.label ?? i} className="border-b last:border-b-0">
                       <td className="flex items-center gap-3 py-3">
                         <span className="p-2 rounded-lg bg-gray-100">
@@ -184,7 +189,7 @@ const StaffDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {(loading ? Array.from({ length: 3 }) : assignedCargo).map((item, i) => (
+                {(loading ? Array.from({ length: 3 }) : assignedCargo).map((item, i) => ( // Assuming 3 for skeleton
                   <tr key={item?.shipmentId ?? i} className="border-t last:border-b-0 hover:bg-gray-50 transition">
                     <td className="py-2">{loading ? <Skel w={70} /> : item.date}</td>
                     <td className="py-2 font-medium">{loading ? <Skel w={140} /> : item.shipmentId}</td>
@@ -216,11 +221,11 @@ const StaffDashboard = () => {
                 <FaChevronLeft className="w-3 h-3" /> Prev
               </button>
               <span className="text-gray-600 text-sm">
-                {loading ? <Skel w={70} /> : `Page ${page} of 1`}
+                {loading ? <Skel w={70} /> : `Page ${page} of ${TOTAL_PAGES}`}
               </span>
               <button
                 className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm text-gray-500 bg-gray-100 hover:bg-gray-200 disabled:opacity-60"
-                disabled={true || loading}
+                disabled={page >= TOTAL_PAGES || loading}
                 onClick={() => setPage((p) => p + 1)}
               >
                 Next <FaChevronRight className="w-3 h-3" />
@@ -230,30 +235,6 @@ const StaffDashboard = () => {
         </div>
       </div>
 
-      {/* Tiny shimmer CSS; move to a global file if you prefer */}
-      <style>{`
-        .skel {
-          background: #e5e7eb; /* gray-200 */
-          position: relative;
-          overflow: hidden;
-        }
-        .skel::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          transform: translateX(-100%);
-          background: linear-gradient(
-            90deg,
-            rgba(229,231,235,0) 0%,
-            rgba(255,255,255,0.75) 50%,
-            rgba(229,231,235,0) 100%
-          );
-          animation: skel-shimmer 1.2s infinite;
-        }
-        @keyframes skel-shimmer {
-          100% { transform: translateX(100%); }
-        }
-      `}</style>
     </section>
   );
 };
