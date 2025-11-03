@@ -102,6 +102,30 @@ export const updateBillShipment = async (shipmentId, payload) => {
   }
 };
 
+// ---- DELETE (POST /physical-shipments/bulk-delete)
+export const deleteBillShipments = async (shipmentIds) => {
+  const url = "/physical-shipments/bulk-delete";
+  const payload = {
+    shipment_ids: Array.isArray(shipmentIds)
+      ? shipmentIds.map(Number)
+      : [Number(shipmentIds)],
+  };
+
+  info("DELETE " + url + " =>", payload);
+  try {
+    // Some APIs accept body with DELETE — if yours doesn’t, use query param fallback.
+    const res = await api.delete(url, { data: payload });
+    ok("DELETE /physical-shipments/bulk-delete [OK]", { status: res.status });
+    return res.data ?? res;
+  } catch (e) {
+    bad("DELETE /physical-shipments/bulk-delete [ERR]", {
+      status: e?.response?.status,
+      data: e?.response?.data,
+      message: e?.message,
+    });
+    throw e;
+  }
+};
 
 // Convenience single-update wrapper
 export const updateSingleBillShipmentStatus = (shipmentId, shipmentStatusId) =>

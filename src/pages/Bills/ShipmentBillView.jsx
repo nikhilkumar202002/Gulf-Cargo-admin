@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   getBillShipments,
-  updateBillShipmentStatuses,
+  updateBillShipmentStatuses, deleteBillShipments,
 } from "../../api/billShipmentApi";
 import { getActiveShipmentStatuses } from "../../api/shipmentStatusApi";
 import { FaEye, FaEdit, FaTrash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import { Toaster, toast } from "react-hot-toast";
 
 const unwrapArray = (o) =>
   Array.isArray(o)
@@ -153,8 +154,39 @@ export default function ShipmentBillView() {
     }
   };
 
+  // --- Single delete
+const handleDelete = async (id) => {
+  if (!window.confirm("Are you sure you want to delete this shipment?")) return;
+  try {
+    await deleteBillShipments([id]);
+    toast.success("Shipment deleted successfully!");
+    refresh();
+  } catch (e) {
+    console.error("Delete failed:", e);
+    toast.error(e?.response?.data?.message || "Failed to delete shipment.");
+  }
+};
+
+// --- Bulk delete
+const handleBulkDelete = async () => {
+  if (selectedIds.size === 0) {
+    toast.error("No shipments selected for deletion.");
+    return;
+  }
+  if (!window.confirm("Delete all selected shipments?")) return;
+  try {
+    await deleteBillShipments([...selectedIds]);
+    toast.success(`Deleted ${selectedIds.size} shipment(s) successfully!`);
+    refresh();
+  } catch (e) {
+    console.error("Bulk delete failed:", e);
+    toast.error(e?.response?.data?.message || "Bulk delete failed.");
+  }
+};
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-5">
+      <Toaster position="top-right" reverseOrder={false} />
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="text-2xl font-semibold text-gray-800">Shipments</h2>
@@ -240,6 +272,14 @@ export default function ShipmentBillView() {
           >
             {savingBulk ? "Updating…" : `Update ${selectedIds.size || ""}`}
           </button>
+
+          <button
+              onClick={handleBulkDelete}
+              disabled={selectedIds.size === 0}
+              className="px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
+            >
+              Bulk Delete
+            </button>
         </div>
       </div>
 
@@ -360,8 +400,9 @@ export default function ShipmentBillView() {
                               >
                                 <FaEdit className="w-3.5 h-3.5" />
                             </button>
-                            <button
+                           <button
                               title="Delete"
+                              onClick={() => handleDelete(r.id)}
                               className="bg-rose-100 hover:bg-rose-200 text-rose-700 px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1"
                             >
                               <FaTrash className="w-3.5 h-3.5" />
