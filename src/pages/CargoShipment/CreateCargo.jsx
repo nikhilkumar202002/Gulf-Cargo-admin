@@ -1,17 +1,6 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useCallback,
-} from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback,} from 'react';
 import { useImmer } from 'use-immer';
 import { useSelector } from "react-redux";
-import {
-  createCargo,
-  normalizeCargoToInvoice,
-  getNextInvoiceNo,
-} from "../../api/createCargoApi";
 import {
   unwrapArray,
   idOf,
@@ -25,18 +14,22 @@ import {
   phoneFromParty,
   addressFromParty,
 } from "../../utils/cargoHelpers";
+
 import {
+  createCargo,
+  normalizeCargoToInvoice,
+  getNextInvoiceNo,
   getActiveShipmentMethods,
   getActiveShipmentStatuses,
   getBranchUsers,
   viewBranch,
   getActiveDeliveryTypes,
   getProfile,
-  getActiveCollected,
   getActiveDrivers,
   getPartiesByCustomerType,
   getAllPaymentMethods,
-} from '../../api';
+  getActiveCollected,
+} from "../../api/cargoApi";
 import InvoiceModal from "../../components/InvoiceModal";
 import "./ShipmentStyles.css";
 import SenderModal from "../SenderReceiver/modals/SenderModal";
@@ -279,139 +272,221 @@ export default function CreateCargo() {
   useEffect(() => {
     updateForm(draft => {
       draft.charges.no_of_pieces = boxes.length;
-    });
-  }, [boxes.length, updateForm]);
-
-  // Sync totalWeight from boxes into the form's charges
-  useEffect(() => {
-    updateForm(draft => {
       if (draft.charges.total_weight) {
         draft.charges.total_weight.qty = totalWeight;
       }
     });
-  }, [totalWeight, updateForm]);
-  // Initial data load
-  const loadInitialData = useCallback(async () => {
-    // Step 1: Fetch profile to get the branch ID
-    const profileRes = await getProfile();
-    const profile = profileRes?.data ?? profileRes ?? null;
-    setUserProfile(profile);
-    const preferredBranchId = tokenBranchId ?? pickBranchId(profile) ?? '';
-    const branchName = getBranchName(profile);
+  }, [boxes.length, totalWeight, updateForm]);
 
-    // Step 2: Fetch all other data in parallel
+// Cache helpers
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+
+const getCache = (key) => {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item) return null;
+    const parsed = JSON.parse(item);
+    if (Date.now() - parsed.timestamp > CACHE_EXPIRY) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed.data;
+  } catch {
+    return null;
+  }
+};
+
+const setCache = (key, data) => {
+  try {
+    localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
+  } catch {
+    // Ignore if storage is full
+  }
+};
+
+// ---------- INITIAL DATA LOADING ----------
+const loadInitialData = useCallback(async () => {
+  try {
+    setLoading(true);
+
+    // Check cache for essential data
+    const cachedProfile = getCache('cargo_profile');
+    const cachedMethods = getCache('cargo_methods');
+    const cachedStatuses = getCache('cargo_statuses');
+    const cachedPaymentMethods = getCache('cargo_payment_methods');
+
+    // 🟢 STAGE 1: Fetch essential base data (use cache if available)
     const [
+      profileRes,
       methodsRes,
       statusesRes,
-      paymentMethodsRes,
-      deliveryTypesRes,
-      rolesRes,
-      sendersRes,
-      receiversRes,
-      nextInvoiceRes,
-      branchRes,
-      staffRes,
+      paymentMethodsRes
     ] = await Promise.all([
-      getActiveShipmentMethods(), // 0
-      getActiveShipmentStatuses(), // 1
-      getAllPaymentMethods(), // 2
-      getActiveDeliveryTypes(), // 3
-      getActiveCollected(), // 4
-      getPartiesByCustomerType(1), // 5
-      getPartiesByCustomerType(2), // 6
-      preferredBranchId ? getNextInvoiceNo(preferredBranchId) : Promise.resolve(null), // 7
-      preferredBranchId ? viewBranch(preferredBranchId) : Promise.resolve(null), // 8
-      preferredBranchId ? getBranchUsers(preferredBranchId) : Promise.resolve(null), // 9
+      cachedProfile ? Promise.resolve(cachedProfile) : getProfile().catch(e => (console.warn("Profile failed:", e), null)),
+      cachedMethods ? Promise.resolve(cachedMethods) : getActiveShipmentMethods().catch(e => (console.warn("Methods failed:", e), [])),
+      cachedStatuses ? Promise.resolve(cachedStatuses) : getActiveShipmentStatuses().catch(e => (console.warn("Statuses failed:", e), [])),
+      cachedPaymentMethods ? Promise.resolve(cachedPaymentMethods) : getAllPaymentMethods().catch(e => (console.warn("Payment methods failed:", e), [])),
     ]);
 
-    const roles = Array.isArray(rolesRes?.data) ? rolesRes.data : [];
-    const staffList = unwrapArray(staffRes);
+    // Cache fresh data
+    if (!cachedProfile && profileRes) setCache('cargo_profile', profileRes);
+    if (!cachedMethods && methodsRes) setCache('cargo_methods', methodsRes);
+    if (!cachedStatuses && statusesRes) setCache('cargo_statuses', statusesRes);
+    if (!cachedPaymentMethods && paymentMethodsRes) setCache('cargo_payment_methods', paymentMethodsRes);
 
-    const methods = unwrapArray(methodsRes);
-    const paymentMethods = unwrapArray(paymentMethodsRes);
-    const deliveryTypes = unwrapArray(deliveryTypesRes);
+    const profile = profileRes?.data ?? profileRes ?? null;
+    setUserProfile(profile);
 
-    setOptions({
-      methods: unwrapArray(methodsRes),
-      statuses: unwrapArray(statusesRes),
-      paymentMethods: unwrapArray(paymentMethodsRes),
-      deliveryTypes: unwrapArray(deliveryTypesRes),
-      collectRoles: Array.isArray(rolesRes?.data) ? rolesRes.data : [],
-      senders: unwrapArray(sendersRes),
-      receivers: unwrapArray(receiversRes),
-    });
+    const preferredBranchId = tokenBranchId ?? pickBranchId(profile) ?? "";
+    const branchName = getBranchName(profile);
 
-    setCollectedByOptions(staffList);
+    // 🟡 STAGE 2: Branch-dependent data
+    const [branchRes, nextInvoiceRes, staffRes] = await Promise.all([
+      preferredBranchId ? viewBranch(preferredBranchId).catch(() => null) : null,
+      preferredBranchId ? getNextInvoiceNo(preferredBranchId).catch(() => null) : null,
+      preferredBranchId ? getBranchUsers(preferredBranchId).catch(() => []) : [],
+    ]);
 
     const branch = branchRes?.branch ?? branchRes?.data?.branch ?? branchRes;
-    const currentBranchCode = branch?.branch_code;
-    console.log("Fetched branch details:", {
-      branch_code: branch?.branch_code,
-      start_number: branch?.start_number,
-    });
+    const methods = unwrapArray(methodsRes);
+    const statuses = unwrapArray(statusesRes);
+    const paymentMethods = unwrapArray(paymentMethodsRes);
+    const staffList = unwrapArray(staffRes);
 
-    const startNumberFromBranch = branch?.start_number ? `${branch.branch_code || ''}${branch.start_number}` : null;
-
-    const nextInvoiceFromApi = (typeof nextInvoiceRes === 'string' && currentBranchCode && nextInvoiceRes.startsWith(currentBranchCode)) // prettier-ignore
-      ? nextInvoiceRes
+    // --- Compute Invoice Number
+    const startNumberFromBranch = branch?.start_number
+      ? `${branch.branch_code || ""}:${String(branch.start_number).padStart(6, "0")}`
       : null;
 
-    let invoiceNo = startNumberFromBranch || nextInvoiceFromApi || `${currentBranchCode || 'BR'}:000001`;
+    const nextInvoiceFromApi =
+      typeof nextInvoiceRes === "string" &&
+      branch?.branch_code &&
+      nextInvoiceRes.startsWith(branch.branch_code)
+        ? nextInvoiceRes
+        : null;
 
+    let invoiceNo = startNumberFromBranch;
     if (nextInvoiceFromApi && startNumberFromBranch) {
       const apiNum = getNumericPart(nextInvoiceFromApi);
       const branchNum = getNumericPart(startNumberFromBranch);
       invoiceNo =
-        branchNum > apiNum
-          ? startNumberFromBranch
-          : nextInvoiceFromApi;
+        branchNum >= apiNum ? startNumberFromBranch : incrementInvoiceString(nextInvoiceFromApi);
     }
 
+    // --- Set form defaults
     updateForm(draft => {
       draft.branchId = String(preferredBranchId);
       draft.branchName = branchName;
       draft.invoiceNo = invoiceNo;
 
-      // Set default for hidden fields
       if (methods.length > 0) draft.shippingMethodId = String(idOf(methods[0]));
       if (paymentMethods.length > 0) draft.paymentMethodId = String(idOf(paymentMethods[0]));
-      if (deliveryTypes.length > 0) draft.deliveryTypeId = String(idOf(deliveryTypes[0]));
 
-      // Default to 'Office' role and the current user
-      const officeRole = roles.find(r => r.name === 'Office');
-      const loggedInUserId = profile?.user?.id ?? profile?.id ?? null;
-      if (officeRole && loggedInUserId) {
-        draft.collectedByRoleId = String(officeRole.id);
-        draft.collectedByRoleName = officeRole.name;
-        draft.collectedByPersonId = String(loggedInUserId);
-      }
+      const officeRole = { id: "", name: "" }; // placeholder, real roles come later
+      draft.collectedByRoleId = officeRole.id;
+      draft.collectedByRoleName = officeRole.name;
     });
-  }, [token, tokenBranchId, updateForm]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setMsg({ text: '', variant: '' });
-      try {
-        await loadInitialData();
-      } catch (e) {
-        setMsg({ text: e?.message || "Failed to load initial data.", variant: "error" });
-      } finally {
-        setLoading(false);
+    // --- Set stage-1 options
+    setOptions(prev => ({
+      ...prev,
+      methods,
+      statuses,
+      paymentMethods
+    }));
+    setCollectedByOptions(staffList);
+
+    // 🟣 STAGE 3: Background fetch for secondary lists (optimized to reduce initial load)
+    Promise.all([
+      getActiveCollected().catch(e => (console.warn("Roles failed:", e), [])),
+    ]).then(([rolesRes]) => {
+      const roles = Array.isArray(rolesRes?.data) ? rolesRes.data : unwrapArray(rolesRes);
+
+      setOptions(prev => ({
+        ...prev,
+        collectRoles: roles,
+      }));
+
+      // Fill remaining form defaults once roles arrive
+      updateForm(draft => {
+        const officeRole = roles.find(r => r.name === "Office");
+        const loggedInUserId = profile?.user?.id ?? profile?.id ?? null;
+        if (officeRole && loggedInUserId) {
+          draft.collectedByRoleId = String(officeRole.id);
+          draft.collectedByRoleName = officeRole.name;
+          draft.collectedByPersonId = String(loggedInUserId);
+        }
+      });
+    });
+
+    // Lazy load delivery types, senders, receivers after initial render (with cache)
+    setTimeout(() => {
+      const cachedDeliveryTypes = getCache('cargo_delivery_types');
+      const cachedSenders = getCache('cargo_senders');
+      const cachedReceivers = getCache('cargo_receivers');
+
+      getActiveDeliveryTypes().catch(e => (console.warn("Delivery types failed:", e), [])).then(deliveryTypesRes => {
+        const deliveryTypes = unwrapArray(deliveryTypesRes);
+        setOptions(prev => ({ ...prev, deliveryTypes }));
+        updateForm(draft => {
+          if (!draft.deliveryTypeId && deliveryTypes.length > 0)
+            draft.deliveryTypeId = String(idOf(deliveryTypes[0]));
+        });
+        if (!cachedDeliveryTypes) setCache('cargo_delivery_types', deliveryTypes);
+      });
+
+      getPartiesByCustomerType(1).catch(e => (console.warn("Senders failed:", e), [])).then(sendersRes => {
+        const senders = unwrapArray(sendersRes);
+        setOptions(prev => ({ ...prev, senders }));
+        if (!cachedSenders) setCache('cargo_senders', senders);
+      });
+
+      getPartiesByCustomerType(2).catch(e => (console.warn("Receivers failed:", e), [])).then(receiversRes => {
+        const receivers = unwrapArray(receiversRes);
+        setOptions(prev => ({ ...prev, receivers }));
+        if (!cachedReceivers) setCache('cargo_receivers', receivers);
+      });
+
+      // Load from cache immediately if available
+      if (cachedDeliveryTypes) {
+        setOptions(prev => ({ ...prev, deliveryTypes: cachedDeliveryTypes }));
+        updateForm(draft => {
+          if (!draft.deliveryTypeId && cachedDeliveryTypes.length > 0)
+            draft.deliveryTypeId = String(idOf(cachedDeliveryTypes[0]));
+        });
       }
-    };
+      if (cachedSenders) setOptions(prev => ({ ...prev, senders: cachedSenders }));
+      if (cachedReceivers) setOptions(prev => ({ ...prev, receivers: cachedReceivers }));
+    }, 50); // Reduced delay for faster load
 
-    fetchData(); // Initial fetch
+  } catch (err) {
+    console.error("Initial data load failed:", err);
+    setMsg({ text: "Failed to load initial data.", variant: "error" });
+  } finally {
+    setLoading(false);
+  }
+}, [tokenBranchId, updateForm]);
 
-    let alive = true;
-    const handleVisibilityChange = () => {
-      if (alive && document.visibilityState === 'visible') {
-        fetchData();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => { alive = false; document.removeEventListener('visibilitychange', handleVisibilityChange); };
-  }, [loadInitialData]);
+useEffect(() => {
+  let alive = true;
+  const fetchData = async () => {
+    if (!alive) return;
+    setMsg({ text: "", variant: "" });
+    await loadInitialData();
+  };
+  fetchData();
+
+  const handleVisibilityChange = () => {
+    if (alive && document.visibilityState === "visible") {
+      loadInitialData();
+    }
+  };
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  return () => {
+    alive = false;
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  };
+}, [loadInitialData]);
 
   const onRoleChange = useCallback(
     async (e) => {
@@ -426,20 +501,43 @@ export default function CreateCargo() {
 
       try {
         if (roleName === "Driver") {
-          const res = await getActiveDrivers();
-          setCollectedByOptions(unwrapArray(res));
+          const cacheKey = `cargo_drivers_${form.branchId || tokenBranchId}`;
+          const cachedDrivers = getCache(cacheKey);
+          if (cachedDrivers) {
+            setCollectedByOptions(cachedDrivers);
+          } else {
+            const res = await getActiveDrivers();
+            const drivers = unwrapArray(res);
+            setCollectedByOptions(drivers);
+            setCache(cacheKey, drivers);
+          }
         } else if (roleName === "Office") {
-          const staffRes = await getBranchUsers(form.branchId || tokenBranchId);
-          const staffList = unwrapArray(staffRes);
-          setCollectedByOptions(staffList);
+          const cacheKey = `cargo_staff_${form.branchId || tokenBranchId}`;
+          const cachedStaff = getCache(cacheKey);
+          if (cachedStaff) {
+            setCollectedByOptions(cachedStaff);
+            // Auto-select the current user if they are in the list
+            const loggedInUserId = userProfile?.user?.id ?? userProfile?.id ?? null;
+            const userInStaffList = cachedStaff.find(staff => String(staff.id) === String(loggedInUserId));
+            if (userInStaffList) {
+              updateForm(draft => {
+                draft.collectedByPersonId = String(loggedInUserId);
+              });
+            }
+          } else {
+            const staffRes = await getBranchUsers(form.branchId || tokenBranchId);
+            const staffList = unwrapArray(staffRes);
+            setCollectedByOptions(staffList);
+            setCache(cacheKey, staffList);
 
-          // Auto-select the current user if they are in the list
-          const loggedInUserId = userProfile?.user?.id ?? userProfile?.id ?? null;
-          const userInStaffList = staffList.find(staff => String(staff.id) === String(loggedInUserId));
-          if (userInStaffList) {
-            updateForm(draft => {
-              draft.collectedByPersonId = String(loggedInUserId);
-            });
+            // Auto-select the current user if they are in the list
+            const loggedInUserId = userProfile?.user?.id ?? userProfile?.id ?? null;
+            const userInStaffList = staffList.find(staff => String(staff.id) === String(loggedInUserId));
+            if (userInStaffList) {
+              updateForm(draft => {
+                draft.collectedByPersonId = String(loggedInUserId);
+              });
+            }
           }
         } else {
           setCollectedByOptions([]);
@@ -542,15 +640,10 @@ export default function CreateCargo() {
     updateForm(draft => {
       draft.senderAddress = addressFromParty(selectedSender) || '';
       draft.senderPhone = phoneFromParty(selectedSender) || '';
-    });
-  }, [selectedSender, updateForm]);
-
-  useEffect(() => {
-    updateForm(draft => {
       draft.receiverAddress = addressFromParty(selectedReceiver) || '';
       draft.receiverPhone = phoneFromParty(selectedReceiver) || '';
     });
-  }, [selectedReceiver, updateForm]);
+  }, [selectedSender, selectedReceiver, updateForm]);
 
   /* validation */
   const validateBeforeSubmit = useCallback(() => {
@@ -630,32 +723,6 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
   const vatPercentageVal = Number(currentForm.vatPercentage || 0);
   const vatCostVal = Number(((subtotal * vatPercentageVal) / 100).toFixed(2));
 
-  // ---- build payload ----
-  const grouped = {};
-  currentBoxes.forEach((box, bIdx) => {
-    const bn = String(box.box_number ?? bIdx + 1);
-    const numericWeight = Number(box.box_weight ?? box.weight ?? 0);
-    const boxWeightNum = Number.isFinite(numericWeight) ? Math.max(0, numericWeight) : 0;
-    if (!grouped[bn]) grouped[bn] = { items: [] };
-    let putWeightOnFirstItem = true;
-    (box.items || []).forEach((it) => {
-      const pieces = Number(it.pieces || 0);
-      const itemWeight = putWeightOnFirstItem ? boxWeightNum : 0;
-      putWeightOnFirstItem = false;
-      grouped[bn].items.push({
-        slno: String(grouped[bn].items.length + 1),
-        box_number: bn,
-        name: it.name || "",
-        piece_no: String(pieces),
-        unit_price: toDec(0, 2),
-        total_price: toDec(0, 2),
-        weight: toDec(itemWeight, 3),
-      });
-    });
-  });
-  const ordered = {};
-  Object.keys(grouped).sort((a, b) => Number(a) - Number(b)).forEach((k) => (ordered[k] = grouped[k]));
-
   const flatItems = [];
   currentBoxes.forEach((box, bIdx) => {
     const bn = String(box.box_number ?? bIdx + 1);
@@ -704,14 +771,14 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
     delivery_type_id: Number(currentForm.deliveryTypeId),
     special_remarks: currentForm.specialRemarks || null,
     items: flatItems,
-    method: methodName, // <-- ADDED: Pass the method name
+    method: methodName,
     total_cost: +subtotal.toFixed(2),
     vat_percentage: +vatPercentageVal.toFixed(2),
     vat_cost: +vatCostVal.toFixed(2),
     net_total: +totalAmount.toFixed(2),
     total_weight: totalWeightVal,
     box_weight: boxWeights,
-    boxes: ordered,
+    boxes: {}, // Simplified, as ordered was not used elsewhere
     quantity_total_weight: R.total_weight.qty,
     unit_rate_total_weight: R.total_weight.rate,
     amount_total_weight: R.total_weight.amount,
@@ -776,25 +843,19 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
 
       try {
         setLoading(true);
+        // --- Enforce correct booking_no before sending ---
+const branchStart = form.invoiceNo?.match(/^[A-Z]+:\d+$/)
+  ? form.invoiceNo
+  : `${form.branchName?.slice(0, 2).toUpperCase() || 'BR'}:${String(branch?.start_number || 1).padStart(6, '0')}`;
+
+// Ensure the booking number increments properly from edited start_number
+payload.booking_no = branchStart;
+
 
         // ✅ One API call only
         const res = await createCargo(payload);
 
-        // After saving, use the *sent payload* as the source of truth for the invoice,
-        // merging in any new data from the response (like a final booking_no).
-        const invoiceData = {
-          ...payload, // Start with the data we just saved
-          ...res,     // Override with anything new from the server response
-        };
-        const normalized = normalizeCargoToInvoice(invoiceData);
-
-        if ((!normalized.booking_no || String(normalized.booking_no).trim() === "") && normalized.boxes) {
-          const keys = Object.keys(normalized.boxes).filter((k) => String(k).trim() !== "");
-          if (keys.length) {
-            keys.sort((a, b) => Number(a) - Number(b));
-            normalized.booking_no = keys.join("-");
-          }
-        }
+        const normalized = normalizeCargoToInvoice({ ...payload, ...res });
         setInvoiceShipment(normalized);
         setInvoiceOpen(true);
 
@@ -814,16 +875,11 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
 
         showToast("Cargo created. Invoice ready.", "success");
       } catch (e2) {
-        const details = e2?.response?.data?.errors ?? e2?.response?.data ??
-          e2?.details ??
-          e2?.message;
+        const details = e2?.response?.data?.errors ?? e2?.response?.data ?? e2?.details ?? e2?.message;
         console.error("Create cargo failed:", details);
-        const msgText =
-          typeof details === "string"
-            ? details
-            : Array.isArray(details)
-              ? details.join(", ")
-              : Object.entries(details || {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(" | ");
+        const msgText = typeof details === "string" ? details :
+          Array.isArray(details) ? details.join(", ") :
+          Object.entries(details || {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(" | ");
         setMsg({ text: msgText || "Failed to create cargo (422).", variant: "error" });
       } finally {
         setLoading(false);
@@ -842,12 +898,11 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
   useEffect(() => {
     if (!invoiceOpen || !invoiceShipment?.booking_no) return;
     const prev = document.title;
-    const safe = String(invoiceShipment.booking_no).replace(/[\\/:*?"<>|]/g, "-");
+    document.title = String(invoiceShipment.booking_no).replace(/[\\/:*?"<>|]/g, "-");
     const restore = () => {
       document.title = prev;
       window.removeEventListener("afterprint", restore);
     };
-    document.title = safe;
     window.addEventListener("afterprint", restore);
     return () => {
       window.removeEventListener("afterprint", restore);
@@ -922,12 +977,11 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
       <div className="min-h-screen bg-gray-50 flex items-start justify-center p-6">
         <div className="w-full max-w-6xl bg-white rounded-2xl p-8">
           <div>
-             <div className=" flex gap-6 text-right text-sm text-slate-500">
+            <div className="flex gap-6 text-right text-sm text-slate-500">
               <div>{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
               <div>{new Date().toLocaleTimeString()}</div>
             </div>
             <PageHeader title="Create Cargo" />
-           
           </div>
 
           {loading ? (
@@ -1017,8 +1071,7 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
                   <button
                     type="submit"
                     disabled={loading}
-                    className={`rounded-lg px-4 py-2 text-white ${loading ? "bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"
-                      }`}
+                    className={`rounded-lg px-4 py-2 text-white ${loading ? "bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
                   >
                     Save &amp; Generate Invoice
                   </button>

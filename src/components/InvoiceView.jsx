@@ -502,15 +502,10 @@ export default function InvoiceView({
   /* --------------- normalized basics --------------- */
   const currency = DEFAULT_CURRENCY;
 
-  const billNo = useMemo(
-    () =>
-      shipment?.booking_no ??
-      shipment?.bookingNo ??
-      shipment?.booking_number ??
-      shipment?.invoice_no ??
-      "—",
-    [shipment]
-  );
+const billNo = useMemo(
+  () => shipment?.booking_no ?? shipment?.invoice_no ?? "—",
+  [shipment]
+);
 
   /** Build Box Rows (robust) */
   const boxRows = useMemo(() => {
