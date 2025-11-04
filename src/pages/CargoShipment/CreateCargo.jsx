@@ -36,7 +36,7 @@ import SenderModal from "../SenderReceiver/modals/SenderModal";
 import ReceiverModal from "../SenderReceiver/modals/ReceiverModal";
 import { Toaster } from "react-hot-toast";
 import { PageHeader } from "./components/PageHeader";
-import { SkeletonCreateCargo } from "./components/CreateCargoSkeleton";
+import Preloader from "../../components/Preloader";
 
 import { CollectionDetails } from './components/CollectionDetails';
 import { PartyInfo } from './components/PartyInfo';
@@ -165,6 +165,7 @@ export default function CreateCargo() {
     variant: "success",
   });
   const toastTimer = useRef(null);
+  const isLoadingRef = useRef(false);
 
   // --- Toast helpers ---
   const showToast = useCallback((text, variant = "success", duration = 3500) => {
@@ -306,6 +307,8 @@ const setCache = (key, data) => {
 
 // ---------- INITIAL DATA LOADING ----------
 const loadInitialData = useCallback(async () => {
+  if (isLoadingRef.current) return; // Prevent multiple simultaneous loads
+  isLoadingRef.current = true;
   try {
     setLoading(true);
 
@@ -314,18 +317,27 @@ const loadInitialData = useCallback(async () => {
     const cachedMethods = getCache('cargo_methods');
     const cachedStatuses = getCache('cargo_statuses');
     const cachedPaymentMethods = getCache('cargo_payment_methods');
+    const cachedSenders = getCache('cargo_senders');
+    const cachedReceivers = getCache('cargo_receivers');
+    const cachedDeliveryTypes = getCache('cargo_delivery_types');
 
     // 🟢 STAGE 1: Fetch essential base data (use cache if available)
     const [
       profileRes,
       methodsRes,
       statusesRes,
-      paymentMethodsRes
+      paymentMethodsRes,
+      sendersRes,
+      receiversRes,
+      deliveryTypesRes
     ] = await Promise.all([
       cachedProfile ? Promise.resolve(cachedProfile) : getProfile().catch(e => (console.warn("Profile failed:", e), null)),
       cachedMethods ? Promise.resolve(cachedMethods) : getActiveShipmentMethods().catch(e => (console.warn("Methods failed:", e), [])),
       cachedStatuses ? Promise.resolve(cachedStatuses) : getActiveShipmentStatuses().catch(e => (console.warn("Statuses failed:", e), [])),
       cachedPaymentMethods ? Promise.resolve(cachedPaymentMethods) : getAllPaymentMethods().catch(e => (console.warn("Payment methods failed:", e), [])),
+      cachedSenders ? Promise.resolve(cachedSenders) : getPartiesByCustomerType(1).catch(e => (console.warn("Senders failed:", e), [])),
+      cachedReceivers ? Promise.resolve(cachedReceivers) : getPartiesByCustomerType(2).catch(e => (console.warn("Receivers failed:", e), [])),
+      cachedDeliveryTypes ? Promise.resolve(cachedDeliveryTypes) : getActiveDeliveryTypes().catch(e => (console.warn("Delivery types failed:", e), [])),
     ]);
 
     // Cache fresh data
@@ -333,6 +345,9 @@ const loadInitialData = useCallback(async () => {
     if (!cachedMethods && methodsRes) setCache('cargo_methods', methodsRes);
     if (!cachedStatuses && statusesRes) setCache('cargo_statuses', statusesRes);
     if (!cachedPaymentMethods && paymentMethodsRes) setCache('cargo_payment_methods', paymentMethodsRes);
+    if (!cachedSenders && sendersRes) setCache('cargo_senders', sendersRes);
+    if (!cachedReceivers && receiversRes) setCache('cargo_receivers', receiversRes);
+    if (!cachedDeliveryTypes && deliveryTypesRes) setCache('cargo_delivery_types', deliveryTypesRes);
 
     const profile = profileRes?.data ?? profileRes ?? null;
     setUserProfile(profile);
@@ -351,6 +366,18 @@ const loadInitialData = useCallback(async () => {
     const methods = unwrapArray(methodsRes);
     const statuses = unwrapArray(statusesRes);
     const paymentMethods = unwrapArray(paymentMethodsRes);
+    const senders = unwrapArray(sendersRes);
+    const receivers = unwrapArray(receiversRes);
+    const deliveryTypes = unwrapArray(deliveryTypesRes);
+
+    // Clear cache if fetched data is empty to force fresh fetch next time
+    if (!cachedProfile && (!profileRes || !profileRes?.data)) localStorage.removeItem('cargo_profile');
+    if (!cachedMethods && methods.length === 0) localStorage.removeItem('cargo_methods');
+    if (!cachedStatuses && statuses.length === 0) localStorage.removeItem('cargo_statuses');
+    if (!cachedPaymentMethods && paymentMethods.length === 0) localStorage.removeItem('cargo_payment_methods');
+    if (!cachedSenders && senders.length === 0) localStorage.removeItem('cargo_senders');
+    if (!cachedReceivers && receivers.length === 0) localStorage.removeItem('cargo_receivers');
+    if (!cachedDeliveryTypes && deliveryTypes.length === 0) localStorage.removeItem('cargo_delivery_types');
     const staffList = unwrapArray(staffRes);
 
     // --- Compute Invoice Number
@@ -392,7 +419,10 @@ const loadInitialData = useCallback(async () => {
       ...prev,
       methods,
       statuses,
-      paymentMethods
+      paymentMethods,
+      senders,
+      receivers,
+      deliveryTypes
     }));
     setCollectedByOptions(staffList);
 
@@ -419,51 +449,14 @@ const loadInitialData = useCallback(async () => {
       });
     });
 
-    // Lazy load delivery types, senders, receivers after initial render (with cache)
-    setTimeout(() => {
-      const cachedDeliveryTypes = getCache('cargo_delivery_types');
-      const cachedSenders = getCache('cargo_senders');
-      const cachedReceivers = getCache('cargo_receivers');
-
-      getActiveDeliveryTypes().catch(e => (console.warn("Delivery types failed:", e), [])).then(deliveryTypesRes => {
-        const deliveryTypes = unwrapArray(deliveryTypesRes);
-        setOptions(prev => ({ ...prev, deliveryTypes }));
-        updateForm(draft => {
-          if (!draft.deliveryTypeId && deliveryTypes.length > 0)
-            draft.deliveryTypeId = String(idOf(deliveryTypes[0]));
-        });
-        if (!cachedDeliveryTypes) setCache('cargo_delivery_types', deliveryTypes);
-      });
-
-      getPartiesByCustomerType(1).catch(e => (console.warn("Senders failed:", e), [])).then(sendersRes => {
-        const senders = unwrapArray(sendersRes);
-        setOptions(prev => ({ ...prev, senders }));
-        if (!cachedSenders) setCache('cargo_senders', senders);
-      });
-
-      getPartiesByCustomerType(2).catch(e => (console.warn("Receivers failed:", e), [])).then(receiversRes => {
-        const receivers = unwrapArray(receiversRes);
-        setOptions(prev => ({ ...prev, receivers }));
-        if (!cachedReceivers) setCache('cargo_receivers', receivers);
-      });
-
-      // Load from cache immediately if available
-      if (cachedDeliveryTypes) {
-        setOptions(prev => ({ ...prev, deliveryTypes: cachedDeliveryTypes }));
-        updateForm(draft => {
-          if (!draft.deliveryTypeId && cachedDeliveryTypes.length > 0)
-            draft.deliveryTypeId = String(idOf(cachedDeliveryTypes[0]));
-        });
-      }
-      if (cachedSenders) setOptions(prev => ({ ...prev, senders: cachedSenders }));
-      if (cachedReceivers) setOptions(prev => ({ ...prev, receivers: cachedReceivers }));
-    }, 50); // Reduced delay for faster load
+    // All data is now loaded instantly, no lazy loading needed
 
   } catch (err) {
     console.error("Initial data load failed:", err);
     setMsg({ text: "Failed to load initial data.", variant: "error" });
   } finally {
     setLoading(false);
+    isLoadingRef.current = false;
   }
 }, [tokenBranchId, updateForm]);
 
@@ -843,19 +836,11 @@ const buildCargoPayload = (currentForm, currentBoxes, derivedValues, shipmentMet
 
       try {
         setLoading(true);
-        // --- Enforce correct booking_no before sending ---
-const branchStart = form.invoiceNo?.match(/^[A-Z]+:\d+$/)
-  ? form.invoiceNo
-  : `${form.branchName?.slice(0, 2).toUpperCase() || 'BR'}:${String(branch?.start_number || 1).padStart(6, '0')}`;
-
-// Ensure the booking number increments properly from edited start_number
-payload.booking_no = branchStart;
-
-
         // ✅ One API call only
         const res = await createCargo(payload);
 
         const normalized = normalizeCargoToInvoice({ ...payload, ...res });
+        normalized.booking_no = payload.booking_no; // Ensure invoice shows the submitted booking_no
         setInvoiceShipment(normalized);
         setInvoiceOpen(true);
 
@@ -985,7 +970,7 @@ payload.booking_no = branchStart;
           </div>
 
           {loading ? (
-            <SkeletonCreateCargo />
+            <Preloader />
           ) : (
             <form
               onSubmit={submit}
